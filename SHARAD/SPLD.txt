@@ -1,0 +1,15 @@
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr16xxx/edr1640301/e_1640301_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr07xxx/edr0788802/e_0788802_001_ss19_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr05xxx/edr0590101/e_0590101_001_ss19_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1005801/e_1005801_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1733301/e_1733301_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1767101/e_1767101_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0002/data/edr23xxx/edr2353501/e_2353501_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr26xxx/edr2682701/e_2682701_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr27xxx/edr2710401/e_2710401_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm173/edr3231701/e_3231701_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm273/edr5034301/e_5034301_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm273/edr5035201/e_5035201_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm273/edr5036501/e_5036501_001_ss11_700_a_a.dat
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm273/edr5040901/e_5040901_001_ss11_700_a_a.dat
+
