@@ -1,0 +1,24 @@
+# git repositories
+subradar
+rsr
+cmp
+
+# compiled python
+__pycache__
+*.pyc
+
+
+# output files
+`
+*.log
+SPICE
+xover
+*.swp
+.nfs*
+*.h5
+*.npz
+*.npy
+
+EDR*.txt
+lookup.txt
+*.pdf
