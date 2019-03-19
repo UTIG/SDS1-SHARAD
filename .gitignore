@@ -1,7 +1,6 @@
 # git repositories
 subradar
 rsr
-cmp
 
 # compiled python
 __pycache__
