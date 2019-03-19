@@ -62,12 +62,14 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
     # TODO: change the inputlist to a namedtuple or dict
     """
     import sys
+    import numpy as np
+    import pandas as pd
     sys.path.insert(0, '../xlib/sar/')
     sys.path.insert(0, '../xlib/cmp/')
     import sar
-    import numpy as np
-    import pandas as pd
     import pds3lbl as pds3
+
+    taskname = "Task{:03d}".format(taskid)
 
     try:
     
@@ -76,13 +78,13 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         idx_end = inputlist[2]
         path = inputlist[0]
         
+
         # print info in debug mode
-        if debug:
-            print('SAR method:', focuser)
-            print('SAR column posting interval [m]:', posting)
-            print('SAR aperture length [s]:', aperture)
-            print('SAR Doppler bandwidth [Hz]:', bandwidth)
-            print('SAR number of looks:', int(np.floor(aperture * 2 * bandwidth)))
+        logging.debug("{:s}: SAR method: {:s}".format(taskname, focuser)) 
+        logging.debug("{:s}: SAR column posting interval[m]: {:f}".format(taskname, posting)) 
+        logging.debug("{:s}: SAR aperture length[s]: {:f}".format(taskname, aperture)) 
+        logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, bandwidth) )
+        logging.debug('{:s}: SAR number of looks: {:d}'.format(taskname,  int(np.floor(aperture * 2 * bandwidth))) )
 
         # create cmp path
         path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
@@ -93,8 +95,8 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
         science_path=path.replace('_a.dat','_s.dat')
-        if debug:
-            print('Loading cmp data from:', cmp_path)
+
+        logging.debug("{:s}: Loading cmp data from {:s}".format(taskname, cmp_path))
     
         # load the range compressed and ionosphere corrected data
         real = np.array(pd.read_hdf(cmp_path, 'real'))	
@@ -109,24 +111,22 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         else:
             idx_end = len(cmp_track)
         cmp_track = cmp_track[idx_start:idx_end]
-        if debug:
-            print('Start index of track to be processed:', idx_start)
-            print('End index of track to be processed:', idx_end)
-            print('Length of cmp track to be processed:', len(cmp_track))
+
+        logging.debug("{:s}: Processing track from start={:d} end={:d} (length={:d})".format(
+            taskname, idx_start, idx_end, len(cmp_track)) )
         
         # load the relevant EDR files
-        if debug:
-            print('Loading science data from EDR file:', science_path)
+        logging.debug("{:s}: Loading science data from EDR file: {:s}".format(taskname, science_path) )
         data = pds3.read_science(science_path, label_path, science=True, 
                                  bc=True)[idx_start:idx_end]
-        if debug:
-            print('Loading auxiliary data from EDR file:', 
-                                science_path.replace('_s.dat', '_a.dat'))
-        aux = pds3.read_science(science_path.replace('_s.dat','_a.dat'), 
+
+        auxfile=science_path.replace('_s.dat', '_a.dat')
+        logging.debug("{:s}: Loading auxiliary data from EDR file: {:s}".format(taskname, auxfile))
+        aux = pds3.read_science(auxfile, 
                                 aux_path, science=False, bc=False)[idx_start:idx_end]
-        if debug:
-            print('Length of selected EDR sci data:',len(data))
-            print('Length of selected EDR aux data:', len(aux))
+
+        logging.debug("{:s}: Length of selected EDR sci data: {:d}".format(taskname, len(data)) )
+        logging.debug("{:s}: Length of selected EDR aux data: {:d}".format(taskname, len(aux)) )
     
         # load relevant spacecraft position information from EDR files
         pri_code = data['PULSE_REPETITION_INTERVAL'].as_matrix()
@@ -165,8 +165,7 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         """
         
         # execute sar processing
-        if debug:
-            print('Start of SAR processing') 
+        logging.debug("{:s}: Start of SAR processing".format(taskname))
         if focuser == 'Delay Doppler':
             sar, columns = sar.delay_doppler(cmp_track, posting, aperture, bandwidth,
                                             tlp, et, scrad, tpgpy, rxwot - min(rxwot), v)
@@ -178,8 +177,8 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         if saving:
             save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
             path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-            data_file = path_file.split('/')[-1]
-            path_file = path_file.replace(data_file,'')
+            data_file = os.path.basename(path_file)
+            path_file = os.path.dirname(path_file)
             new_path = save_root + path_file
             new_path = new_path + str(posting) + 'm/'
             new_path = new_path + str(aperture) + 's/'
@@ -187,8 +186,9 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
             if focuser == 'Matched Filter':
                 new_path = new_path + str(Er) + 'Er/'
 
-            if debug: 
-                print('Saving to file:', new_path + data_file.replace('.dat','.h5'))
+            outputfile = os.path.join(new_path, datafile.replace(".dat", ".h5"))
+
+            logging.debug("{:s}: Saving to file: {:s}".format(taskname, outputfile))
 
             if not os.path.exists(new_path):
                 os.makedirs(new_path)
@@ -196,9 +196,9 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
             # restructure and save data
             dfsar = pd.DataFrame(sar)
             dfcol = pd.DataFrame(columns)
-            dfsar.to_hdf(new_path+data_file.replace('.dat','.h5'), key='sar',
+            dfsar.to_hdf(outputfile, key='sar',
                          complib = 'blosc:lz4', complevel=6)
-            dfcol.to_hdf(new_path+data_file.replace('.dat','.h5'), key='columns',
+            dfcol.to_hdf(outputfile, key='columns',
                          complib = 'blosc:lz4', complevel=6)
 
     except Exception as e:
@@ -296,11 +296,12 @@ def main():
     #    idx_end = h5file[orbit]['idx_end'][0]
         logging.debug("[{:03d} of {:03d}] Building task for {:s}".format(i+1, len(lookup), path))
     
+        taskid = "Task{:03d}".format(i+1)
         # check if file has already been processed
         path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-        data_file = path_file.split('/')[-1]
+        data_file = os.path.basename(path_file)
         orbit_name = data_file[2:7]
-        path_file = path_file.replace(data_file,'')
+        path_file = os.path.dirname(path_file)
         new_path = path_root + path_file
         new_path = new_path + str(posting) + 'm/'
         new_path = new_path + str(aperture) + 's/'
@@ -339,7 +340,6 @@ def main():
                 process_list.append([path, 13000, 45000])
             else:
                 process_list.append([path, None, None])
-            i+=1
         else:
             logging.debug('File already processed. Skipping: '+path)
 
