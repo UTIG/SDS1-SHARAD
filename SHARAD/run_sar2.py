@@ -25,7 +25,7 @@ Example usage:
 
 
 def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Doppler',
-                  recalc=20, Er=1, saving=True, debug=False):
+                  recalc=20, Er=1, taskid=None, saving=True, debug=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual range compressed and ionosphere corrected tracks and
@@ -59,6 +59,7 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
 
     # TODO [gng]: change arguments such that if output path is specified, output,
     #  if it is none, then don't save
+    # TODO: change the inputlist to a namedtuple or dict
     """
     import sys
     sys.path.insert(0, '../xlib/sar/')
@@ -202,10 +203,11 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
 
     except Exception as e:
         
-        logging.debug('Error in file:'+path+'\n'+str(e)+'\n')
+        logging.error('Task{:03d}: Error processing file: {:s}'.format(taskid,path))
+        logging.error("Task{:03d}: {:s}".format(taskid, str(e)) )
         return 1
     
-    logging.debug('Successfully processed file:'+path)
+    logging.debug('Task{:03d}: Successfully processed file: {:s}'.format(taskid,path))
     
     return 0
 
@@ -240,7 +242,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run SAR processing')
     parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
-    parser.add_argument('-n','--dry-run', action="store_true", help="Dry run.  Build task list but do not run")
+    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     parser.add_argument('-m','--modifypst', help="Enable PST rewriting using specified script", required=False)
     parser.add_argument('--tracklist', default="elysium.txt",
         help="List of tracks to process")
@@ -255,7 +257,9 @@ def main():
     args = parser.parse_args()
 
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
-    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout, 
+        format="run_sar2: [%(levelname)-7s] %(message)s")
 
     # Set number of cores
     nb_cores = args.jobs
@@ -281,7 +285,7 @@ def main():
     path_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
 
     # Just run the first one
-    # lookup = lookup[0:1]
+    #lookup = lookup[0:1]
 
     for i, path in enumerate(lookup):
     #for orbit in keys:
@@ -341,27 +345,30 @@ def main():
 
     #h5file.close()
 
-    # Stop for now
-    print(process_list)
-    sys.exit(0)
+    if args.dryrun:
+        # If it's a dry run, print the list and stop
+        print(process_list)
+        sys.exit(0)
 
-    print('start processing',len(process_list),'tracks')
-
+    logging.info("Start processing {:d} tracks".format(len(process_list)) )
     start_time = time.time()
 
     pool = multiprocessing.Pool(nb_cores)
     results = [pool.apply_async(sar_processor, (t,posting,aperture,bandwidth,focuser,recalc,Er),
-                     {'saving':False,'debug':args.verbose}) for t in process_list]
+                     {'saving':False,'debug':args.verbose, 'taskid':j+1}) for j,t in enumerate(process_list)]
 
     #p=prog.Prog(len(keys))
-    p = prog.Prog(len(lookup))
+    #p = prog.Prog(len(lookup), prog_symbol='#')
     for i, result in enumerate(results):
-        p.print_Prog(i)
+        #p.print_Prog(i)
         dummy = result.get()
-        if dummy == 1: print('WARNING: Error in SAR processing - see logfile')
+        if dummy == 1:
+            logging.error("Processing task {:d} of {:d} had a problem.".format(i+1, len(process_list) ))
+        else:
+            logging.info( "Processing task {:d} of {:d} successful.".format(i+1, len(process_list) ))
 
-    print('done in ', (time.time()-start_time), 'seconds')
-    p.close_Prog()
+    logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ) )
+    #p.close_Prog()
 
 
 if __name__ == "__main__":
