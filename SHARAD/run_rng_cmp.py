@@ -16,7 +16,8 @@ __history__ = {
          'info': 'Modified data saving method from .npy to .h5'}} 
 
 
-def cmp_processor(path, idx_start=None, idx_end=None, radargram=True,
+
+def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
                   chrp_filt=True, debug=False, verbose=False, saving=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
@@ -24,7 +25,8 @@ def cmp_processor(path, idx_start=None, idx_end=None, radargram=True,
 
     Input:
     -----------
-      path      : Path to track to be processed.
+      infile    : Path to track file to be processed.
+      outdir    : Path to directory to write output data
       idx_start : Start index for processing.
       idx_end   : End index for processing.
       chrp_filt : Apply a filter to the reference chirp
@@ -56,7 +58,7 @@ def cmp_processor(path, idx_start=None, idx_end=None, radargram=True,
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
         # Load data
-        science_path=path.replace('_a.dat','_s.dat')
+        science_path=infile.replace('_a.dat','_s.dat')
         data = pds3.read_science(science_path, label_path, science=True)
         aux = pds3.read_science(science_path.replace('_s.dat','_a.dat'), aux_path, science=False)
 
@@ -135,11 +137,12 @@ def cmp_processor(path, idx_start=None, idx_end=None, radargram=True,
         if verbose: print('Data compressed in',stamp3,'s')
 
         if saving:
-            path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-            path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-            data_file = path_file.split('/')[-1]
-            path_file = path_file.replace(data_file,'')
-            new_path = path_root+path_file+'ion/'
+            #path_outroot = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
+            #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+            #data_file = path_file.split('/')[-1]
+            #path_file = path_file.replace(data_file,'')
+            #new_path = path_outroot+path_file+'ion/'
+            outfile = os.path.join(outdir, os.path.basename(infile))
 
             if debug: print('Saving to folder:',new_path)
             if not os.path.exists(new_path):
@@ -165,13 +168,13 @@ def cmp_processor(path, idx_start=None, idx_end=None, radargram=True,
             plotting.plot_radargram(cmp_track,tx,samples=3600)
 
     except Exception as e:
-        logging.debug('Error in file:'+path+'\n'+str(e)+'\n')
+        logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
+        logging.error('{:s}: {:s}'.format(taskname, str(e)) )
         return 1
-    logging.debug('Successfully processd file:'+path)
+    logging.debug('Successfully processed file: ' + infile)
     return 0
 
 import sys
-sys.path.insert(0, '../xlib/misc/')
 import os
 import numpy as np
 import importlib.util
@@ -179,74 +182,100 @@ import pandas as pd
 import multiprocessing
 import time
 import logging
-import prog
-import hdf
+import argparse
 import warnings
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+sys.path.insert(0, '../xlib/misc/')
+import prog
+import hdf
 
-# Set number of cores
-nb_cores = 4
 
-# Read lookup table associating gob's with tracks
-#h5file = pd.HDFStore('mc11e_spice.h5')
-#keys = h5file.keys() 
-#lookup = np.genfromtxt('lookup.txt',dtype='str')
-lookup = np.genfromtxt('elysium.txt', dtype = 'str')
-#lookup = np.genfromtxt('EDR_Cyril_SouthPole_Path.txt', dtype = 'str')
+def main():
+    # TODO: improve description
+    parser = argparse.ArgumentParser(description='Run SAR processing')
+    parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/cmp',
+                        help="Output base directory")
 
-# Build list of processes
-print('build task list')
-process_list=[]
-#p=prog.Prog(len(keys))
-logging.basicConfig(filename='crash.log',level=logging.DEBUG)
 
-p = prog.Prog(len(lookup))
-i=0
-path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
+    parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    parser.add_argument('--tracklist', default="elysium.txt",
+        help="List of tracks to process")
+    # implies single core
+    #parser.add_argument('--profile',  action="store_true", help='Profile execution performance', required=False)
+    #parser.add_argument('files', nargs='+', help='Input files to process')
 
-for i in range(len(lookup)): 
-#for orbit in keys:
-    p.print_Prog(i)
-    #gob = int(orbit.replace('/orbit', ''))    
-    #path = lookup[gob]
-    path = lookup[i]
-    #idx_start = h5file[orbit]['idx_start'][0]
-    #idx_end = h5file[orbit]['idx_end'][0]
+    args = parser.parse_args()
 
-    # check if file has already been processed
-    path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-    data_file = path_file.split('/')[-1]
-    path_file = path_file.replace(data_file,'')
-    new_path = path_root+path_file+'ion/'
+    #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+        format="run_rng_cmp: [%(levelname)-7s] %(message)s")
 
-    if not os.path.exists(new_path):
-        process_list.append([path, None, None])
-        i+=1
-    else:
-        logging.debug('File already processed. Skipping:'+path)
+    # Set number of cores
+    nb_cores = args.jobs
 
-p.close_Prog()
-#h5file.close()
 
-#process_list.append(['/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0188801/e_0188801_001_ss05_700_a_a.dat',None,None])
+    # Read lookup table associating gob's with tracks
+    #h5file = pd.HDFStore('mc11e_spice.h5')
+    #keys = h5file.keys() 
+    #lookup = np.genfromtxt('lookup.txt',dtype='str')
+    lookup = np.genfromtxt(args.tracklist, dtype = 'str')
+    #lookup = np.genfromtxt('EDR_Cyril_SouthPole_Path.txt', dtype = 'str')
 
-print('start processing',len(process_list),'tracks')
+    # Build list of processes
+    logging.info("Building task list")
+    process_list=[]
+    #p=prog.Prog(len(keys))
+    path_outroot = args.output
 
-start_time = time.time()
+    logging.debug("Base output directory: " + path_outroot)
+    for i,infile in enumerate(lookup):
+    #for orbit in keys:
+        #p.print_Prog(i)
+        #gob = int(orbit.replace('/orbit', ''))    
+        #path = lookup[gob]
+        #idx_start = h5file[orbit]['idx_start'][0]
+        #idx_end = h5file[orbit]['idx_end'][0]
 
-pool = multiprocessing.Pool(nb_cores)
-results = [pool.apply_async(cmp_processor, t,
-          {'saving':True,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}) for t in process_list]
+        # check if file has already been processed
+        path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        data_file = os.path.basename(path_file)
+        path_file = os.path.dirname(path_file)
+        outdir = os.path.join(path_outroot,path_file, 'ion')
 
-#p=prog.Prog(len(keys))
-p = prog.Prog(len(lookup))
-i=0
-for result in results:
-    p.print_Prog(i)
-    dummy = result.get()
-    if dummy == 1: print('WARNING: Error in pulse compression - see logfile')
-    i+=1
+        if not os.path.exists(outdir):
+            logging.debug("Adding " + infile)
+            process_list.append([infile, None, None, outdir, "Task{:03d}".format(i+1)])
+        else:
+            logging.debug('File already processed. Skipping ' + infile)
 
-print('done in ', (time.time()-start_time), 'seconds')
-p.close_Prog()
+    #p.close_Prog()
+    #h5file.close()
+
+    #process_list.append(['/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0188801/e_0188801_001_ss05_700_a_a.dat',None,None])
+    if args.dryrun:
+        sys.exit(0)
+
+    logging.info("Starting processing {:d} tracks".format(len(process_list)))
+
+    start_time = time.time()
+
+    pool = multiprocessing.Pool(nb_cores)
+    results = [pool.apply_async(cmp_processor, t,
+              {'saving':False,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}) for t in process_list]
+
+    for i,result in enumerate(results):
+        dummy = result.get()
+        if dummy == 1: 
+            logging.error("[{:s}] Problem running pulse compression".format(process_list[i][4]))
+
+    logging.info("Done in {:0.2f} seconds".format( time.time() - start_time ) )
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
