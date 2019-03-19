@@ -53,6 +53,10 @@ Version and Date
 
       Initial release.
 
+   2019-03-19 -- Gregory Ng UTIG
+      Added ability to configure progress symbol.  Current symbol can cause
+      UnicodeEncodeErrors exceptions in some cases.
+
 """
 import time
 import sys
@@ -63,7 +67,9 @@ __all__ = ['Prog']
 
 
 class Prog():
-    def __init__(self, length, step=0, kind='#', etc=True, eta=True):
+    def __init__(self, length, step=0, kind='#',
+        etc=True, eta=True,
+        prog_symbol = '▨'):
         def isiterable(x):
             try:
                 iter(x)
@@ -84,6 +90,10 @@ class Prog():
         self.kind = kind
         self.etc = etc
         self.eta = eta
+        self.prog_symbol = prog_symbol
+
+    def set_prog_symbol(self, symbol):
+        self.prog_symbol = symbol
 
     def print_Prog(self, loop, appendix=''):
         if (self.keys is not None):
@@ -114,12 +124,11 @@ class Prog():
                                     eta_str,
                                     appendix))
             if (self.kind == '#'):
-                prog_symbol = '▨'
                 # prog_symbol = '▬'
                 # prog_symbol = '■'
                 # prog_symbol = self.kind
                 sys.stdout.write("\r[%s%s] %3i%%%s%s%s"
-                                 % (prog_symbol * int(round(prog/5)),
+                                 % (self.prog_symbol * int(round(prog/5)),
                                     ' ' * (20-int(round(prog/5))),
                                     int(round(prog)),
                                     etc_str,
