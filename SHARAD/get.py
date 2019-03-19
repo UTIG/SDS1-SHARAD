@@ -16,8 +16,6 @@ import numpy as np
 import pandas as pd
 sys.path.append('../xlib')
 sys.path.append('../xlib/rdr')
-#import solar_longitude
-import cmp.pds3lbl as pds3
 
 
 def params():
