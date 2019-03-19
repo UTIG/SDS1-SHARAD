@@ -19,13 +19,15 @@ Example usage:
 ./run_sar2.py 
 
 
+You can tee to a log file using this command:
+stdbuf -o 0 ./run_sar2.py -v | tee sar_crash.log
 
 
 """
 
 
-def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Doppler',
-                  recalc=20, Er=1, taskid=None, saving=True, debug=False):
+def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
+                  recalc=20, Er=1, saving=True, debug=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual range compressed and ionosphere corrected tracks and
@@ -35,10 +37,12 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
 
     Input:
     -----------
-      inputlist : list of inputs required for SAR processing
-                  - path to EDR
-                  - idx_start
-                  - idx_end
+      taskinfo  : dict of inputs required for SAR processing, with the following keys
+                  - name: (required) name for this task, unique among all tasks being processed
+                  - input: (required) path to EDR
+                  - output: (required) path to output file (set to None to omit saving)
+                  - idx_start: (optional)
+                  - idx_end: (optional)
       posting   : SAR column posting interval [m]
       aperture  : length of the SAR aperture [s]
       bandwidth : Doppler bandwidth [Hz]
@@ -48,8 +52,8 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
       Er        : relative dielectric permittivity of the subsurface
                   - only required for matched filter SAR processing and tests
                     show results are not strongly affected
-      saving    : Flag to save the SAR output.
-      debug     : Enter debug mode - more info.
+      saving    : Flag to save the SAR output. True=save, False=don't save
+      debug     : Enter debug mode - show more info
 
     Output:
     -----------
@@ -57,9 +61,6 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
       columns   : matrix of EDR range lines specifying the mid-aperture
                   position as well as the start and end of each aperture
 
-    # TODO [gng]: change arguments such that if output path is specified, output,
-    #  if it is none, then don't save
-    # TODO: change the inputlist to a namedtuple or dict
     """
     import sys
     import numpy as np
@@ -69,15 +70,14 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
     import sar
     import pds3lbl as pds3
 
-    taskname = "Task{:03d}".format(taskid)
+    taskname = taskinfo.get('name', "TaskXXX")
 
     try:
     
-        # split the path variable 
-        idx_start = inputlist[1]
-        idx_end = inputlist[2]
-        path = inputlist[0]
-        
+        idx_start = taskinfo.get('idx_start', None)
+        idx_end   = taskinfo.get('idx_end', None)
+        path      = taskinfo['input']
+        outputfile= taskinfo['output']
 
         # print info in debug mode
         logging.debug("{:s}: SAR method: {:s}".format(taskname, focuser)) 
@@ -89,11 +89,11 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         # create cmp path
         path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
         path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-        data_file = path_file.split('/')[-1]
-        path_file = path_file.replace(data_file,'')
-        cmp_path = path_root+path_file+'ion/'+data_file.replace('_a.dat','_s.h5')
+        data_file = os.path.basename(path_file)
+        path_file = os.path.dirname(path_file)
+        cmp_path = os.path.join(path_root, path_file, 'ion', data_file.replace('_a.dat','_s.h5'))
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+        aux_path   = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
         science_path=path.replace('_a.dat','_s.dat')
 
         logging.debug("{:s}: Loading cmp data from {:s}".format(taskname, cmp_path))
@@ -149,7 +149,8 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
             vr = data['RADIAL_VELOCITY_INTERPOLATE'].as_matrix()
             v = np.zeros(len(vt), dtype=float)
             for j in range(len(vt)):
-                v[j] = np.sqrt(vt[j]**2 + vr[j]**2)
+                #v[j] = np.sqrt(vt[j]**2 + vr[j]**2)
+                v[j] = np.hypot( vt[j], vr[j] )
         
         # correct the rx window opening times for along-track changes in spacecraft
         # radius
@@ -174,19 +175,20 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
                                              recalc, tlp, et, rxwot)
         
         # save the result
-        if saving:
-            save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
-            path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-            data_file = os.path.basename(path_file)
-            path_file = os.path.dirname(path_file)
-            new_path = save_root + path_file
-            new_path = new_path + str(posting) + 'm/'
-            new_path = new_path + str(aperture) + 's/'
-            new_path = new_path + str(bandwidth) + 'Hz/'
-            if focuser == 'Matched Filter':
-                new_path = new_path + str(Er) + 'Er/'
+        if saving == True and outputfile is not None:
+            #save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
+            #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+            #data_file = os.path.basename(path_file)
+            #path_file = os.path.dirname(path_file)
+            #new_path = save_root + path_file
+            #new_path = new_path + str(posting) + 'm/'
+            #new_path = new_path + str(aperture) + 's/'
+            #new_path = new_path + str(bandwidth) + 'Hz/'
+            #if focuser == 'Matched Filter':
+            #    new_path = new_path + str(Er) + 'Er/'
+            new_path = os.path.dirname(outputfile)
 
-            outputfile = os.path.join(new_path, datafile.replace(".dat", ".h5"))
+            #outputfile = os.path.join(new_path, data_file.replace(".dat", ".h5"))
 
             logging.debug("{:s}: Saving to file: {:s}".format(taskname, outputfile))
 
@@ -203,11 +205,11 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
 
     except Exception as e:
         
-        logging.error('Task{:03d}: Error processing file: {:s}'.format(taskid,path))
-        logging.error("Task{:03d}: {:s}".format(taskid, str(e)) )
+        logging.error('{:s}: Error processing file: {:s}'.format(taskname,path))
+        logging.error("{:s}: {:s}".format(taskname, str(e)) )
         return 1
     
-    logging.debug('Task{:03d}: Successfully processed file: {:s}'.format(taskid,path))
+    logging.debug('{:s}: Successfully processed file: {:s}'.format(taskname,path))
     
     return 0
 
@@ -296,52 +298,56 @@ def main():
     #    idx_end = h5file[orbit]['idx_end'][0]
         logging.debug("[{:03d} of {:03d}] Building task for {:s}".format(i+1, len(lookup), path))
     
-        taskid = "Task{:03d}".format(i+1)
         # check if file has already been processed
         path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
         data_file = os.path.basename(path_file)
         orbit_name = data_file[2:7]
         path_file = os.path.dirname(path_file)
-        new_path = path_root + path_file
-        new_path = new_path + str(posting) + 'm/'
-        new_path = new_path + str(aperture) + 's/'
-        new_path = new_path + str(bandwidth) + 'Hz/'
+        new_path = os.path.join(path_root, path_file, 
+            str(posting) + 'm', 
+            str(aperture) + 's',
+            str(bandwidth) + 'Hz')
         if focuser == 'Matched Filter':
-            new_path = new_path + str(Er) + 'Er/'
+            new_path = os.path.join(new_path, str(Er) + 'Er')
+
+        outputfile = os.path.join(new_path, data_file.replace('_a.dat','_s.h5') )
+
 
         logging.debug("Looking for {:s}".format(new_path))
 
-        if not os.path.exists(new_path):
-            if orbit_name == '05901':
-                process_list.append([path, 78000, 141000])
-            elif orbit_name == '10058':
-                process_list.append([path, 30000, 62000])
-            elif orbit_name == '16403':
-                process_list.append([path, 38000, 80000])
-            elif orbit_name == '17333':
-                process_list.append([path, 39000, 71000])
-            elif orbit_name == '17671':
-                process_list.append([path, 43000, 75000])
-            elif orbit_name == '23535':
-                process_list.append([path, 43000, 75000])
-            elif orbit_name == '26827':
-                process_list.append([path, 43000, 75000])
-            elif orbit_name == '27104':
-                process_list.append([path, 43000, 75000])
-            elif orbit_name == '32317':
-                process_list.append([path, 3000, 32000])
-            elif orbit_name == '50343':
-                process_list.append([path, 13000, 45000])
-            elif orbit_name == '50352':
-                process_list.append([path, 13000, 45000])
-            elif orbit_name == '50365':
-                process_list.append([path, 13000, 45000])
-            elif orbit_name == '50409':
-                process_list.append([path, 13000, 45000])
-            else:
-                process_list.append([path, None, None])
-        else:
+
+        orbit_indexes = {
+            '05901': [78000, 141000],
+            '10058': [30000, 62000],
+            '16403': [38000, 80000],
+            '17333': [39000, 71000],
+            '17671': [43000, 75000],
+            '23535': [43000, 75000],
+            '26827': [43000, 75000],
+            '27104': [43000, 75000],
+            '32317': [ 3000, 32000],
+            '50343': [13000, 45000],
+            '50352': [13000, 45000],
+            '50365': [13000, 45000],
+            '50409': [13000, 45000],
+        }
+
+        if os.path.exists(new_path):
             logging.debug('File already processed. Skipping: '+path)
+            continue
+
+        # Get the orbit index from the dict, or just use None
+        orbit_index = orbit_indexes.get(orbit_name, [None, None])
+        taskinfo = {
+        'name': 'Task{:03d}-{:s}'.format(i, orbit_name),
+        'input': path,
+        'output': outputfile,
+        'idx_start': orbit_index[0],
+        'idx_end':   orbit_index[1],        
+        }
+        process_list.append(taskinfo)
+        logging.debug("{:s} input:  {:s}".format(taskinfo['name'], taskinfo['input']) )
+        logging.debug("{:s} output: {:s}".format(taskinfo['name'], taskinfo['output']) )
 
     #h5file.close()
 
@@ -355,7 +361,8 @@ def main():
 
     pool = multiprocessing.Pool(nb_cores)
     results = [pool.apply_async(sar_processor, (t,posting,aperture,bandwidth,focuser,recalc,Er),
-                     {'saving':False,'debug':args.verbose, 'taskid':j+1}) for j,t in enumerate(process_list)]
+                     {'saving':False,'debug':args.verbose}) 
+        for j,t in enumerate(process_list)]
 
     #p=prog.Prog(len(keys))
     #p = prog.Prog(len(lookup), prog_symbol='#')
