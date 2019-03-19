@@ -41,14 +41,14 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
     """
 
     import sys
-    sys.path.insert(0, '../xlib/cmp/')
-    import time
-    from scipy.optimize import curve_fit
     import os
+    import time
     import logging
+    sys.path.insert(0, '../xlib/cmp/')
+    from scipy.optimize import curve_fit
     import pds3lbl as pds3
     import plotting as plotting
-    import rng_cmp as rng_cmp
+    import rng_cmp
     import pandas as pd
 
     try:
