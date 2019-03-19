@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 __authors__ = ['Gregor Steinbruegge, gregor@ig.utexas.edu']
 __version__ = '1.0'
 __history__ = {
@@ -9,6 +11,18 @@ __history__ = {
         {'date': 'October 23 2018',
          'author': 'Kirk Scanlan, UTIG',
          'info': 'Second release.'}}
+
+
+"""
+
+Example usage:
+./run_sar2.py 
+
+
+
+
+"""
+
 
 def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Doppler',
                   recalc=20, Er=1, saving=True, debug=False):
@@ -42,6 +56,9 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
       sar       : focused SAR data
       columns   : matrix of EDR range lines specifying the mid-aperture
                   position as well as the start and end of each aperture
+
+    # TODO [gng]: change arguments such that if output path is specified, output,
+    #  if it is none, then don't save
     """
     import sys
     sys.path.insert(0, '../xlib/sar/')
@@ -188,126 +205,165 @@ def sar_processor(inputlist, posting, aperture, bandwidth, focuser='Delay Dopple
         logging.debug('Error in file:'+path+'\n'+str(e)+'\n')
         return 1
     
-    logging.debug('Successfully processd file:'+path)
+    logging.debug('Successfully processed file:'+path)
     
     return 0
 
+# standard python libraries and systemwide libraries
 import sys
-sys.path.insert(0, '../xlib/misc')
 import os
 import numpy as np
-import importlib.util
-import pandas as pd
 import multiprocessing
+import argparse
 import time
 import logging
-import prog
-import hdf
-import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+import pandas as pd
+import importlib.util
 
-# Set number of cores
-nb_cores = 3
+#import matplotlib
+## Force matplotlib to not use any Xwindows backend.
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
 
-# set SAR processing variables
-posting = 115
-aperture = 11.7
-bandwidth = 0.4
-focuser = 'Delay Doppler'
-recalc = 20
-Er = 1.00
 
-# Read lookup table associating gob's with tracks
-#h5file = pd.HDFStore('mc11e_spice.h5')
-#keys = h5file.keys()
-#lookup = np.genfromtxt('lookup.txt',dtype='str')
-lookup = np.genfromtxt('elysium.txt', dtype = 'str')
-# Build list of processes
-print('build task list')
-process_list=[]
-logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
+# project libraries
+sys.path.insert(0, '../xlib/misc')
+import prog
+import hdf
 
-p = prog.Prog(len(lookup))
-i=0
-path_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
 
-i = 0
-if i == 0:
-#for i in range(len(lookup)): 
-#for orbit in keys:
-    p.print_Prog(i)
-#    gob = int(orbit.replace('/orbit', ''))
-#    path = lookup[gob]
-#    idx_start = h5file[orbit]['idx_start'][0]
-#    idx_end = h5file[orbit]['idx_end'][0]
-    path = lookup[i]
+def main():
+    # TODO: improve description
+    parser = argparse.ArgumentParser(description='Run SAR processing')
+    parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    parser.add_argument('-n','--dry-run', action="store_true", help="Dry run.  Build task list but do not run")
+    parser.add_argument('-m','--modifypst', help="Enable PST rewriting using specified script", required=False)
+    parser.add_argument('--tracklist', default="elysium.txt",
+        help="List of tracks to process")
+    #parser.add_argument('-f','--format', help="When outputting to stdout, use this payload format (default=repr)", required=False, default='repr',choices= sorted(rawcat_fmts.keys()) )
+    #parser.add_argument('--compact', action="store_true", help="When outputting to stdout, use compact output format")
+    #parser.add_argument('--single','--full',  action="store_true", help="Output full data to a single transect directory (don't create per-transect directories)")
+    #parser.add_argument('--stream',help="Comma separated list of stream names to include in output")
+    # implies single core
+    parser.add_argument('--profile',  action="store_true", help='Profile execution performance', required=False)
+    #parser.add_argument('files', nargs='+', help='Input files to process')
+
+    args = parser.parse_args()
+
+    #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+
+    # Set number of cores
+    nb_cores = args.jobs
+
+    # set SAR processing variables
+    posting = 115
+    aperture = 11.7
+    bandwidth = 0.4
+    focuser = 'Delay Doppler'
+    recalc = 20
+    Er = 1.00
+
+    # Read lookup table associating gob's with tracks
+    #h5file = pd.HDFStore('mc11e_spice.h5')
+    #keys = h5file.keys()
+    #lookup = np.genfromtxt('lookup.txt',dtype='str')
+    lookup = np.genfromtxt(args.tracklist, dtype = 'str')
+    # Build list of processes
+    process_list=[]
+    logging.info("Building task list from {:s}".format(args.tracklist))
+
+    #p = prog.Prog(len(lookup), prog_symbol='*')
+    path_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
+
+    # Just run the first one
+    # lookup = lookup[0:1]
+
+    for i, path in enumerate(lookup):
+    #for orbit in keys:
+        #p.print_Prog(i)
+    #    gob = int(orbit.replace('/orbit', ''))
+    #    path = lookup[gob]
+    #    idx_start = h5file[orbit]['idx_start'][0]
+    #    idx_end = h5file[orbit]['idx_end'][0]
+        logging.debug("[{:03d} of {:03d}] Building task for {:s}".format(i+1, len(lookup), path))
     
-    # check if file has already been processed
-    path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-    data_file = path_file.split('/')[-1]
-    orbit_name = data_file[2:7]
-    path_file = path_file.replace(data_file,'')
-    new_path = path_root + path_file
-    new_path = new_path + str(posting) + 'm/'
-    new_path = new_path + str(aperture) + 's/'
-    new_path = new_path + str(bandwidth) + 'Hz/'
-    if focuser == 'Matched Filter':
-        new_path = new_path + str(Er) + 'Er/'
+        # check if file has already been processed
+        path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        data_file = path_file.split('/')[-1]
+        orbit_name = data_file[2:7]
+        path_file = path_file.replace(data_file,'')
+        new_path = path_root + path_file
+        new_path = new_path + str(posting) + 'm/'
+        new_path = new_path + str(aperture) + 's/'
+        new_path = new_path + str(bandwidth) + 'Hz/'
+        if focuser == 'Matched Filter':
+            new_path = new_path + str(Er) + 'Er/'
 
-    if not os.path.exists(new_path):
-        if orbit_name == '05901':
-            process_list.append([path, 78000, 141000])
-        elif orbit_name == '10058':
-            process_list.append([path, 30000, 62000])
-        elif orbit_name == '16403':
-            process_list.append([path, 38000, 80000])
-        elif orbit_name == '17333':
-            process_list.append([path, 39000, 71000])
-        elif orbit_name == '17671':
-            process_list.append([path, 43000, 75000])
-        elif orbit_name == '23535':
-            process_list.append([path, 43000, 75000])
-        elif orbit_name == '26827':
-            process_list.append([path, 43000, 75000])
-        elif orbit_name == '27104':
-            process_list.append([path, 43000, 75000])
-        elif orbit_name == '32317':
-            process_list.append([path, 3000, 32000])
-        elif orbit_name == '50343':
-            process_list.append([path, 13000, 45000])
-        elif orbit_name == '50352':
-            process_list.append([path, 13000, 45000])
-        elif orbit_name == '50365':
-            process_list.append([path, 13000, 45000])
-        elif orbit_name == '50409':
-            process_list.append([path, 13000, 45000])
+        logging.debug("Looking for {:s}".format(new_path))
+
+        if not os.path.exists(new_path):
+            if orbit_name == '05901':
+                process_list.append([path, 78000, 141000])
+            elif orbit_name == '10058':
+                process_list.append([path, 30000, 62000])
+            elif orbit_name == '16403':
+                process_list.append([path, 38000, 80000])
+            elif orbit_name == '17333':
+                process_list.append([path, 39000, 71000])
+            elif orbit_name == '17671':
+                process_list.append([path, 43000, 75000])
+            elif orbit_name == '23535':
+                process_list.append([path, 43000, 75000])
+            elif orbit_name == '26827':
+                process_list.append([path, 43000, 75000])
+            elif orbit_name == '27104':
+                process_list.append([path, 43000, 75000])
+            elif orbit_name == '32317':
+                process_list.append([path, 3000, 32000])
+            elif orbit_name == '50343':
+                process_list.append([path, 13000, 45000])
+            elif orbit_name == '50352':
+                process_list.append([path, 13000, 45000])
+            elif orbit_name == '50365':
+                process_list.append([path, 13000, 45000])
+            elif orbit_name == '50409':
+                process_list.append([path, 13000, 45000])
+            else:
+                process_list.append([path, None, None])
+            i+=1
         else:
-            process_list.append([path, None, None])
-        i+=1
-    else:
-        logging.debug('File already processed. Skipping:'+path)
+            logging.debug('File already processed. Skipping: '+path)
 
-p.close_Prog()
-#h5file.close()
-print('start processing',len(process_list),'tracks')
+    #h5file.close()
 
-start_time = time.time()
+    # Stop for now
+    print(process_list)
+    sys.exit(0)
 
-pool = multiprocessing.Pool(nb_cores)
-results = [pool.apply_async(sar_processor, (t,posting,aperture,bandwidth,focuser,recalc,Er),
-                 {'saving':True,'debug':False}) for t in process_list]
+    print('start processing',len(process_list),'tracks')
 
-#p=prog.Prog(len(keys))
-p = prog.Prog(len(lookup))
-i=0
-for result in results:
-    p.print_Prog(i)
-    dummy = result.get()
-    if dummy == 1: print('WARNING: Error in SAR processing - see logfile')
-    i+=1
+    start_time = time.time()
 
-print('done in ', (time.time()-start_time), 'seconds')
-p.close_Prog()
+    pool = multiprocessing.Pool(nb_cores)
+    results = [pool.apply_async(sar_processor, (t,posting,aperture,bandwidth,focuser,recalc,Er),
+                     {'saving':False,'debug':args.verbose}) for t in process_list]
 
+    #p=prog.Prog(len(keys))
+    p = prog.Prog(len(lookup))
+    for i, result in enumerate(results):
+        p.print_Prog(i)
+        dummy = result.get()
+        if dummy == 1: print('WARNING: Error in SAR processing - see logfile')
+
+    print('done in ', (time.time()-start_time), 'seconds')
+    p.close_Prog()
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
