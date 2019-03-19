@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from cmp import pds3lbl as pds3
 from scipy.constants import c
+import os.path
 
 xover = np.load('xover/mc11_xover.npy')
 lookup = np.genfromtxt('lookup.txt',dtype='str')
@@ -20,8 +23,8 @@ for x in xover:
         # track 1
         path = lookup[gob1]
         path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-        data_file = path_file.split('/')[-1]
-        path_file = path_file.replace(data_file,'')
+        data_file = os.path.basename(path_file)
+        path_file = os.path.dirname(path_file)
         new_path = 'alt2/'+data_file.replace('.dat','.npy')
         tecu_file = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'+path_file+'ion/'+data_file.replace('_a.dat','_s_TECU.txt')
         tec1 = np.loadtxt(tecu_file)*1E+15
@@ -37,10 +40,11 @@ for x in xover:
         #aux2 = pds3.read_science(path.replace('_s.dat','_a.dat'), aux_path, science=False, bc=False)
         #sza2=aux2['SOLAR_ZENITH_ANGLE'][idx2]
         path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-        data_file = path_file.split('/')[-1]
-        path_file = path_file.replace(data_file,'')
-        new_path = 'alt2/'+data_file.replace('.dat','.npy')
-        tecu_file = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'+path_file+'ion/'+data_file.replace('_a.dat','_s_TECU.txt')
+        data_file = os.path.basename(path_file)
+        path_file = os.path.dirname(path_file)
+        new_path = os.path.join('alt2',data_file.replace('.dat','.npy'))
+        tecu_file = os.path.join('/disk/kea/SDS/targ/xtra/SHARAD/cmp/', path_file+'ion',
+                    data_file.replace('_a.dat','_s_TECU.txt')
         tec2 = np.loadtxt(tecu_file)*1E+15
         delay2 = c*tec2*1.69E-6/(2*np.pi*(20E+6)**2)
         #print(sza2,tec2[0],tec2[0]*1.69E-6/(20E+6)**2)        
