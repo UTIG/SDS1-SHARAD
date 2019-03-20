@@ -38,6 +38,8 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
       E          : Optimal E value
       cmp_pulses : Compressed pulses
 
+    # TODO: what's the difference between debug and verbose?  
+    # These should be combined into verbosity levels
     """
 
     import sys
@@ -70,7 +72,9 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             idx_start = 0
             idx_end = len(data)
         idx = np.arange(idx_start,idx_end)
-        if debug: print('Length of track:',len(idx))
+        
+        
+        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)) )
 
         # Chop raw data
         raw_data=np.zeros((len(idx),3600),dtype=np.complex)
@@ -109,7 +113,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         else: chunks[-1][1]=idx_end-idx_start
         chunks = np.array(chunks)
 
-        if debug: print('chunked into:', len(chunks), 'pieces.')
+        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)) )
         # Compress the data chunkwise and reconstruct
         for i in range(len(chunks)):
             start = chunks[i,0]
@@ -117,15 +121,12 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
             #check if ionospheric correction is needed
             iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
-            if len(iono_check) == 0:
-                iono = False
-            else:
-                iono = True
+            b_iono = len(iono_check) != 0
+            minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
+            logging.debug('{:s}: Minimum SZA: {:s}'.format(taskname, str(minsza)) )
+            logging.debug('{:s}: Ionospheric Correction: {!r}'.format(taskname, b_iono)) 
 
-            if debug: print('Minimum SZA:',min(aux['SOLAR_ZENITH_ANGLE'][start:end]),'\n',
-                        'Ionospheric correction:',iono)
-
-            E, sigma, cmp_data = rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=iono, debug=debug)
+            E, sigma, cmp_data = rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=debug)
             if i == 0:
                 cmp_track = cmp_data
             else:
@@ -142,21 +143,24 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             #data_file = path_file.split('/')[-1]
             #path_file = path_file.replace(data_file,'')
             #new_path = path_outroot+path_file+'ion/'
-            outfile = os.path.join(outdir, os.path.basename(infile))
+            data_file   = os.path.basename(infile)
+            outfilebase = data_file.replace('.dat','.h5')
+            outfile     = os.path.join(outdir, outfilebase)
 
-            if debug: print('Saving to folder:',new_path)
-            if not os.path.exists(new_path):
-                os.makedirs(new_path)
+            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,new_path) )
+            if not os.path.exists(outdir):
+                os.makedirs(outdir)
 
             # restructure of data save
             real = np.array(np.round(cmp_track.real), dtype=np.int16)
             imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
             dfreal = pd.DataFrame(real)
             dfimag = pd.DataFrame(imag)
-            dfreal.to_hdf(new_path+data_file.replace('.dat','.h5'), key='real', complib = 'blosc:lz4', complevel=6)
-            dfimag.to_hdf(new_path+data_file.replace('.dat','.h5'), key='imag', complib = 'blosc:lz4', complevel=6)
+            dfreal.to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
+            dfimag.to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
             #np.save(new_path+data_file.replace('.dat','.npy'),cmp_track)
-            np.savetxt(new_path+data_file.replace('.dat','_TECU.txt'),E_track)
+            outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
+            np.savetxt(outfile_TECU,E_track)
 
         if radargram:
             # Plot a radargram
@@ -187,7 +191,6 @@ import warnings
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 sys.path.insert(0, '../xlib/misc/')
-import prog
 import hdf
 
 
@@ -228,13 +231,11 @@ def main():
     # Build list of processes
     logging.info("Building task list")
     process_list=[]
-    #p=prog.Prog(len(keys))
     path_outroot = args.output
 
     logging.debug("Base output directory: " + path_outroot)
     for i,infile in enumerate(lookup):
     #for orbit in keys:
-        #p.print_Prog(i)
         #gob = int(orbit.replace('/orbit', ''))    
         #path = lookup[gob]
         #idx_start = h5file[orbit]['idx_start'][0]
@@ -248,29 +249,38 @@ def main():
 
         if not os.path.exists(outdir):
             logging.debug("Adding " + infile)
-            process_list.append([infile, None, None, outdir, "Task{:03d}".format(i+1)])
+            process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
         else:
             logging.debug('File already processed. Skipping ' + infile)
 
-    #p.close_Prog()
     #h5file.close()
 
     #process_list.append(['/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0188801/e_0188801_001_ss05_700_a_a.dat',None,None])
     if args.dryrun:
         sys.exit(0)
 
-    logging.info("Starting processing {:d} tracks".format(len(process_list)))
+    logging.info("Start processing {:d} tracks".format(len(process_list)))
 
     start_time = time.time()
 
-    pool = multiprocessing.Pool(nb_cores)
-    results = [pool.apply_async(cmp_processor, t,
-              {'saving':False,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}) for t in process_list]
+    named_params = {'saving':False,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}
 
-    for i,result in enumerate(results):
-        dummy = result.get()
-        if dummy == 1: 
-            logging.error("[{:s}] Problem running pulse compression".format(process_list[i][4]))
+    if nb_cores <= 1:
+        for t in process_list:
+            cmp_processor(*t, **named_params)
+
+    else:
+
+        pool = multiprocessing.Pool(nb_cores)
+        results = [pool.apply_async(cmp_processor, t,
+                named_params) for t in process_list]
+
+        for i,result in enumerate(results):
+            dummy = result.get()
+            if dummy == 1: 
+                logging.error("{:s}: Problem running pulse compression".format(process_list[i][4]))
+            else:
+                logging.info( "{:s}: Finished pulse compression".format(process_list[i][4] ))
 
     logging.info("Done in {:0.2f} seconds".format( time.time() - start_time ) )
 
