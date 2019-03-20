@@ -15,12 +15,15 @@ __history__ = {
                  'by numpy and only the bitstrings by the bitstring package.'
                  'This significantly speeds up the process'}}
 
-import pvl
 import numpy as np
 import glob, os
 import pandas as pd
 #import bitstring as bs - currently not used
-    
+
+import sys
+sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
+import pvl
+
 
 def read_science(data_path, label_path, science=True, bc=True):
     
