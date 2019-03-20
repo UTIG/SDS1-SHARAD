@@ -23,6 +23,17 @@ Version History
         --- Date: Thursday, September 27 2018
 '''
 
+
+import glob
+import numpy as np
+import pandas as pd
+
+
+
+import sys
+sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
+import pvl
+
 def load_mola(pth):
     '''
     Python script for plotting MOLA .img data
@@ -36,11 +47,6 @@ def load_mola(pth):
        topo: matrix of MOLA topographies [km]
     '''
 
-    # TODO: PEP8: move these to the top of the file
-    import pvl
-    import glob
-    import numpy as np
-    import pandas as pd
 
     label = pvl.load(pth.replace('.img', '.lbl'))
     lon_samp = label['IMAGE']['LINE_SAMPLES']
