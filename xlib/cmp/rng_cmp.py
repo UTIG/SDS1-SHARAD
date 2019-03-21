@@ -11,6 +11,12 @@ __history__ = {
                  'for the pulse compression of SHARAD data and'
                  'to correct for the ionospheric distortion'}}
 
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
+
+
 def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
     """
     This subroutine creates SHARAD reference chirps used for
@@ -31,8 +37,6 @@ def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
         fs: Set of filter functions (reference chirps)
             suitable for pulse compression
     """
-
-    import numpy as np
 
     # Parameters
     fl = 15E+6   # Sharad lower frequency 15 MHz
@@ -101,20 +105,20 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         E:         Optimal E value found
         dechirped: Pulse compressed with optimal E value
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.optimize import curve_fit
-
+    # TODO: make plotting optional with an arg
     # Compute list of reference chirps
     fs = us_refchirp(iono, resolution=resolution,
                      maxTECU=maxTECU)
     if iono:
         csnr = np.empty((len(fs), len(data)))
         # Perform range compression per filter and record SNR
+        # GNG: for i, chirp in enumerate(fs)
         for i in range(0, len(fs)):
+            # GNG: TODO: move this fft call out of the loop
             product = np.fft.fft(data)*np.conj(fs[i])
             # apply frequency domain filter if desired
             if chirp_filter:
+                # GNG: move hamming filter out of the loop
                 product = np.multiply(product, Hamming(15E6, 25E6))
             dechirped = np.fft.ifft(product)
             # Noise is recorded within first 266 samples
@@ -163,12 +167,11 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         if chirp_filter:
             product = np.multiply(product, Hamming(15E6, 25E6))
         dechirped = np.fft.ifft(product)
-        plt.show()
+        if debug:
+            plt.show()
     return E, sigma, dechirped
 
 def Gaussian(x, a, x0, sigma):
-    import numpy as np
-
     """
     Simple Gaussian distribution
     This function is used internally for curve fitting.
@@ -201,8 +204,6 @@ def Hamming(Fl, Fh):
         Frequency domain Hamming filter
     """
 
-    import numpy as np
-
     min_freq = int(round((Fl) * 3600 / (1/0.0375E-6)))
     max_freq = int(round((Fh) * 3600 / (1/0.0375E-6)))
     dfreq = max_freq - min_freq + 1
@@ -229,8 +230,6 @@ def decompressSciData(data, compression, presum, bps, SDI):
         Decompressed data
     """
 
-    import numpy as np
-
     #TODO: only static decompression is currently implemented
     #      implement dynamic decompression
 
@@ -254,6 +253,7 @@ def decompressSciData(data, compression, presum, bps, SDI):
             decompressed_data = data * (np.power(2, S) / N)
         return decompressed_data
     else:
+        # TODO: logging, should this be an exception?
         print('Decompression Error: Compression Type {} not understood'.format(compression))
     return
 
