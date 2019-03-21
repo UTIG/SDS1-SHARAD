@@ -219,30 +219,16 @@ def read_science(data_path, label_path, science=True, bc=True):
             print('This error should not occur. Something horribly went wrong')
             return 0
     if bc:
-        logging.debug("Running bc")
         # Replace the bitstrings
         # Read the bitcolumns. These have been previously saved in np.void format
         # and are now converted into bitstrings which are evaluated bit per bit.
 
         for k,bcl in enumerate(bitcolumns):
             stringdata = out[bcl[0]]
-            #mydtype='S'+str(bcl[2]*8)
-            #bits = np.empty(len(stringdata), dtype=mydtype)
             # A list of bitarray objects for data
-            bitdata=[]
+            bitdata = [ bs.ConstBitStream(bs1.tobytes()) for bs1 in stringdata ]
 
-            logging.debug("bc k={:d}".format(k ))
-            #logging.debug("stringdata={!r}".format(stringdata ))
-
-            for i, bs1 in enumerate(stringdata):
-                #bits[i] = bs.BitArray(bs1.tobytes()).bin #tobit(bs1)
-                bitdata.append( bs.ConstBitStream(bs1.tobytes()) )
-
-
-            #logging.debug("bits={!r} shape={!r}".format(bits, bits.shape) )
-            #logging.debug("bits={!r} shape={!r}".format(bits, len(bits)) )
             for m,sub in enumerate(bcl[1]):
-                logging.debug("k={:d} m={:d} sub={!r}".format(k, m,sub))
                 # GNG: TODO: should this be?
                 # if sub[0] == 'BIT_COLUMN':
                 if 'BIT_COLUMN' not in sub:
@@ -250,13 +236,11 @@ def read_science(data_path, label_path, science=True, bc=True):
 
                 name = sub[1]['NAME']
                 # Select data type from dictionary if field is not a spare
-
                 if 'SPARE' in name:
                     continue
 
-                nb_bits = sub[1]['BITS']
+                nb_bits   = sub[1]['BITS']
                 start_bit = sub[1]['START_BIT']-1
-                end_bit = start_bit + nb_bits
                 dtype = PDS3_DATA_TYPE_TO_BS[sub[1]['BIT_DATA_TYPE']]\
                         +':'+str(nb_bits)
                 if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
@@ -264,10 +248,7 @@ def read_science(data_path, label_path, science=True, bc=True):
 
                 logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
 
-                vals = [ bit_select2( bits, start_bit, dtype) for bits in bitdata ]
-
-                conv = np.array(vals)
-                logging.debug("conv={!r} shape={!r}".format(conv, conv.shape) )
+                conv = np.array( [ bit_select2( bits, start_bit, dtype) for bits in bitdata ] )
                 dfr[name] = pd.Series(conv, index=dfr.index)
     return dfr
 
