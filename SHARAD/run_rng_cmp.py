@@ -15,10 +15,35 @@ __history__ = {
         {'date': 'October 16 2018',
          'info': 'Modified data saving method from .npy to .h5'}} 
 
+import sys
+import os
+import time
+import logging
+import argparse
+import warnings
+import multiprocessing
+import traceback
+
+import numpy as np
+from scipy.optimize import curve_fit
+import importlib.util
+import pandas as pd
+
+# TODO: make this import more robust to allow this script
+# TODO: to be run from outside the SHARAD directory
+sys.path.insert(0, '../xlib')
+#import misc.hdf
+import cmp.pds3lbl as pds3
+import cmp.plotting
+import cmp.rng_cmp
+
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
 
 
 def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
-                  chrp_filt=True, debug=False, verbose=False, saving=False):
+                  chrp_filt=True, verbose=False, saving=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -30,7 +55,6 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
       idx_start : Start index for processing.
       idx_end   : End index for processing.
       chrp_filt : Apply a filter to the reference chirp
-      debug     : Enter debug mode - more info.
       verbose   : Gives feedback in the terminal.
 
     Output:
@@ -38,20 +62,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
       E          : Optimal E value
       cmp_pulses : Compressed pulses
 
-    # TODO: what's the difference between debug and verbose?  
-    # These should be combined into verbosity levels
     """
-
-    import sys
-    import os
-    import time
-    import logging
-    sys.path.insert(0, '../xlib/cmp/')
-    from scipy.optimize import curve_fit
-    import pds3lbl as pds3
-    import plotting as plotting
-    import rng_cmp
-    import pandas as pd
 
     try:
     #if chrp_filt:
@@ -72,8 +83,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             idx_start = 0
             idx_end = len(data)
         idx = np.arange(idx_start,idx_end)
-        
-        
+                
         logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)) )
 
         # Chop raw data
@@ -84,6 +94,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         if data['COMPRESSION_SELECTION'][idx_start] == 0: compression = 'static'
         else: compression = 'dynamic'
         tps = data['TRACKING_PRE_SUMMING'][idx_start]
+        assert(tps >= 0 and tps <= 7)
         if tps == 0: presum = 1
         elif tps == 1: presum = 2
         elif tps == 2: presum = 3
@@ -96,7 +107,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         bps = 8    
 
         # Decompress the data
-        decompressed = rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI) 
+        decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI) 
         E_track = np.empty((idx_end-idx_start,2))
         # Get groundtrack distance and define 30 km chunks
         tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
@@ -126,7 +137,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
                 taskname, i, len(chunks), minsza, b_iono) )
 
             # GNG: These concats seem relatively expensive.
-            E, sigma, cmp_data = rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=debug)
+            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
             if i == 0:
                 cmp_track = cmp_data
             else:
@@ -147,7 +158,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             outfilebase = data_file.replace('.dat','.h5')
             outfile     = os.path.join(outdir, outfilebase)
 
-            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,new_path) )
+            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,outdir) )
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
 
@@ -167,32 +178,20 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx]
             tx0=data['RECEIVE_WINDOW_OPENING_TIME'][0]
             tx=np.empty(len(data))
+            # GNG: this seems likely to be wrong. Should be:
+            #for rec in range(len(data['RECEIVE_WINDOW_OPENING_TIME'])):
             for rec in range(len(data)):
                 tx[rec]=data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
-            plotting.plot_radargram(cmp_track,tx,samples=3600)
+            cmp.plotting.plot_radargram(cmp_track,tx,samples=3600)
 
     except Exception as e:
+
         logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
-        logging.error('{:s}: {:s}'.format(taskname, str(e)) )
+        for line in traceback.format_exc().split("\n"):
+            logging.error('{:s}: {:s}'.format(taskname, line) )
         return 1
-    logging.debug('Successfully processed file: ' + infile)
+    logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
     return 0
-
-import sys
-import os
-import numpy as np
-import importlib.util
-import pandas as pd
-import multiprocessing
-import time
-import logging
-import argparse
-import warnings
-warnings.filterwarnings("ignore", message="numpy.dtype size changed")
-warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
-sys.path.insert(0, '../xlib/misc/')
-import hdf
-
 
 def main():
     # TODO: improve description
@@ -200,16 +199,12 @@ def main():
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/cmp',
                         help="Output base directory")
 
-
     parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
-    # implies single core
-    #parser.add_argument('--profile',  action="store_true", help='Profile execution performance', required=False)
-    #parser.add_argument('files', nargs='+', help='Input files to process')
 
     args = parser.parse_args()
 
@@ -220,7 +215,6 @@ def main():
 
     # Set number of cores
     nb_cores = args.jobs
-
 
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
@@ -246,7 +240,7 @@ def main():
         path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
-        outdir = os.path.join(path_outroot,path_file, 'ion')
+        outdir    = os.path.join(path_outroot,path_file, 'ion')
 
         if not os.path.exists(outdir):
             logging.debug("Adding " + infile)
@@ -265,14 +259,14 @@ def main():
 
     start_time = time.time()
 
-    named_params = {'saving':True,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}
+    named_params = {'saving':True,'chrp_filt':True,'verbose':args.verbose,'radargram':False}
 
     if nb_cores <= 1:
+        # Single processing (for profiling)
         for t in process_list:
             cmp_processor(*t, **named_params)
-
     else:
-
+        # Multiprocessing
         pool = multiprocessing.Pool(nb_cores)
         results = [pool.apply_async(cmp_processor, t,
                 named_params) for t in process_list]
