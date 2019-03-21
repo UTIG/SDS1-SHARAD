@@ -122,7 +122,6 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         if len(chunks)==0: chunks.append([0,idx_end-idx_start])
         if (tlp[-1]-tlp[i0])>=15: chunks.append([i0, idx_end-idx_start])
         else: chunks[-1][1]=idx_end-idx_start
-        #chunks = np.array(chunks)
 
         logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)) )
         # Compress the data chunkwise and reconstruct
@@ -133,7 +132,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
             b_iono = len(iono_check) != 0
             minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:0.3f}  Ionospheric Correction: {!r}'.format(
+            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f}  Ionospheric Correction: {!r}'.format(
                 taskname, i, len(chunks), minsza, b_iono) )
 
             # GNG: These concats seem relatively expensive.
@@ -162,16 +161,19 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
 
+
             # restructure of data save
             real = np.array(np.round(cmp_track.real), dtype=np.int16)
             imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
-
             if saving == 'hdf5':
                 dfreal = pd.DataFrame(real)
                 dfimag = pd.DataFrame(imag)
                 dfreal.to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
                 dfimag.to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
             elif saving == 'npy':
+                # Round it just like in an hdf5 and save as side-by-side arrays
+                cmp_track = np.vstack([real, imag])
+
                 outfile = os.path.join(outdir, data_file.replace('.dat','.npy') )
                 np.save(outfile,cmp_track)
             elif saving == 'none':
@@ -207,7 +209,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run SAR processing')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/cmp',
                         help="Output base directory")
-    parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','npz','none'),
+    parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','npy','none'),
                         help="Output file format")
 
     parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
