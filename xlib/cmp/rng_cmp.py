@@ -87,7 +87,7 @@ def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
 
 
 def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
-               debug=True):
+               debug=True, b_plot=False):
     """
     Performs the range compression according to the Bruce Campbell
     method. In case of ionosphere it tries to find the optimal
@@ -112,14 +112,13 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
     if iono:
         csnr = np.empty((len(fs), len(data)))
         # Perform range compression per filter and record SNR
-        # GNG: for i, chirp in enumerate(fs)
-        for i in range(0, len(fs)):
-            # GNG: TODO: move this fft call out of the loop
-            product = np.fft.fft(data)*np.conj(fs[i])
+        fftdata  = np.fft.fft(data)
+        hammingf = Hamming(15E6, 25E6)
+        for i, chirp in enumerate(fs):
+            product = fftdata*np.conj(chirp)
             # apply frequency domain filter if desired
             if chirp_filter:
-                # GNG: move hamming filter out of the loop
-                product = np.multiply(product, Hamming(15E6, 25E6))
+                product = np.multiply(product, hammingf)
             dechirped = np.fft.ifft(product)
             # Noise is recorded within first 266 samples
             var = np.var(dechirped[:, 0:266], axis=1)
@@ -130,7 +129,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         Emax = np.argmax(csnr, axis=0)
         # Create a histogram of SNR maximizing E's
         hist, edges = np.histogram(Emax, bins=resolution*maxTECU)
-        if debug:
+        if debug and b_plot:
             plt.bar(np.arange(len(hist)), hist)
             plt.show()
 
@@ -167,7 +166,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         if chirp_filter:
             product = np.multiply(product, Hamming(15E6, 25E6))
         dechirped = np.fft.ifft(product)
-        if debug:
+        if debug and b_plot:
             plt.show()
     return E, sigma, dechirped
 
