@@ -79,7 +79,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         # Chop raw data
         raw_data=np.zeros((len(idx),3600),dtype=np.complex)
         for j in range(0,3600):
-            raw_data[idx-idx_start,j]=data['sample'+str(j)][idx].as_matrix()
+            raw_data[idx-idx_start,j]=data['sample'+str(j)][idx].values()
 
         if data['COMPRESSION_SELECTION'][idx_start] == 0: compression = 'static'
         else: compression = 'dynamic'
