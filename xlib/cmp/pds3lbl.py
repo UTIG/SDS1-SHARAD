@@ -28,8 +28,10 @@ sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
 import bitstring as bs
 import pvl
 
+g_debug=False
+
 def read_science(data_path, label_path, science=True, bc=True):
-    
+    global g_debug
 
     """
     Routine to read the pds3 label files and return the corresponding
@@ -248,8 +250,8 @@ def read_science(data_path, label_path, science=True, bc=True):
                         +':'+str(nb_bits)
                 if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
                     dtype = 'bool'
-
-                logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
+                if g_debug:
+                    logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
 
                 conv = np.array( [ bit_select2( bits, start_bit, dtype) for bits in bitdata ] )
                 dfr[name] = pd.Series(conv, index=dfr.index)
@@ -378,6 +380,7 @@ def test1():
 
 
 def main():
+    g_debug=True
     test1()
 
 
