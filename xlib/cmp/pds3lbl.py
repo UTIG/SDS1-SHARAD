@@ -211,7 +211,11 @@ def read_science(data_path, label_path, science=True, bc=True):
         conv = np.empty((len(s),3600), dtype = 'i1')
         if pseudo_samples == 2700: 
             for j in range(len(s)):
-                conv[j] = [x for y in [[s[j][i]>>2, ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4, ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
+                conv[j] = [x for y in [
+                    [s[j][i]>>2, 
+                   ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4, 
+                   ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, 
+                     s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
             for i in range(0, 3600):
                 dfr['sample'+str(i)] = pd.Series(conv[:,i], index=dfr.index)
         elif pseudo_samples == 1800:
@@ -229,9 +233,8 @@ def read_science(data_path, label_path, science=True, bc=True):
         # and are now converted into bitstrings which are evaluated bit per bit.
 
         for k,bcl in enumerate(bitcolumns):
-            stringdata = out[bcl[0]]
             # A list of bitarray objects for data
-            bitdata = [ bs.ConstBitStream(bs1.tobytes()) for bs1 in stringdata ]
+            bitdata = [ bs.ConstBitStream(bs1.tobytes()) for bs1 in out[bcl[0]] ]
 
             for m,sub in enumerate(bcl[1]):
                 # GNG: TODO: should this be?
@@ -307,8 +310,7 @@ def bit_select2(bits, pos, form):
         numeric data
     """
     bits.pos = pos
-    out1 = bits.read(form)
-    return out1
+    return bits.read(form)
 
 def read_raw(path):
     """
