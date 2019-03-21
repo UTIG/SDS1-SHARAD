@@ -18,12 +18,15 @@ __history__ = {
 import numpy as np
 import glob, os
 import pandas as pd
-#import bitstring as bs - currently not used
-
+import pickle
+#import assert
+import logging
+import gzip
 import sys
+import struct
 sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
+import bitstring as bs
 import pvl
-
 
 def read_science(data_path, label_path, science=True, bc=True):
     
@@ -46,6 +49,8 @@ def read_science(data_path, label_path, science=True, bc=True):
     label file.
     """
 
+    logging.debug("pds3lbl::read_science reading data  " + data_path)
+    logging.debug("pds3lbl::read_science reading label " + label_path)
 
     # Dictionary for PDS3 data types: Note that floats are currently limited
     # to 64 bit. Higher precisions will be returned as bitstrings. Dates are
@@ -174,7 +179,7 @@ def read_science(data_path, label_path, science=True, bc=True):
             for i in range(0, 3600):
                 dtype.append(('sample'+str(i), 'b'))
         else:
-                dtype.append(('samples', str(pseudo_samples)+'B'))
+            dtype.append(('samples', str(pseudo_samples)+'B'))
 
 
     # Read science data file
@@ -196,8 +201,6 @@ def read_science(data_path, label_path, science=True, bc=True):
     if science:
         if pseudo_samples < 3600: del arr_pd
 
-    v_bit_select = np.vectorize(bit_select)
-
     # Convert 6 and 4 bit samples
     if science and pseudo_samples < 3600:
         string = out['samples']
@@ -216,32 +219,56 @@ def read_science(data_path, label_path, science=True, bc=True):
             print('This error should not occur. Something horribly went wrong')
             return 0
     if bc:
+        logging.debug("Running bc")
         # Replace the bitstrings
         # Read the bitcolumns. These have been previously saved in np.void format
         # and are now converted into bitstrings which are evaluated bit per bit.
 
-        #v_tobit = np.vectorize(tobit)
-        v_bit_select = np.vectorize(bit_select)
+        for k,bcl in enumerate(bitcolumns):
+            stringdata = out[bcl[0]]
+            #mydtype='S'+str(bcl[2]*8)
+            #bits = np.empty(len(stringdata), dtype=mydtype)
+            # A list of bitarray objects for data
+            bitdata=[]
 
-        for bcl in bitcolumns:
-            string = out[bcl[0]]
-            bits = np.empty(len(string), dtype='S'+str(bcl[2]*8))
-            for i in range(len(string)):
-                bits[i] = tobit(string[i])
+            logging.debug("bc k={:d}".format(k ))
+            #logging.debug("stringdata={!r}".format(stringdata ))
 
-            for sub in bcl[1]:
-                if 'BIT_COLUMN' in sub:
-                    name = sub[1]['NAME']
-                    # Select data type from dictionary if field is not a spare
-                    if not 'SPARE' in name:
-                        nb_bits = sub[1]['BITS']
-                        start_bit = sub[1]['START_BIT']-1
-                        dtype = PDS3_DATA_TYPE_TO_BS[sub[1]['BIT_DATA_TYPE']]\
-                                +':'+str(nb_bits)
-                        if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
-                            dtype = 'bool'
-                        conv = v_bit_select(bits, start_bit, nb_bits, dtype)
-                        dfr[name] = pd.Series(conv, index=dfr.index)
+            for i, bs1 in enumerate(stringdata):
+                #bits[i] = bs.BitArray(bs1.tobytes()).bin #tobit(bs1)
+                bitdata.append( bs.ConstBitStream(bs1.tobytes()) )
+
+
+            #logging.debug("bits={!r} shape={!r}".format(bits, bits.shape) )
+            #logging.debug("bits={!r} shape={!r}".format(bits, len(bits)) )
+            for m,sub in enumerate(bcl[1]):
+                logging.debug("k={:d} m={:d} sub={!r}".format(k, m,sub))
+                # GNG: TODO: should this be?
+                # if sub[0] == 'BIT_COLUMN':
+                if 'BIT_COLUMN' not in sub:
+                    continue
+
+                name = sub[1]['NAME']
+                # Select data type from dictionary if field is not a spare
+
+                if 'SPARE' in name:
+                    continue
+
+                nb_bits = sub[1]['BITS']
+                start_bit = sub[1]['START_BIT']-1
+                end_bit = start_bit + nb_bits
+                dtype = PDS3_DATA_TYPE_TO_BS[sub[1]['BIT_DATA_TYPE']]\
+                        +':'+str(nb_bits)
+                if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
+                    dtype = 'bool'
+
+                logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
+
+                vals = [ bit_select2( bits, start_bit, dtype) for bits in bitdata ]
+
+                conv = np.array(vals)
+                logging.debug("conv={!r} shape={!r}".format(conv, conv.shape) )
+                dfr[name] = pd.Series(conv, index=dfr.index)
     return dfr
 
 def tobit(string):
@@ -254,15 +281,14 @@ def tobit(string):
 
     Output:
     -----------
-        bitarray
+        bitStream
     """
-    import bitstring as bs
     return bs.BitArray(string.tobytes()).bin
 
 def bit_select(bits, start, num, form):
     """
     This subroutine selects bits from a bitstream and converts
-    them into a new format
+    them into a new format [GNG: what new format?]
 
     Input:
     -----------
@@ -272,12 +298,31 @@ def bit_select(bits, start, num, form):
         form: return formats
     Output:
     -----------
-        numpy array with data records
+        list with data records
     """
-    import bitstring as bs
+    # GNG: does this modify the input parameter?
     bits = bits.decode('utf-8')
     return bs.ConstBitStream('0b'+str(bits[start:(start+num)]
                                      )).readlist(form)[0]
+
+def bit_select2(bits, pos, form):
+    """ 
+    This subroutine selects bits from a BitStream object and converts them
+    to a numeric with the requested format.  The length of the bit field
+    is encoded in the "form" field
+
+    Input:
+    -----------
+        bits: bistring Bits object representing a bit array
+        pos: start index (lowest numbered index) of the field
+        form: return format
+    Output:
+    -----------
+        numeric data
+    """
+    bits.pos = pos
+    out1 = bits.read(form)
+    return out1
 
 def read_raw(path):
     """
@@ -314,4 +359,48 @@ def read_refchirp(path):
     fil = glob.glob(path)[0]
     arr = np.fromfile(fil, dtype=np.float)
     return arr
+
+def test_write(datafile, labelfile, goldfile):
+    
+    pdsdata = read_science(datafile, labelfile)
+    with gzip.open(goldfile, "wb") as  fout:
+        pickle.dump(pdsdata, fout)
+
+def test_cmp_gold(datafile, labelfile, goldfile):
+    pdsdata1 = read_science(datafile, labelfile)
+    with gzip.open(goldfile, "rb") as  fin:
+        pdsdata2 = json.load(fin)
+
+    #result = cmp(pdsdata1, pdsdata2)
+    #assert(result)
+
+
+
+def test1():
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+
+    # Test pds3lbl on a known piece of data to assure correct output
+    datafile="/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_s.dat"
+    labelfile="/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt"
+    #outfile="rm184_edr3434001.gold.pickle.gz"
+    #pdsdata1 = read_science(datafile, labelfile)
+    outfile="rm184_edr3434001.pickle.gz"
+    test_write(datafile, labelfile, outfile)
+    #test_cmp_gold(datafile, labelfile, goldfile)
+    # It would be nice to have something to compare with but oh well
+
+
+
+
+
+def main():
+    test1()
+
+
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
 
