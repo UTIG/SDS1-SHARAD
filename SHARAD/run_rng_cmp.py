@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
 def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
-                  chrp_filt=True, verbose=False, saving=False):
+                  chrp_filt=True, verbose=False, saving='hdf5'):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -148,7 +148,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         stamp3=time.time()-time_start-stamp1
         logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
 
-        if saving:
+        if saving and outdir != "":
             #path_outroot = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
             #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
             #data_file = path_file.split('/')[-1]
@@ -165,11 +165,20 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             # restructure of data save
             real = np.array(np.round(cmp_track.real), dtype=np.int16)
             imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
-            dfreal = pd.DataFrame(real)
-            dfimag = pd.DataFrame(imag)
-            dfreal.to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
-            dfimag.to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
-            #np.save(new_path+data_file.replace('.dat','.npy'),cmp_track)
+
+            if saving == 'hdf5':
+                dfreal = pd.DataFrame(real)
+                dfimag = pd.DataFrame(imag)
+                dfreal.to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
+                dfimag.to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
+            elif saving == 'npy':
+                outfile = os.path.join(outdir, data_file.replace('.dat','.npy') )
+                np.save(outfile,cmp_track)
+            elif saving == 'none':
+                pass
+            else:
+                logging.error("{:s}: Unrecognized output format '{:s}'".format(taskname, saving))
+
             outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
             np.savetxt(outfile_TECU,E_track)
 
@@ -198,6 +207,8 @@ def main():
     parser = argparse.ArgumentParser(description='Run SAR processing')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/cmp',
                         help="Output base directory")
+    parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','npz','none'),
+                        help="Output file format")
 
     parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
@@ -259,7 +270,7 @@ def main():
 
     start_time = time.time()
 
-    named_params = {'saving':True,'chrp_filt':True,'verbose':args.verbose,'radargram':False}
+    named_params = {'saving':args.ofmt,'chrp_filt':True,'verbose':args.verbose,'radargram':False}
 
     if nb_cores <= 1:
         # Single processing (for profiling)
