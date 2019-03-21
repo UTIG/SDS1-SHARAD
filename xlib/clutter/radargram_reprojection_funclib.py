@@ -6,6 +6,16 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'function library for radargram reprojection'}}
 
+import glob
+import numpy as np
+import pandas as pd
+
+
+import sys
+sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
+import pvl
+
+
 def load_mola(pth):
     '''
     Python script for plotting MOLA .img data
@@ -18,10 +28,6 @@ def load_mola(pth):
     -------------
     pst_trc: matrix of MOLA topographies
     '''
-    import pvl
-    import glob
-    import numpy as np
-    import pandas as pd
     #import matplotlib.pyplot as plt
     
     label = pvl.load(pth.replace('.img','.lbl'))
