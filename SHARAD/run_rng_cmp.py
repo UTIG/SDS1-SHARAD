@@ -83,13 +83,11 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             idx_start = 0
             idx_end = len(data)
         idx = np.arange(idx_start,idx_end)
-                
+
         logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)) )
 
         # Chop raw data
-        raw_data=np.zeros((len(idx),3600),dtype=np.complex)
-        for j in range(0,3600):
-            raw_data[idx-idx_start,j]=data['sample'+str(j)][idx].values
+        raw_data = chop_raw_data(data, idx, idx_start)
 
         if data['COMPRESSION_SELECTION'][idx_start] == 0: compression = 'static'
         else: compression = 'dynamic'
@@ -125,6 +123,9 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
         logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)) )
         # Compress the data chunkwise and reconstruct
+
+
+        list_cmp_track=[]
         for i, chunk in enumerate(chunks):
             start,end = chunks[i]
 
@@ -136,13 +137,16 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
                 taskname, i, len(chunks), minsza, b_iono) )
 
             # GNG: These concats seem relatively expensive.
-            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
-            if i == 0:
-                cmp_track = cmp_data
-            else:
-                cmp_track = np.vstack((cmp_track, cmp_data))
+            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(
+                decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
+            list_cmp_track.append(cmp_data)
             E_track[start:end,0] = E
             E_track[start:end,1] = sigma        
+
+        cmp_track = np.vstack(list_cmp_track)
+        list_cmp_track = None  # free memory
+
+
 
         stamp3=time.time()-time_start-stamp1
         logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
@@ -165,11 +169,12 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             # restructure of data save
             real = np.array(np.round(cmp_track.real), dtype=np.int16)
             imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
+            cmp_track = None # free memory
             if saving == 'hdf5':
-                dfreal = pd.DataFrame(real)
-                dfimag = pd.DataFrame(imag)
-                dfreal.to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
-                dfimag.to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
+                #dfreal = pd.DataFrame(real)
+                #dfimag = pd.DataFrame(imag)
+                pd.DataFrame(real).to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
+                pd.DataFrame(imag).to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
             elif saving == 'npy':
                 # Round it just like in an hdf5 and save as side-by-side arrays
                 cmp_track = np.vstack([real, imag])
@@ -183,6 +188,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
             outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
             np.savetxt(outfile_TECU,E_track)
+
 
         if radargram:
             # Plot a radargram
@@ -203,6 +209,19 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         return 1
     logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
     return 0
+
+def chop_raw_data(data, idx, idx_start):
+    raw_data=np.zeros((len(idx),3600),dtype=np.complex)
+    for j in range(3600):
+        k = 'sample' + str(j)
+        #logging.debug("raw_data[{:s},{:d}]=data[{:s}][{:s}].values".format(str(idx-idx_start), j, k,str(idx)) )
+        #logging.debug("raw_data[{:s},{:d}]=data[{:s}][{:s}].values".format(":", j, k,str(idx)) )
+        #raw_data[idx-idx_start,j]=data[k][idx].values
+        raw_data[:,j]=data[k][idx].values
+    return raw_data
+
+
+
 
 def main():
     # TODO: improve description
