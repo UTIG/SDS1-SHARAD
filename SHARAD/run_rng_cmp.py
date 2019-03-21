@@ -62,10 +62,10 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         # Load data
         science_path=infile.replace('_a.dat','_s.dat')
         data = pds3.read_science(science_path, label_path, science=True)
-        aux = pds3.read_science(science_path.replace('_s.dat','_a.dat'), aux_path, science=False)
+        aux  = pds3.read_science(infile      , aux_path,   science=False)
 
         stamp1=time.time()-time_start
-        if verbose: print('data loaded in',stamp1,'seconds')
+        logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
 
         # Array of indices to be processed
         if idx_start is None or idx_end is None:
@@ -79,7 +79,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         # Chop raw data
         raw_data=np.zeros((len(idx),3600),dtype=np.complex)
         for j in range(0,3600):
-            raw_data[idx-idx_start,j]=data['sample'+str(j)][idx].values()
+            raw_data[idx-idx_start,j]=data['sample'+str(j)][idx].values
 
         if data['COMPRESSION_SELECTION'][idx_start] == 0: compression = 'static'
         else: compression = 'dynamic'
@@ -111,21 +111,21 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         if len(chunks)==0: chunks.append([0,idx_end-idx_start])
         if (tlp[-1]-tlp[i0])>=15: chunks.append([i0, idx_end-idx_start])
         else: chunks[-1][1]=idx_end-idx_start
-        chunks = np.array(chunks)
+        #chunks = np.array(chunks)
 
         logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)) )
         # Compress the data chunkwise and reconstruct
-        for i in range(len(chunks)):
-            start = chunks[i,0]
-            end = chunks[i,1]
+        for i, chunk in enumerate(chunks):
+            start,end = chunks[i]
 
             #check if ionospheric correction is needed
             iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
             b_iono = len(iono_check) != 0
             minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: Minimum SZA: {:s}'.format(taskname, str(minsza)) )
-            logging.debug('{:s}: Ionospheric Correction: {!r}'.format(taskname, b_iono)) 
+            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:0.3f}  Ionospheric Correction: {!r}'.format(
+                taskname, i, len(chunks), minsza, b_iono) )
 
+            # GNG: These concats seem relatively expensive.
             E, sigma, cmp_data = rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=debug)
             if i == 0:
                 cmp_track = cmp_data
@@ -135,7 +135,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             E_track[start:end,1] = sigma        
 
         stamp3=time.time()-time_start-stamp1
-        if verbose: print('Data compressed in',stamp3,'s')
+        logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
 
         if saving:
             #path_outroot = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
@@ -206,6 +206,7 @@ def main():
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
         help="List of tracks to process")
+    parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
     # implies single core
     #parser.add_argument('--profile',  action="store_true", help='Profile execution performance', required=False)
     #parser.add_argument('files', nargs='+', help='Input files to process')
@@ -254,7 +255,8 @@ def main():
             logging.debug('File already processed. Skipping ' + infile)
 
     #h5file.close()
-
+    if args.maxtracks > 0:
+        process_list = process_list[0:args.maxtracks]
     #process_list.append(['/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0188801/e_0188801_001_ss05_700_a_a.dat',None,None])
     if args.dryrun:
         sys.exit(0)
@@ -263,7 +265,7 @@ def main():
 
     start_time = time.time()
 
-    named_params = {'saving':False,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}
+    named_params = {'saving':True,'chrp_filt':True,'debug':False,'verbose':False,'radargram':False}
 
     if nb_cores <= 1:
         for t in process_list:
