@@ -148,6 +148,7 @@ def read_science(data_path, label_path, science=True, bc=True):
     # Unfortunately labels are not labeled consistently
     # It first tries the regular file and then looks for other ones
     # in the respective data folder
+    # GNG QUESTION: should this thing "break" on a successful load?
     try:
         if science:
             science_label = pvl.load(data_path.replace('_a_s.dat', '_a.lbl'))
@@ -170,6 +171,7 @@ def read_science(data_path, label_path, science=True, bc=True):
         elif mode_id in bits6: pseudo_samples = 2700
         elif mode_id in bits4: pseudo_samples = 1800
         else:
+            # GNG: TODO: raise an exception?
             print('Error while reading science label! Invalid mode id', mode_id)
             return 0
 
@@ -203,19 +205,20 @@ def read_science(data_path, label_path, science=True, bc=True):
 
     # Convert 6 and 4 bit samples
     if science and pseudo_samples < 3600:
-        string = out['samples']
-        conv = np.empty((len(string),3600), dtype = 'i1')
+        s = out['samples']
+        conv = np.empty((len(s),3600), dtype = 'i1')
         if pseudo_samples == 2700: 
-            for j in range(len(string)):
-                conv[j] = [x for y in [[string[j][i]>>2, ((string[j][i] << 4) & 0x3f) | string[j][i+1] >> 4, ((string[j][i+1] << 2) & 0x3f) | string[j][i+2] >> 6, string[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
+            for j in range(len(s)):
+                conv[j] = [x for y in [[s[j][i]>>2, ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4, ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
             for i in range(0, 3600):
                 dfr['sample'+str(i)] = pd.Series(conv[:,i], index=dfr.index)
         elif pseudo_samples == 1800:
-            for j in range(len(string)):
-                conv[j] = [x for y in [[string[j][i] >> 4,string[j][i] & 0xf] for i in range(1800)] for x in y]
+            for j in range(len(s)):
+                conv[j] = [x for y in [[s[j][i] >> 4,s[j][i] & 0xf] for i in range(1800)] for x in y]
             for i in range(0, 3600):
                 dfr['sample'+str(i)] = pd.Series(conv, index=dfr.index)
         else:
+            # GNG: TODO: raise an exception?
             print('This error should not occur. Something horribly went wrong')
             return 0
     if bc:
