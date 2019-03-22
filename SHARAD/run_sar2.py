@@ -27,7 +27,7 @@ stdbuf -o 0 ./run_sar2.py -v | tee sar_crash.log
 
 
 def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
-                  recalc=20, Er=1, saving=True, debug=False):
+                  recalc=20, Er=1, saving="hdf5", debug=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual range compressed and ionosphere corrected tracks and
@@ -129,8 +129,8 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         logging.debug("{:s}: Length of selected EDR aux data: {:d}".format(taskname, len(aux)) )
     
         # load relevant spacecraft position information from EDR files
-        pri_code = data['PULSE_REPETITION_INTERVAL'].as_matrix()
-        rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].as_matrix()
+        pri_code = data['PULSE_REPETITION_INTERVAL'].values
+        rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values
         for j in range(len(pri_code)):                   
             if pri_code[j] == 1:   pri = 1428E-6
             elif pri_code[j] == 2: pri = 1429E-6
@@ -140,13 +140,13 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
             elif pri_code[j] == 6: pri = 2580E-6
             else: pri = 0
             rxwot[j] = rxwot[j] * 0.0375E-6 + pri - 11.98E-6
-        et = aux['EPHEMERIS_TIME'].as_matrix()
-        tlp = data['TLP_INTERPOLATE'].as_matrix()
-        scrad = data['RADIUS_INTERPOLATE'].as_matrix()
+        et = aux['EPHEMERIS_TIME'].values
+        tlp = data['TLP_INTERPOLATE'].values
+        scrad = data['RADIUS_INTERPOLATE'].values
         if focuser == 'Delay Doppler':
-            tpgpy = data['TOPOGRAPHY'].as_matrix()
-            vt = data['TANGENTIAL_VELOCITY_INTERPOLATE'].as_matrix()
-            vr = data['RADIAL_VELOCITY_INTERPOLATE'].as_matrix()
+            tpgpy = data['TOPOGRAPHY'].values
+            vt = data['TANGENTIAL_VELOCITY_INTERPOLATE'].values
+            vr = data['RADIAL_VELOCITY_INTERPOLATE'].values
             v = np.zeros(len(vt), dtype=float)
             for j in range(len(vt)):
                 #v[j] = np.sqrt(vt[j]**2 + vr[j]**2)
@@ -169,13 +169,13 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         logging.debug("{:s}: Start of SAR processing".format(taskname))
         if focuser == 'Delay Doppler':
             sar, columns = sar.delay_doppler(cmp_track, posting, aperture, bandwidth,
-                                            tlp, et, scrad, tpgpy, rxwot - min(rxwot), v)
+                                            tlp, et, scrad, tpgpy, rxwot - min(rxwot), v, debugtag=taskname)
         elif focuser == 'Matched Filter':
             sar, columns = sar.matched_filter(cmp_track, posting, aperture, Er, bandwidth,
                                              recalc, tlp, et, rxwot)
         
         # save the result
-        if saving == True and outputfile is not None:
+        if saving and outputfile is not None:
             #save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
             #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
             #data_file = os.path.basename(path_file)
@@ -195,13 +195,21 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
             if not os.path.exists(new_path):
                 os.makedirs(new_path)
           
-            # restructure and save data
-            dfsar = pd.DataFrame(sar)
-            dfcol = pd.DataFrame(columns)
-            dfsar.to_hdf(outputfile, key='sar',
-                         complib = 'blosc:lz4', complevel=6)
-            dfcol.to_hdf(outputfile, key='columns',
-                         complib = 'blosc:lz4', complevel=6)
+            if saving == "hdf5":
+                # restructure and save data
+                dfsar = pd.DataFrame(sar)
+                dfcol = pd.DataFrame(columns)
+                dfsar.to_hdf(outputfile, key='sar',
+                             complib = 'blosc:lz4', complevel=6)
+                dfcol.to_hdf(outputfile, key='columns',
+                             complib = 'blosc:lz4', complevel=6)
+            elif saving == "npy":
+                outputdir = os.path.dirname(outputfile)
+                np.save(os.path.join(outputdir, "sar.npy"), sar)
+                np.save(os.path.join(outputdir, "columns.npy"), columns)
+            else:
+                logging.error("Can't save to format '{:s}'".format(saving))
+                return 1
 
     except Exception as e:
         
@@ -243,6 +251,7 @@ def main():
     # TODO: improve description
     parser = argparse.ArgumentParser(description='Run SAR processing')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/foc/', help="Output base directory")
+    parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','npy','none'), help="Output data format")
     parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
@@ -318,6 +327,14 @@ def main():
 
         # For these orbits, process only the range described by these start/end indexes
         orbit_indexes = {
+            # GNG: For performance, correctness testing only (shorten track)
+            # TODO: allow this to be set with a command line argument
+            '03366': [   0, 3000],
+            '34340': [   0, 3000],
+            '51166': [   0, 3000],
+            '52729': [   0, 3000],
+            #############################
+
             '05901': [78000, 141000],
             '10058': [30000, 62000],
             '16403': [38000, 80000],
@@ -353,7 +370,7 @@ def main():
     #h5file.close()
 
     if args.maxtracks:
-        logging.info("Limiting to processing first {:d} tracks".format(args.maxtracks))
+        logging.info("Processing first {:d} tracks".format(args.maxtracks))
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
@@ -365,11 +382,12 @@ def main():
     start_time = time.time()
 
     params_pos = (posting,aperture,bandwidth,focuser,recalc,Er)
-    params_named = {'saving':True,'debug':args.verbose}
+    params_named = {'saving':args.ofmt,'debug':args.verbose}
     if nb_cores <= 1:            
         run_sp(          params_pos, params_named, process_list)
     else:
         run_mp(nb_cores, params_pos, params_named, process_list)
+    logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ) )
 
 
 
@@ -377,6 +395,7 @@ def run_sp(params_pos, params_named, process_list):
     for t in process_list:
         params2 = (t,) + params_pos
         sar_processor( *params2, **params_named )
+
 def run_mp(nb_cores, params_pos, params_named, process_list):
     pool = multiprocessing.Pool(nb_cores)
     results = [pool.apply_async(sar_processor, (t,) + params_pos, params_named)
@@ -388,8 +407,6 @@ def run_mp(nb_cores, params_pos, params_named, process_list):
             logging.error("Processing task {:d} of {:d} had a problem.".format(i+1, len(process_list) ))
         else:
             logging.info( "Processing task {:d} of {:d} successful.".format(i+1, len(process_list) ))
-
-    logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ) )
 
 
 if __name__ == "__main__":
