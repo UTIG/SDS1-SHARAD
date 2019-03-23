@@ -41,7 +41,6 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
-
 def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
                   chrp_filt=True, verbose=False, saving='hdf5'):
     """
@@ -106,6 +105,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
         # Decompress the data
         decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI) 
+        # TODO: E_track can just be a list of tuples
         E_track = np.empty((idx_end-idx_start,2))
         # Get groundtrack distance and define 30 km chunks
         tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
@@ -136,7 +136,6 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f}  Ionospheric Correction: {!r}'.format(
                 taskname, i, len(chunks), minsza, b_iono) )
 
-            # GNG: These concats seem relatively expensive.
             E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(
                 decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
             list_cmp_track.append(cmp_data)
@@ -145,7 +144,6 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
         cmp_track = np.vstack(list_cmp_track)
         list_cmp_track = None  # free memory
-
 
 
         stamp3=time.time()-time_start-stamp1
