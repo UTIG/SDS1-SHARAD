@@ -27,7 +27,7 @@ stdbuf -o 0 ./run_sar2.py -v | tee sar_crash.log
 
 
 def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
-                  recalc=20, Er=1, saving=True, debug=False):
+                  recalc=20, Er=1, saving="hdf5", debug=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual range compressed and ionosphere corrected tracks and
@@ -175,7 +175,7 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
                                              recalc, tlp, et, rxwot)
         
         # save the result
-        if saving == True and outputfile is not None:
+        if saving != "" and outputfile is not None:
             #save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
             #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
             #data_file = os.path.basename(path_file)
@@ -195,13 +195,21 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
             if not os.path.exists(new_path):
                 os.makedirs(new_path)
           
-            # restructure and save data
-            dfsar = pd.DataFrame(sar)
-            dfcol = pd.DataFrame(columns)
-            dfsar.to_hdf(outputfile, key='sar',
-                         complib = 'blosc:lz4', complevel=6)
-            dfcol.to_hdf(outputfile, key='columns',
-                         complib = 'blosc:lz4', complevel=6)
+            if saving == "hdf5":
+                # restructure and save data
+                dfsar = pd.DataFrame(sar)
+                dfcol = pd.DataFrame(columns)
+                dfsar.to_hdf(outputfile, key='sar',
+                             complib = 'blosc:lz4', complevel=6)
+                dfcol.to_hdf(outputfile, key='columns',
+                             complib = 'blosc:lz4', complevel=6)
+            elif saving == "npy":
+                outputdir = os.path.dirname(outputfile)
+                np.save(os.path.join(outputdir, "sar.npy"), sar)
+                np.save(os.path.join(outputdir, "columns.npy"), columns)
+            else:
+                logging.error("Can't save to format '{:s}'".format(saving))
+                return 1
 
     except Exception as e:
         
@@ -242,12 +250,15 @@ import hdf
 def main():
     # TODO: improve description
     parser = argparse.ArgumentParser(description='Run SAR processing')
+    parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/foc/', help="Output base directory")
+    parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','npy','none'), help="Output data format")
     parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     parser.add_argument('-m','--modifypst', help="Enable PST rewriting using specified script", required=False)
     parser.add_argument('--tracklist', default="elysium.txt",
         help="List of tracks to process")
+    parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
     #parser.add_argument('-f','--format', help="When outputting to stdout, use this payload format (default=repr)", required=False, default='repr',choices= sorted(rawcat_fmts.keys()) )
     #parser.add_argument('--compact', action="store_true", help="When outputting to stdout, use compact output format")
     #parser.add_argument('--single','--full',  action="store_true", help="Output full data to a single transect directory (don't create per-transect directories)")
@@ -265,6 +276,8 @@ def main():
 
     # Set number of cores
     nb_cores = args.jobs
+    # Set output base directory
+    outdir = args.output
 
     # set SAR processing variables
     posting = 115
@@ -284,7 +297,6 @@ def main():
     logging.info("Building task list from {:s}".format(args.tracklist))
 
     #p = prog.Prog(len(lookup), prog_symbol='*')
-    path_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
 
     # Just run the first one
     #lookup = lookup[0:1]
@@ -303,7 +315,7 @@ def main():
         data_file = os.path.basename(path_file)
         orbit_name = data_file[2:7]
         path_file = os.path.dirname(path_file)
-        new_path = os.path.join(path_root, path_file, 
+        new_path = os.path.join(outdir, path_file, 
             str(posting) + 'm', 
             str(aperture) + 's',
             str(bandwidth) + 'Hz')
@@ -312,11 +324,18 @@ def main():
 
         outputfile = os.path.join(new_path, data_file.replace('_a.dat','_s.h5') )
 
-
         logging.debug("Looking for {:s}".format(new_path))
 
-
+        # For these orbits, process only the range described by these start/end indexes
         orbit_indexes = {
+            # GNG: For performance, correctness testing only (shorten track)
+            # TODO: allow this to be set with a command line argument
+            '03366': [   0, 3000],
+            '34340': [   0, 3000],
+            '51166': [   0, 3000],
+            '52729': [   0, 3000],
+            #############################
+
             '05901': [78000, 141000],
             '10058': [30000, 62000],
             '16403': [38000, 80000],
@@ -351,6 +370,10 @@ def main():
 
     #h5file.close()
 
+    if args.maxtracks:
+        logging.info("Limiting to processing first {:d} tracks".format(args.maxtracks))
+        process_list = process_list[0:args.maxtracks]
+
     if args.dryrun:
         # If it's a dry run, print the list and stop
         print(process_list)
@@ -359,23 +382,32 @@ def main():
     logging.info("Start processing {:d} tracks".format(len(process_list)) )
     start_time = time.time()
 
-    pool = multiprocessing.Pool(nb_cores)
-    results = [pool.apply_async(sar_processor, (t,posting,aperture,bandwidth,focuser,recalc,Er),
-                     {'saving':False,'debug':args.verbose}) 
-        for j,t in enumerate(process_list)]
+    params_pos = (posting,aperture,bandwidth,focuser,recalc,Er)
+    params_named = {'saving':args.ofmt,'debug':args.verbose}
+    if nb_cores <= 1:            
+        run_sp(          params_pos, params_named, process_list)
+    else:
+        run_mp(nb_cores, params_pos, params_named, process_list)
+    logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ) )
 
-    #p=prog.Prog(len(keys))
-    #p = prog.Prog(len(lookup), prog_symbol='#')
+
+
+def run_sp(params_pos, params_named, process_list):
+    for t in process_list:
+        params2 = (t,) + params_pos
+        sar_processor( *params2, **params_named )
+
+def run_mp(nb_cores, params_pos, params_named, process_list):
+    pool = multiprocessing.Pool(nb_cores)
+    results = [pool.apply_async(sar_processor, (t,) + params_pos, params_named)
+        for t in process_list]
+
     for i, result in enumerate(results):
-        #p.print_Prog(i)
         dummy = result.get()
         if dummy == 1:
             logging.error("Processing task {:d} of {:d} had a problem.".format(i+1, len(process_list) ))
         else:
             logging.info( "Processing task {:d} of {:d} successful.".format(i+1, len(process_list) ))
-
-    logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ) )
-    #p.close_Prog()
 
 
 if __name__ == "__main__":

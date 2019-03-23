@@ -223,7 +223,8 @@ def dD_rngmig(data, R0, et, vt, dt):
         R[jj] = np.sqrt(R0**2 + ((et[jj]) * vt[jj])**2)
 
     #convert distance to two-way time
-    dt_aperture = 2 * (R - R0) / 299792458
+    #dt_aperture = 2 * (R - R0) / 299792458
+    dt_aperture = (R - R0) * (2 / 299792458)
 
     # apply phase shift to each range line corresponding to required range
     # migration
