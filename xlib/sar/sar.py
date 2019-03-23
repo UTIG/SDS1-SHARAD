@@ -37,11 +37,13 @@ def sar_posting(dpst, La, idx, tlp, et):
     ## define posting centers for SAR columns
     ### post radargram columns
     num_pst = np.floor((np.max(tlp)-tlp[0])/(dpst/1000))
+    # TODO: pst_trc could be a list of tuples 3xn
     pst_trc = np.zeros((int(num_pst), 3), dtype=float)
     pst_trc[:, 0] = np.round(np.arange(0, idx, idx/num_pst))
     ## define trace ranges to include in SAR window from aperture length
     ### aperture length will be defined in SECONDS so need the ephemeris time
     ### for each post trace
+    # TODO: pst_et could be a list of tuples
     pst_et = np.zeros((len(pst_trc), 3), dtype=float)
     for ii in range(len(pst_et)):
         pst_et[ii, 0] = et[int(pst_trc[ii, 0])]
@@ -179,7 +181,6 @@ def rx_opening(data, rxwot, dt):
 
     # define the output
     out = np.zeros((len(data), n), dtype=complex)
-
     # apply phase shift
     for jj in range(len(data)):
         tempA = np.multiply(np.fft.fft(data[jj], norm='ortho'),
@@ -213,6 +214,8 @@ def dD_rngmig(data, R0, et, vt, dt):
         out: array of range migrated range lines
     '''
 
+    # GNG: TODO -- in theory the output lines could be a list of numpy arrays
+
     # define the output
     out = np.zeros((len(data), np.size(data, axis=1)), dtype=complex)
 
@@ -223,8 +226,8 @@ def dD_rngmig(data, R0, et, vt, dt):
         R[jj] = np.sqrt(R0**2 + ((et[jj]) * vt[jj])**2)
 
     #convert distance to two-way time
-    dt_aperture = 2 * (R - R0) / 299792458
-    #dt_aperture = (R - R0) * (2 / 299792458)
+    #dt_aperture = 2 * (R - R0) / 299792458
+    dt_aperture = (R - R0) * (2 / 299792458)
 
     # apply phase shift to each range line corresponding to required range
     # migration
@@ -297,15 +300,11 @@ def dD_traceconstructor(data):
     -----------
         out: array of correctly time-positioned range lines
     '''
-    import numpy as np
-
     temp = np.fft.fftshift(np.fft.fft(data, axis=0, norm='ortho'), axes=(0,))
     hann = np.hanning(len(temp))
     hann = np.transpose(np.broadcast_to(np.transpose(hann),
                                         (np.size(data, axis=1), len(hann))))
-    out = np.abs(np.fft.ifftshift(np.multiply(temp, hann), axes=(0,)))
-
-    return out
+    return np.abs(np.fft.ifftshift(np.multiply(temp, hann), axes=(0,)))
 
 def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml=True,
                   debugtag="SAR"):
@@ -364,47 +363,54 @@ def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml
         rl2 = np.zeros((len(pst_trc), len(data[0])), dtype=float)
     else:
         rl = np.zeros((len(pst_trc), len(data[0])), dtype=float)
+
     for ii in range(len(pst_trc)):
         if ii % 50 == 0:
             logging.debug("{:s}: Working delay Doppler SAR column {:d} of {:d}".format(debugtag, ii, len(pst_trc)) )
-        # TODO: convert this to a continue block
-        if pst_trc[ii, 1] != 0 and pst_trc[ii, 2] != 0:
-            # TODO: gc old temp variables to keep mem footprint low
-            # select data within the aperture
-            temp_data = data[pst_trc[ii, 1]:pst_trc[ii, 2]]
 
-            # time shift to align traces and remove rx opening time changes and
-            # spacecraft radius changes
-            temp_data2 = rx_opening(temp_data,
-                                    rxwot[pst_trc[ii, 1]:pst_trc[ii, 2]],
-                                    0.0375E-6)
+        if pst_trc[ii, 1] == 0 or pst_trc[ii, 2] == 0:
+            continue
 
-            # Shared quantities in param 3
+        # TODO: gc old temp variables to keep mem footprint low
 
-            # range migration
-            R0 = (scrad[pst_trc[ii, 0]] - tpgpy[pst_trc[ii, 0]]) * 1000
-            temp_data3 = dD_rngmig(temp_data2, R0,
-                                   et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
-                                   vt[pst_trc[ii, 1]:pst_trc[ii, 2]], 0.0375E-6)
-            # azimuth migration
-            temp_data4 = dD_azmig( temp_data3, R0,
-                                   et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
-                                   vt[pst_trc[ii, 1]:pst_trc[ii, 2]])
-            # construct the radargram range line
-            temp_data5 = dD_traceconstructor(temp_data4)
-            # multilook and output
-            if looks != 1:
-                tempA = np.arange(-np.floor(looks/2), np.ceil(looks/2), 1, dtype=int)
-                for jj in range(looks):
-                    rl[jj, ii, :] = temp_data5[tempA[jj], :]
-            else:
-                rl[ii] = temp_data5[0, :]
+        # select data within the aperture
+        temp_data = data[pst_trc[ii, 1]:pst_trc[ii, 2]]
+
+        # time shift to align traces and remove rx opening time changes and
+        # spacecraft radius changes
+        temp_data2 = rx_opening(temp_data,
+                                rxwot[pst_trc[ii, 1]:pst_trc[ii, 2]],
+                                0.0375E-6)
+
+        # range migration
+        R0 = (scrad[pst_trc[ii, 0]] - tpgpy[pst_trc[ii, 0]]) * 1000
+        temp_data3 = dD_rngmig(temp_data2, R0,
+                               et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
+                               vt[pst_trc[ii, 1]:pst_trc[ii, 2]], 0.0375E-6)
+        # azimuth migration
+        temp_data4 = dD_azmig( temp_data3, R0,
+                               et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
+                               vt[pst_trc[ii, 1]:pst_trc[ii, 2]])
+        logging.debug("{:s}: Shape of azimuth-migrated line {:3d}: {!r}".format(debugtag, ii, temp_data4.shape))
+        # construct the radargram range line
+        temp_data5 = dD_traceconstructor(temp_data4)
+        # multilook and output
+        if looks != 1:
+            tempA = np.arange(-np.floor(looks/2), np.ceil(looks/2), 1, dtype=int)
+            for jj in range(looks):
+                rl[jj, ii, :] = temp_data5[tempA[jj], :]
+        else:
+            rl[ii] = temp_data5[0, :]
+    # end for i
 
     # produce a final combined multilook product if desired
     if looks != 1 and comb_ml:
+        logging.debug("{:s}: Producing final combined multilook product".format(debugtag))
         for ii in range(looks):
             for jj in range(len(pst_trc)):
                 rl2[jj, :] = rl2[jj, :] + np.square(np.abs(rl[ii, jj, :]))
+                # TODO: faster?
+                #rl2[jj, :] += np.square(np.abs(rl[ii, jj, :]))
         rl = np.sqrt(rl2)
 
     return rl, pst_trc
