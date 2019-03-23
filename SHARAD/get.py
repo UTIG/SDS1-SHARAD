@@ -12,16 +12,28 @@ import os
 import sys
 import glob
 import string
+
+import logging
+
 import numpy as np
 import pandas as pd
+
+# TODO GNG: not sure if this does anything
 sys.path.append('../xlib')
 sys.path.append('../xlib/rdr')
 
 
+# TODO: Improve globs to assert that there is only one file matching the pattern
+
 def params():
     """Get various parameters defining the dataset
     """
+    # GNG TODO: make this an object so that we can override params, then pass it in.
+    # GNG TODO: make this code work even if we're not executing from the current directory.
+    # Should use __file__
     out = {'code_path': os.getcwd()}
+    # GNG TODO: make this use SDS environment variable
+    # GNG TODO: convert this to use os.path
     out['data_path'] = '/disk/daedalus/sds/targ/xtra/SHARAD'
     out['data_product'] = os.listdir(out['data_path'])
     for i in out['data_product']:
@@ -42,33 +54,35 @@ def params():
     return out
 
 
-def orbit2full(orbit):
+def orbit2full(orbit, p=params()):
+    # prefer not to use "2" to make code more internationally readable and
+    # less biased toward native English speakers
+    logging.warning("Use of 'orbit2full()' is deprecated. Please use 'orbit_to_full()'")
+    return orbit_to_full(orbit, p)
+
+def orbit_to_full(orbit, p=params()):
     """Output the full orbit name(s) avaialble for a given orbit"""
-    p = params()
     k = p['orbit'].index(orbit)
-    out = p['orbit_full'][k]
-    return out
+    return p['orbit_full'][k]
 
 
 def check(path, verbose=True):
     """Check if file/path exist
     """
-    out = os.path.exists(path)
-    if out is False:
-        message = 'MISSING: ' + path
-        if verbose is True:
-            print(message)
-    return out
+    path_exists = os.path.exists(path)
+    if verbose and not path_exists:
+        print('MISSING: ' + path)
+    return path_exists
 
 
-def aux(orbit):
+def aux(orbit, p=params()):
     """Output content of the auxilliary file for a given orbit
     """
-    p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit2full(orbit)
     k = p['orbit_full'].index(orbit_full)
-    fil = '/'.join( [p['edr_path'], p['orbit_path'][k], orbit_full + '_a.dat'] )
+    fil = os.path.join(p['edr_path'], p['orbit_path'][k], orbit_full + '_a.dat' )
     foo = check(fil)
+    # TODO GNG: this definition can be made global in the module
     # READ AUX FILE
     dtype = np.dtype([
         ("SCET_BLOCK_WHOLE", '>u4'),
@@ -111,16 +125,14 @@ def aux(orbit):
         ("CORRUPTED_DATA_FLAG1", 'B'),
         ("CORRUPTED_DATA_FLAG2", 'B'),
     ])
-    f = open(fil, 'r')
-    out = np.fromfile(f, dtype = dtype, count = -1)
-    f.close()
+    with open(fil, 'r') as f:
+        out = np.fromfile(f, dtype = dtype, count = -1)
     return out
 
 
-def alt(orbit, typ='deriv'):
+def alt(orbit, typ='deriv', p=params()):
     """Output data processed and archived by the altimetry processor
     """
-    p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit2full(orbit)
     k = p['orbit_full'].index(orbit_full)
     fil = glob.glob( '/'.join( [p['alt_path'], p['orbit_path'][k], typ, '*'] ) )[0]
@@ -129,10 +141,9 @@ def alt(orbit, typ='deriv'):
     return out
 
 
-def tec(orbit, typ='ion'):
+def tec(orbit, typ='ion', p=params()):
     """Output TEC data
     """
-    p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit2full(orbit)
     k = p['orbit_full'].index(orbit_full)
     fil = glob.glob( '/'.join( [p['cmp_path'], p['orbit_path'][k], typ, '*TECU.txt']  )  )[0]
@@ -141,10 +152,9 @@ def tec(orbit, typ='ion'):
     return out
 
 
-def cmp(orbit, typ='ion'):
+def cmp(orbit, typ='ion', p=params()):
     """Output data processed and archived by the CMP processor
     """
-    p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit2full(orbit)
     k = p['orbit_full'].index(orbit_full)
     fil = glob.glob( '/'.join( [p['cmp_path'], p['orbit_path'][k], typ, '*.h5']   )   )[0]
@@ -153,12 +163,11 @@ def cmp(orbit, typ='ion'):
     im = pd.read_hdf(fil,key='imag').values
     out = re + 1j*im
     return out
+    
 
-
-def srf(orbit, typ='cmp'):
+def srf(orbit, typ='cmp', p=params()):
     """Output data processed and archived by the altimetry processor
     """
-    p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit2full(orbit)
     k = p['orbit_full'].index(orbit_full)
     fil = glob.glob( '/'.join( [p['srf_path'], p['orbit_path'][k], typ, '*']  )  )[0]
@@ -167,19 +176,20 @@ def srf(orbit, typ='cmp'):
     return out
 
 
-def my(orbit):
+def my(orbit, p=params()):
     """Output martian year for a given orbit (gives the MY at the beginning of the orbit)
     """
-    p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit2full(orbit)
     a = aux(orbit_full)['GEOMETRY_EPOCH']
 
-    yr = np.int( [np.str(a[0])][0][2:6] )
-    mnth = np.int( [np.str(a[0])][0][7:9] )
-    dy = np.int( [np.str(a[0])][0][10:12] )
-    hr = np.int([np.str(a[0])][0][13:15])
-    mnt = np.int([np.str(a[0])][0][16:18])
-    scnd = np.int([np.str(a[0])][0][19:21])
+    timestr = [np.str(a[0])][0]
+
+    yr   = np.int(timestr[ 2: 6])
+    mnth = np.int(timestr[ 7: 9])
+    dy   = np.int(timestr[10:12])
+    hr   = np.int(timestr[13:15])
+    mnt  = np.int(timestr[16:18])
+    scnd = np.int(timestr[19:21])
 
     MY, Ls = solar_longitude.Ls(yr, mnth, dy, hr, mnt, scnd)
     return MY
