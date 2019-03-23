@@ -8,7 +8,6 @@ __pycache__
 
 
 # output files
-`
 *.log
 SPICE
 xover
@@ -17,6 +16,7 @@ xover
 *.h5
 *.npz
 *.npy
+*.profile
 
 EDR*.txt
 lookup.txt

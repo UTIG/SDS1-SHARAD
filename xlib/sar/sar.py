@@ -6,6 +6,9 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'function library for SAR processing'}}
 
+import logging
+import numpy as np
+
 def sar_posting(dpst, La, idx, tlp, et):
     '''
     Algorithm for defining the centers and extent of output SAR columns along
@@ -34,11 +37,13 @@ def sar_posting(dpst, La, idx, tlp, et):
     ## define posting centers for SAR columns
     ### post radargram columns
     num_pst = np.floor((np.max(tlp)-tlp[0])/(dpst/1000))
+    # TODO: pst_trc could be a list of tuples 3xn
     pst_trc = np.zeros((int(num_pst), 3), dtype=float)
     pst_trc[:, 0] = np.round(np.arange(0, idx, idx/num_pst))
     ## define trace ranges to include in SAR window from aperture length
     ### aperture length will be defined in SECONDS so need the ephemeris time
     ### for each post trace
+    # TODO: pst_et could be a list of tuples
     pst_et = np.zeros((len(pst_trc), 3), dtype=float)
     for ii in range(len(pst_et)):
         pst_et[ii, 0] = et[int(pst_trc[ii, 0])]
@@ -170,15 +175,12 @@ def rx_opening(data, rxwot, dt):
         out: array of correctly time-positioned range lines
     '''
 
-    import numpy as np
-
     # define required temporary parameters
     n = np.size(data, axis=1)
     f = np.fft.fftfreq(n, dt)
 
     # define the output
     out = np.zeros((len(data), n), dtype=complex)
-
     # apply phase shift
     for jj in range(len(data)):
         tempA = np.multiply(np.fft.fft(data[jj], norm='ortho'),
@@ -200,6 +202,7 @@ def dD_rngmig(data, R0, et, vt, dt):
             slow-time/fast-time domain
             - range lines organized by row
             - fast-time samples organized by column
+        R0: TODO
         et: relative ephemris times for each range line within the aperture [s]
             - defined relative to the ephemeris time for the mid-aperture range
               line
@@ -211,7 +214,7 @@ def dD_rngmig(data, R0, et, vt, dt):
         out: array of range migrated range lines
     '''
 
-    import numpy as np
+    # GNG: TODO -- in theory the output lines could be a list of numpy arrays
 
     # define the output
     out = np.zeros((len(data), np.size(data, axis=1)), dtype=complex)
@@ -297,17 +300,14 @@ def dD_traceconstructor(data):
     -----------
         out: array of correctly time-positioned range lines
     '''
-    import numpy as np
-
     temp = np.fft.fftshift(np.fft.fft(data, axis=0, norm='ortho'), axes=(0,))
     hann = np.hanning(len(temp))
     hann = np.transpose(np.broadcast_to(np.transpose(hann),
                                         (np.size(data, axis=1), len(hann))))
-    out = np.abs(np.fft.ifftshift(np.multiply(temp, hann), axes=(0,)))
+    return np.abs(np.fft.ifftshift(np.multiply(temp, hann), axes=(0,)))
 
-    return out
-
-def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml=True):
+def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml=True,
+                  debugtag="SAR"):
     '''
     Attempt at delay Doppler SAR processing of SHARAD radar data. Based on
     US methodology as presented in the US PDS data descriptions
@@ -329,6 +329,8 @@ def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml
               generate if multilook processing is to be performed
               - True: combine and produce a single multilook-ed image
               - False: produce a three axis array of individual looks
+
+     debugtag: Optional unique tag prepended to debugging messaages     
 
      Outputs:
     -------------
@@ -352,7 +354,8 @@ def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml
         looks = 1
     elif looks % 2 == 0:
         looks = looks - 1
-    print('Number of looks in delay Doppler SAR processing is', looks)
+
+    logging.debug("{:s}: Number of looks in delay Doppler SAR processing is {:d}".format(debugtag,looks))
 
     # predefine output and start sar processor
     if looks != 1:
@@ -360,41 +363,54 @@ def delay_doppler(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml
         rl2 = np.zeros((len(pst_trc), len(data[0])), dtype=float)
     else:
         rl = np.zeros((len(pst_trc), len(data[0])), dtype=float)
+
     for ii in range(len(pst_trc)):
         if ii % 50 == 0:
-            print('Working delay Doppler SAR column', ii, 'of', len(pst_trc))
-        if pst_trc[ii, 1] != 0 and pst_trc[ii, 2] != 0:
-            # select data within the aperture
-            temp_data = data[pst_trc[ii, 1]:pst_trc[ii, 2]]
-            # time shift to align traces and remove rx opening time changes and
-            # spacecraft radius changes
-            temp_data2 = rx_opening(temp_data,
-                                    rxwot[pst_trc[ii, 1]:pst_trc[ii, 2]],
-                                    0.0375E-6)
-            # range migration
-            R0 = (scrad[pst_trc[ii, 0]] - tpgpy[pst_trc[ii, 0]]) * 1000
-            temp_data3 = dD_rngmig(temp_data2, R0,
-                                   et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
-                                   vt[pst_trc[ii, 1]:pst_trc[ii, 2]], 0.0375E-6)
-            # azimuth migration
-            temp_data4 = dD_azmig(temp_data3, R0,
-                                  et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
-                                  vt[pst_trc[ii, 1]:pst_trc[ii, 2]])
-            # construct the radargram range line
-            temp_data5 = dD_traceconstructor(temp_data4)
-            # multilook and output
-            if looks != 1:
-                tempA = np.arange(-np.floor(looks/2), np.ceil(looks/2), 1, dtype=int)
-                for jj in range(looks):
-                    rl[jj, ii, :] = temp_data5[tempA[jj], :]
-            else:
-                rl[ii] = temp_data5[0, :]
+            logging.debug("{:s}: Working delay Doppler SAR column {:d} of {:d}".format(debugtag, ii, len(pst_trc)) )
+
+        if pst_trc[ii, 1] == 0 or pst_trc[ii, 2] == 0:
+            continue
+
+        # TODO: gc old temp variables to keep mem footprint low
+
+        # select data within the aperture
+        temp_data = data[pst_trc[ii, 1]:pst_trc[ii, 2]]
+
+        # time shift to align traces and remove rx opening time changes and
+        # spacecraft radius changes
+        temp_data2 = rx_opening(temp_data,
+                                rxwot[pst_trc[ii, 1]:pst_trc[ii, 2]],
+                                0.0375E-6)
+
+        # range migration
+        R0 = (scrad[pst_trc[ii, 0]] - tpgpy[pst_trc[ii, 0]]) * 1000
+        temp_data3 = dD_rngmig(temp_data2, R0,
+                               et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
+                               vt[pst_trc[ii, 1]:pst_trc[ii, 2]], 0.0375E-6)
+        # azimuth migration
+        temp_data4 = dD_azmig( temp_data3, R0,
+                               et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
+                               vt[pst_trc[ii, 1]:pst_trc[ii, 2]])
+        logging.debug("{:s}: Shape of azimuth-migrated line {:3d}: {!r}".format(debugtag, ii, temp_data4.shape))
+        # construct the radargram range line
+        temp_data5 = dD_traceconstructor(temp_data4)
+        # multilook and output
+        if looks != 1:
+            tempA = np.arange(-np.floor(looks/2), np.ceil(looks/2), 1, dtype=int)
+            for jj in range(looks):
+                rl[jj, ii, :] = temp_data5[tempA[jj], :]
+        else:
+            rl[ii] = temp_data5[0, :]
+    # end for i
 
     # produce a final combined multilook product if desired
     if looks != 1 and comb_ml:
+        logging.debug("{:s}: Producing final combined multilook product".format(debugtag))
         for ii in range(looks):
             for jj in range(len(pst_trc)):
                 rl2[jj, :] = rl2[jj, :] + np.square(np.abs(rl[ii, jj, :]))
+                # TODO: faster?
+                #rl2[jj, :] += np.square(np.abs(rl[ii, jj, :]))
         rl = np.sqrt(rl2)
 
     return rl, pst_trc

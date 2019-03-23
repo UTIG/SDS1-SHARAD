@@ -26,6 +26,8 @@ stdbuf -o 0 ./run_sar2.py -v | tee sar_crash.log
 """
 
 
+import traceback
+
 def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
                   recalc=20, Er=1, saving="hdf5", debug=False):
     """
@@ -129,8 +131,8 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         logging.debug("{:s}: Length of selected EDR aux data: {:d}".format(taskname, len(aux)) )
     
         # load relevant spacecraft position information from EDR files
-        pri_code = data['PULSE_REPETITION_INTERVAL'].as_matrix()
-        rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].as_matrix()
+        pri_code = data['PULSE_REPETITION_INTERVAL'].values
+        rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values
         for j in range(len(pri_code)):                   
             if pri_code[j] == 1:   pri = 1428E-6
             elif pri_code[j] == 2: pri = 1429E-6
@@ -140,13 +142,13 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
             elif pri_code[j] == 6: pri = 2580E-6
             else: pri = 0
             rxwot[j] = rxwot[j] * 0.0375E-6 + pri - 11.98E-6
-        et = aux['EPHEMERIS_TIME'].as_matrix()
-        tlp = data['TLP_INTERPOLATE'].as_matrix()
-        scrad = data['RADIUS_INTERPOLATE'].as_matrix()
+        et = aux['EPHEMERIS_TIME'].values
+        tlp = data['TLP_INTERPOLATE'].values
+        scrad = data['RADIUS_INTERPOLATE'].values
         if focuser == 'Delay Doppler':
-            tpgpy = data['TOPOGRAPHY'].as_matrix()
-            vt = data['TANGENTIAL_VELOCITY_INTERPOLATE'].as_matrix()
-            vr = data['RADIAL_VELOCITY_INTERPOLATE'].as_matrix()
+            tpgpy = data['TOPOGRAPHY'].values
+            vt = data['TANGENTIAL_VELOCITY_INTERPOLATE'].values
+            vr = data['RADIAL_VELOCITY_INTERPOLATE'].values
             v = np.zeros(len(vt), dtype=float)
             for j in range(len(vt)):
                 #v[j] = np.sqrt(vt[j]**2 + vr[j]**2)
@@ -169,13 +171,13 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         logging.debug("{:s}: Start of SAR processing".format(taskname))
         if focuser == 'Delay Doppler':
             sar, columns = sar.delay_doppler(cmp_track, posting, aperture, bandwidth,
-                                            tlp, et, scrad, tpgpy, rxwot - min(rxwot), v)
+                                            tlp, et, scrad, tpgpy, rxwot - min(rxwot), v, debugtag=taskname)
         elif focuser == 'Matched Filter':
             sar, columns = sar.matched_filter(cmp_track, posting, aperture, Er, bandwidth,
                                              recalc, tlp, et, rxwot)
         
         # save the result
-        if saving != "" and outputfile is not None:
+        if saving and outputfile is not None:
             #save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
             #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
             #data_file = os.path.basename(path_file)
@@ -214,7 +216,11 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
     except Exception as e:
         
         logging.error('{:s}: Error processing file: {:s}'.format(taskname,path))
-        logging.error("{:s}: {:s}".format(taskname, str(e)) )
+        #logging.error("{:s}: {:s}".format(taskname, str(e)) )
+        for line in traceback.format_exc().split("\n"):
+            logging.error('{:s}: {:s}'.format(taskname, line) )
+ 
+
         return 1
     
     logging.debug('{:s}: Successfully processed file: {:s}'.format(taskname,path))
@@ -240,7 +246,7 @@ import importlib.util
 #matplotlib.use('Agg')
 #import matplotlib.pyplot as plt
 
-
+# TODO: import xlib and add relative to this path
 # project libraries
 sys.path.insert(0, '../xlib/misc')
 import prog
@@ -255,7 +261,6 @@ def main():
     parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
-    parser.add_argument('-m','--modifypst', help="Enable PST rewriting using specified script", required=False)
     parser.add_argument('--tracklist', default="elysium.txt",
         help="List of tracks to process")
     parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
@@ -371,7 +376,11 @@ def main():
     #h5file.close()
 
     if args.maxtracks:
+<<<<<<< HEAD
         logging.info("Limiting to processing first {:d} tracks".format(args.maxtracks))
+=======
+        logging.info("Processing first {:d} tracks".format(args.maxtracks))
+>>>>>>> 5e6d96123f4816d899133625927b72cf9ea48447
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:

@@ -28,8 +28,10 @@ sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
 import bitstring as bs
 import pvl
 
+g_debug=False
+
 def read_science(data_path, label_path, science=True, bc=True):
-    
+    global g_debug
 
     """
     Routine to read the pds3 label files and return the corresponding
@@ -209,7 +211,11 @@ def read_science(data_path, label_path, science=True, bc=True):
         conv = np.empty((len(s),3600), dtype = 'i1')
         if pseudo_samples == 2700: 
             for j in range(len(s)):
-                conv[j] = [x for y in [[s[j][i]>>2, ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4, ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
+                conv[j] = [x for y in [
+                    [s[j][i]>>2, 
+                   ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4, 
+                   ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, 
+                     s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
             for i in range(0, 3600):
                 dfr['sample'+str(i)] = pd.Series(conv[:,i], index=dfr.index)
         elif pseudo_samples == 1800:
@@ -227,9 +233,8 @@ def read_science(data_path, label_path, science=True, bc=True):
         # and are now converted into bitstrings which are evaluated bit per bit.
 
         for k,bcl in enumerate(bitcolumns):
-            stringdata = out[bcl[0]]
             # A list of bitarray objects for data
-            bitdata = [ bs.ConstBitStream(bs1.tobytes()) for bs1 in stringdata ]
+            bitdata = [ bs.ConstBitStream(bs1.tobytes()) for bs1 in out[bcl[0]] ]
 
             for m,sub in enumerate(bcl[1]):
                 # GNG: TODO: should this be?
@@ -248,8 +253,8 @@ def read_science(data_path, label_path, science=True, bc=True):
                         +':'+str(nb_bits)
                 if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
                     dtype = 'bool'
-
-                logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
+                if g_debug:
+                    logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
 
                 conv = np.array( [ bit_select2( bits, start_bit, dtype) for bits in bitdata ] )
                 dfr[name] = pd.Series(conv, index=dfr.index)
@@ -305,8 +310,7 @@ def bit_select2(bits, pos, form):
         numeric data
     """
     bits.pos = pos
-    out1 = bits.read(form)
-    return out1
+    return bits.read(form)
 
 def read_raw(path):
     """
@@ -378,6 +382,7 @@ def test1():
 
 
 def main():
+    g_debug=True
     test1()
 
 

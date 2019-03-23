@@ -4,6 +4,9 @@ setenv SDS /disk/kea/SDS
 # We want this to be the path
 # setenv PATH /disk/kea/SDS/syst/ext/bin:$PATH
 
+# Currently set to the same as kscanlan
 setenv WAIS /disk/kea/WAIS
 
 setenv PATH $WAIS/syst/ext/linux/bin:$WAIS/syst/linux/bin:/usr/local/anaconda3:$PATH
+
+

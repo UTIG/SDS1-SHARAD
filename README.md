@@ -8,3 +8,9 @@ Environment
 To setup your environment, including path, run
 
 $ source env/cshrc
+
+Package dependencies:
+
+pvl
+pandas
+numpy

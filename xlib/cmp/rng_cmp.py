@@ -105,25 +105,25 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         E:         Optimal E value found
         dechirped: Pulse compressed with optimal E value
     """
-    # TODO: make plotting optional with an arg
     # Compute list of reference chirps
     fs = us_refchirp(iono, resolution=resolution,
                      maxTECU=maxTECU)
     if iono:
+        #hammingf = Hamming(15E6, 25E6)
         csnr = np.empty((len(fs), len(data)))
         # Perform range compression per filter and record SNR
-        # GNG: for i, chirp in enumerate(fs)
-        for i in range(0, len(fs)):
-            # GNG: TODO: move this fft call out of the loop
-            product = np.fft.fft(data)*np.conj(fs[i])
-            # apply frequency domain filter if desired
-            if chirp_filter:
-                # GNG: move hamming filter out of the loop
-                product = np.multiply(product, Hamming(15E6, 25E6))
+        fftdata  = np.fft.fft(data)
+        # apply frequency domain filter if desired
+        # (combine it with the original fft data)
+        if chirp_filter:
+            fftdata = fftdata * Hamming(15E6, 25E6)
+
+        for i, chirp in enumerate(fs):
+            product = fftdata*np.conj(chirp)
             dechirped = np.fft.ifft(product)
             # Noise is recorded within first 266 samples
             var = np.var(dechirped[:, 0:266], axis=1)
-            # Signal is the maximum amplitude
+            # Signal is the maximum amplitude (GNG: should this be np.abs?)
             maxi = np.max(abs(dechirped), axis=1)
             csnr[i] = maxi**2/var
 
@@ -153,15 +153,14 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         # Pulse compress whole track with optimal E
         fs = us_refchirp(iono, resolution=resolution,
                          custom=x0)
-        product = np.fft.fft(data)*np.conj(fs)
-        # apply frequency domain filter if desired
-        if chirp_filter:
-            product = np.multiply(product, Hamming(15E6, 25E6))
+
+        product = fftdata*np.conj(fs)
         dechirped = np.fft.ifft(product)
 
     else:
         E = 0
         sigma = 0
+        # GNG: should this be * or np.multiply?
         product = np.fft.fft(data)*np.conj(fs)
         # apply frequency domain filter if desired
         if chirp_filter:
