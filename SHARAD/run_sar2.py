@@ -26,6 +26,8 @@ stdbuf -o 0 ./run_sar2.py -v | tee sar_crash.log
 """
 
 
+import traceback
+
 def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
                   recalc=20, Er=1, saving="hdf5", debug=False):
     """
@@ -214,7 +216,11 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
     except Exception as e:
         
         logging.error('{:s}: Error processing file: {:s}'.format(taskname,path))
-        logging.error("{:s}: {:s}".format(taskname, str(e)) )
+        #logging.error("{:s}: {:s}".format(taskname, str(e)) )
+        for line in traceback.format_exc().split("\n"):
+            logging.error('{:s}: {:s}'.format(taskname, line) )
+ 
+
         return 1
     
     logging.debug('{:s}: Successfully processed file: {:s}'.format(taskname,path))
