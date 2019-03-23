@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 __authors__ = ['Cyril Grima, cyril.grima@gmail.com']
 __version__ = '1.0'
 __history__ = {
@@ -5,12 +7,17 @@ __history__ = {
         {'date': 'March 13 2019',
          'author': 'Cyril Grima, UTIG'}}
 
-import get
+import logging
+import argparse
 import multiprocessing
-import numpy as np
 import os
-import pandas as pd
 import sys
+
+import numpy as np
+import pandas as pd
+
+import get
+
 sys.path.append('../xlib/')
 import rsr
 import subradar as sr
@@ -92,14 +99,16 @@ def surface_amp(orbit, typ='cmp', gain=0, sav=True, **kwargs):
     #out = out.reindex(columns=['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp'])
     #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
 
-    k = p['orbit_full'].index(orbit_full)
-    if typ is 'cmp':
-        archive_path = '/'.join([p['srf_path'], p['orbit_path'][k], typ])
-
     if sav is True:
+        k = p['orbit_full'].index(orbit_full)
+
+        if typ is 'cmp':
+            archive_path = os.path.join(p['srf_path'], p['orbit_path'][k], typ)
+        else:
+            assert(False)
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
-        fil = archive_path + '/' + orbit_full + '.txt'
+        fil = os.path.join(archive_path,  orbit_full + '.txt')
         out.to_csv(fil, index=None, sep='\t')
         #print("CREATED: " + fil )
 
@@ -222,11 +231,51 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     if sav is True:
         k = p['orbit_full'].index(orbit_full)
         if typ is 'cmp':
-            archive_path = '/'.join([p['rsr_path'], p['orbit_path'][k], typ])
+            archive_path = os.path.join(p['rsr_path'], p['orbit_path'][k], typ)
+        else:
+            assert(False)
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
-        fil = archive_path + '/' + orbit_full + '.txt'
+        fil = os.path.join(archive_path, orbit_full + '.txt')
         b.to_csv(fil, index=None, sep='\t')
         print('CREATED: ' + fil)
 
     return b
+
+
+
+def main():
+    parser = argparse.ArgumentParser(description='RSR processing routines')
+    parser.add_argument('-o','--output', default='', help="Output directory")
+    parser.add_argument(     '--ofmt',   default='npy',choices=('hdf5','npy','none'), help="Output data format")
+    #parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    #parser.add_argument('--tracklist', default="elysium.txt",
+    #    help="List of tracks to process")
+    #parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
+
+    args = parser.parse_args()
+
+
+
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+        format="run_rsr: [%(levelname)-7s] %(message)s")
+
+
+    b = rsr_processor('0887601', sampling=30000, sav=False)
+
+    if args.output != "":
+        # TODO: improve naming
+        outfile = os.path.join(args.output, "rsr.npy")
+        logging.debug("Saving to " + outfile)
+        np.save(outfile, b)
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
+
+
+
