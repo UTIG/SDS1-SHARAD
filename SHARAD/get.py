@@ -35,9 +35,10 @@ import re
 import numpy as np
 import pandas as pd
 
-sys.path.append('../xlib')
-sys.path.append('../xlib/rdr')
-import solar_longitude
+codepath=os.path.dirname(__file__)
+sys.path.append(os.path.normpath(os.path.join(codepath, "../xlib")) )
+#sys.path.append(os.path.normpath(os.path.join(codepath, "../xlib/rdr")))
+from rdr import solar_longitude
 
 #2006-12-06T02:22:01.951
 p_timestamp = re.compile("(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)\.(\d\d\d)")
@@ -88,7 +89,7 @@ aux_dtype = np.dtype([
 
 
 
-def get_orbitinfo(f):
+def make_orbit_info(f):
     orbit_name1, orbit_ext = os.path.splitext(os.path.basename(f))
     orbit = orbit_name1.split('_')[1]
     # orbit_path = os.path.dirname(f)
@@ -103,25 +104,26 @@ def get_orbitinfo(f):
 # TODO GNG: Improve globs to assert that there is only one file matching the pattern
 
 # TODO GNG: Propose class SDSEnv
-def params():
+def params(data_path='/disk/daedalus/sds/targ/xtra/SHARAD', orig_path='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'):
     """Get various parameters defining the dataset
     """
     # GNG TODO: make this an object so that we can override params, then pass it in.
     # GNG TODO: make this code work even if we're not executing from the current directory.
     # Should use __file__
-    out = {'code_path': os.getcwd()}
+
+    out = {'code_path': os.path.abspath( os.path.dirname(__file__))}
     # GNG TODO: make this use SDS environment variable
     # GNG TODO: convert this to use os.path
-    out['data_path'] = '/disk/daedalus/sds/targ/xtra/SHARAD'
+    out['data_path'] = data_path
     out['data_product'] = os.listdir(out['data_path'])
     for s in out['data_product']:
         out[s + '_path'] = os.path.join(out['data_path'], s)
-    out['orig_path'] = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
+    out['orig_path'] = orig_path
     out['edr_path'] = os.path.join(out['orig_path'], 'EDR')
     logging.debug("edr_path: " + out['edr_path'])
     out['orig_product'] = os.listdir(out['orig_path'])
     for s in out['orig_product']:
-        out[s + '_path'] = out['orig_path'] + '/' + s
+        out[s + '_path'] = os.path.join(out['orig_path'] ,  s)
     # TODO: turn this into a dict, and make a search function called get_orbit?
     # Turn this into a normal iteration and generate lists
 
@@ -140,7 +142,7 @@ def params():
     # TODO: allow multiple files to map to one orbit name
     dict_orbitinfo = {} # map orbit name prefix to full orbit name
     for f in label_files:
-        orbit, orbitinfo = get_orbitinfo(f)
+        orbit, orbitinfo = make_orbit_info(f)
 
         if orbit not in dict_orbitinfo:
             dict_orbitinfo[orbit] = []
@@ -167,14 +169,13 @@ def orbit2full(orbit,p=None):
 def orbit_to_full(orbit, p=None):
     """ 
     Output the full orbit name(s) available for a given orbit
-    input "orbit" may either be the short orbit name or the full orbit name.
-    If the short orbit name, return a list of all full orbit names matching.
+    input "orbit" may either be the short orbit name (such as 0704902)
+    or the full orbit name (such as e_0704902_001_ss05_700_a)
+    If the short orbit name, return a list of all orbits matching that orbit
 
     """
     if p is None:
         p=params()
-
-
 
     return get_orbit_info(orbit, p)[0].get('name', None)
 
@@ -192,7 +193,12 @@ def get_orbit_info(orbit, p=None):
 
     try:
         if orbit_fullname != '':
-            return filter( lambda:x (x['name']==orbit_fullname),  p['orbit_info'][orbit] )
+            # TODO: replace with filter()
+            list_ret = []
+            for x in p['orbit_info'][orbit]:
+                if x['name'] == orbit_fullname:
+                    list_ret.append(x)
+            return list_ret
         else:
             return p['orbit_info'][orbit]
         
@@ -217,6 +223,7 @@ def aux(orbit, p=None, count=-1):
     if p is None:
         p=params()
 
+    #logging.debug("getting info for orbit {:s}".format(orbit))
     list_orbit_info = get_orbit_info(orbit, p)
 
     nitems = len( list_orbit_info )
@@ -336,50 +343,68 @@ def my(orbit, p=None):
 
 
 def test_my(p):
-    orbitnames = sorted(p['orbit_info'].keys())
-    logging.info("test_my: Number of orbits: {:d}".format(len(orbitnames)))
+    orbitnames1 = sorted(p['orbit_info'].keys())
+    orbitnames2 = []
+    for orbit in orbitnames1:
+        for x in p['orbit_info'][orbit]:
+            orbitnames2.append( x['name'] )
+    orbitnames1.sort()
+
+
 
     # what happens when you run my on something that doesn't exist
     MYEAR = my('doesnt_exist',p)
+    MYEAR = my('doesntexist',p)
 
-    for i, orbit in enumerate(orbitnames):
-        try:
-            MYEAR = my(orbit, p)
-        except ValueError as e:
-            logging.info("orbit {:s}: error running my".format(orbit))
-            raise # traceback.print_exc(file=sys.stdout)
-            MYEAR = "ERROR"
-        #logging.info("orbit {:s}: MY={!r}".format(orbit, MYEAR))
+    for orbitnames in (orbitnames1, orbitnames2):
+        logging.info("test_my: Number of orbits: {:d}".format(len(orbitnames)))
 
-        if i % 1000 == 0:
-            logging.info("test_my: {:d} of {:d}".format(i, len(orbitnames)) )
+        for i, orbit in enumerate(orbitnames):
+            try:
+                MYEAR = my(orbit, p)
+            except ValueError as e:
+                logging.info("orbit {:s}: error running my".format(orbit))
+                raise # traceback.print_exc(file=sys.stdout)
+                MYEAR = "ERROR"
+            #logging.info("orbit {:s}: MY={!r}".format(orbit, MYEAR))
 
-        #if i > 4000:
-        #    break
+            if i % 2000 == 0:
+                logging.info("test_my: {:d} of {:d}".format(i, len(orbitnames)) )
 
     logging.info("test_my: done")
     return 0
 
 def test_alt(p):
-    orbitnames = sorted(p['orbit_info'].keys())
-    logging.info("test_alt: Test getting altimetry data. Number of orbits: {:d}".format(len(orbitnames)))
+
+    orbitnames1 = sorted(p['orbit_info'].keys())
+    orbitnames2 = []
+    for orbit in orbitnames1:
+        for x in p['orbit_info'][orbit]:
+            orbitnames2.append( x['name'] )
+    orbitnames1.sort()
+
+
 
     # what happens when you run my on something that doesn't exist
     altdata = alt('doesnt_exist',p=p)
+    altdata = alt('doesntexist',p=p)
 
-    nsucceeded=0
-    nfailed=0
+    for orbitnames in (orbitnames1, orbitnames2):
+        logging.info("test_alt: Test getting altimetry data. Number of orbits: {:d}".format(len(orbitnames)))
 
-    for i, orbit in enumerate(orbitnames):
-        altdata = alt(orbit, p=p)
-        if altdata is None:
-            nfailed += 1
-        else:
-            nsucceeded += 1
-        if i % 1000 == 0:
-            logging.info("test_alt: {:d} of {:d}".format(i, len(orbitnames)) )
+        nsucceeded=0
+        nfailed=0
+    
+        for i, orbit in enumerate(orbitnames):
+            altdata = alt(orbit, p=p)
+            if altdata is None:
+                nfailed += 1
+            else:
+                nsucceeded += 1
+            if i % 2000 == 0:
+                logging.info("test_alt: {:d} of {:d}".format(i, len(orbitnames)) )
 
-    logging.info("test_alt: done.  {:d} succeeded, {:d} failed".format(nsucceeded, nfailed)) 
+        logging.info("test_alt: done.  {:d} succeeded, {:d} failed".format(nsucceeded, nfailed)) 
     return 0
 
 
