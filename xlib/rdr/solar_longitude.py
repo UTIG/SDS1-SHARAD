@@ -1,13 +1,20 @@
+#!/usr/bin/env python3
+
 __authors__ = 'Kirk Scanlan, kirk.scanlan@utexas.edu'
 __version__ = '1.0'
 __history__ = {
     '1.0':
         {'date': 'February 20 2019',
          'author': 'Kirk Scanlan, UTIG',
-         'info': 'Tool to estimate solar longitude from date stamps
-                  in SHARAD USGEOM RDR data products'}}
+         'info': 'Tool to estimate solar longitude from date stamps '
+                  'in SHARAD USGEOM RDR data products'
+}}
 
 # -*- coding: utf-8 -*-
+
+# GNG TODO: rename arguments to abbreviate according to existing convention
+# GNG TODO: move imports to the top per PEP8
+# https://docs.python.org/2/library/time.html#time.struct_time
 
 def Ls(yr, mnth, dy, hr, mnt, scnd):
     """
@@ -15,6 +22,8 @@ def Ls(yr, mnth, dy, hr, mnt, scnd):
     year. Based on 1 Martian year lasting 668.6 sols and 1 sol lasting
     88775.245 seconds. Martian year 1 began on April 11 1955 (solar longitude
     of 0)
+
+    Uses piecewise linear interpolation to calculate position within the month
 
     Inputs
     -----------------
@@ -80,3 +89,27 @@ def Ls(yr, mnth, dy, hr, mnt, scnd):
     Ls = (30 * proportion_through_month) + min_Ls
 
     return MY, Ls
+
+
+
+def main():
+    # Test similarity of original algorithm and numpy-based version
+    pass
+
+    MY1_start_date = dt.datetime(1955, 4, 11, 00, 00, 00)
+
+    for yyyy in range(100):
+        yweeks = yyyy*52
+        for week in range(52):
+            dt = datetime.timedelta(weeks=weeks+yweeks)
+            date1 = MY1_start_date + dt
+
+            Ls(date1.year, date1.month, date1.day, date1.hour, date1.minute, date1.second)
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
+
+
