@@ -30,6 +30,7 @@ import string
 import traceback
 import logging
 import time
+import re
 
 import numpy as np
 import pandas as pd
@@ -38,105 +39,12 @@ sys.path.append('../xlib')
 sys.path.append('../xlib/rdr')
 import solar_longitude
 
-# TODO GNG: Improve globs to assert that there is only one file matching the pattern
+#2006-12-06T02:22:01.951
+p_timestamp = re.compile("(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)\.(\d\d\d)")
 
-# TODO GNG: Propose class SDSEnv
-def params():
-    """Get various parameters defining the dataset
-    """
-    # GNG TODO: make this an object so that we can override params, then pass it in.
-    # GNG TODO: make this code work even if we're not executing from the current directory.
-    # Should use __file__
-    out = {'code_path': os.getcwd()}
-    # GNG TODO: make this use SDS environment variable
-    # GNG TODO: convert this to use os.path
-    out['data_path'] = '/disk/daedalus/sds/targ/xtra/SHARAD'
-    out['data_product'] = os.listdir(out['data_path'])
-    for s in out['data_product']:
-        out[s + '_path'] = os.path.join(out['data_path'], s)
-    out['orig_path'] = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
-    out['edr_path'] = os.path.join(out['orig_path'], 'EDR')
-    logging.debug("edr_path: " + out['edr_path'])
-    out['orig_product'] = os.listdir(out['orig_path'])
-    for s in out['orig_product']:
-        out[s + '_path'] = out['orig_path'] + '/' + s
-    # TODO: turn this into a dict, and make a search function called get_orbit?
-    # Turn this into a normal iteration and generate lists
-
-    label_files =  glob.glob(os.path.join(out['EDR_path'], '*/data/*/*/*.lbl'))
-    logging.debug("Found {:d} label files".format(len(label_files)))
-
-    # For each label file, get the full name of the basename everything before the extension
-    out['orbit_full'] = [f.split('/')[-1].split('.')[0]
-                         for f in label_files]
-    # For each full orbit name, extract just the orbit and put that into a list
-    out['orbit'] = [s.split('_')[1] for s in out['orbit_full']]
-    # Extract the orbit path also as part of that name
-    out['orbit_path'] = ['/'.join(f.split('/')[-5:-1])
-                         for f in label_files]
-
-    dict_orbitinfo = {} # map orbit name prefix to full orbit name
-    for f in label_files:
-        orbit_name1, orbit_ext = os.path.splitext(os.path.basename(f))
-        orbit = orbit_name1.split('_')[1]
-        # orbit_path = os.path.dirname(f)
-        orbit_path = os.path.join(* f.split('/')[-5:-1])
-
-        dict_orbitinfo[orbit] = {
-            'name': orbit_name1, # complete basic orbit name (excluding .lbl)
-            'file': f,           # full filename
-            'path': orbit_path,  # relative path to the file
-        }
-    out['orbit_info'] = dict_orbitinfo
-    
-    out['dataset'] = os.path.basename(out['data_path'])
-    logging.debug("dataset: " + out['dataset'])
-    out['mrosh'] = [i.split('/')[0] for i in out['orbit_path']]
-    return out
-
-# TODO GNG: Propose making a member of SDSEnv
-def orbit2full(orbit,p=None):
-    # prefer not to use "2" to make code more internationally readable and
-    # less biased toward native English speakers
-    if p is None:
-        p=params()
-    logging.warning("Use of 'orbit2full()' is deprecated. Please use 'orbit_to_full()'")
-    return orbit_to_full(orbit, p)
-
-# TODO GNG: Propose making a member of SDSEnv
-def orbit_to_full(orbit, p=None):
-    """Output the full orbit name(s) available for a given orbit"""
-    if p is None:
-        p=params()
-
-    # TODO: Convert this to a dict lookup or None if not found
-    k = p['orbit'].index(orbit)
-    return p['orbit_full'][k]
-
-
-def check(path, verbose=True):
-    """Check if file/path exist
-    """
-    path_exists = os.path.exists(path)
-    if verbose and not path_exists:
-        print('MISSING: ' + path)
-    return path_exists
-
-
-# TODO GNG: Propose making a member of SDSEnv
-def aux(orbit, p=None):
-    """Output content of the auxilliary file for a given orbit
-    """
-    if p is None:
-        p=params()
-
-    orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
-    k = p['orbit_full'].index(orbit_full)
-    fil = os.path.join(p['edr_path'], p['orbit_path'][k], orbit_full + '_a.dat' )
-    foo = check(fil)
-    # TODO GNG: this definition can be made global in the module
-    # READ AUX FILE
-    aux_dtype = np.dtype([
+# TODO GNG: this definition can be made global in the module
+# READ AUX FILE
+aux_dtype = np.dtype([
         ("SCET_BLOCK_WHOLE", '>u4'),
         ("SCET_BLOCK_FRAC", '>u2'),
         ("EPHEMERIS_TIME", '>i8'),
@@ -176,10 +84,151 @@ def aux(orbit, p=None):
         ("TX_CURR", '>f4'),
         ("CORRUPTED_DATA_FLAG1", 'B'),
         ("CORRUPTED_DATA_FLAG2", 'B'),
-    ])
-    logging.debug("aux(): opening {:s}".format(fil))
-    with open(fil, 'r') as f:
-        out = np.fromfile(f, dtype = aux_dtype, count = -1)
+])
+
+
+
+def get_orbitinfo(f):
+    orbit_name1, orbit_ext = os.path.splitext(os.path.basename(f))
+    orbit = orbit_name1.split('_')[1]
+    # orbit_path = os.path.dirname(f)
+    orbit_path = os.path.join(* f.split('/')[-5:-1])
+
+    return orbit, {
+        'name': orbit_name1, # full basic orbit name (excluding .lbl; this is orbit_full)
+        'file': f,           # full filename
+        'path': orbit_path,  # relative path to the file
+    }
+
+# TODO GNG: Improve globs to assert that there is only one file matching the pattern
+
+# TODO GNG: Propose class SDSEnv
+def params():
+    """Get various parameters defining the dataset
+    """
+    # GNG TODO: make this an object so that we can override params, then pass it in.
+    # GNG TODO: make this code work even if we're not executing from the current directory.
+    # Should use __file__
+    out = {'code_path': os.getcwd()}
+    # GNG TODO: make this use SDS environment variable
+    # GNG TODO: convert this to use os.path
+    out['data_path'] = '/disk/daedalus/sds/targ/xtra/SHARAD'
+    out['data_product'] = os.listdir(out['data_path'])
+    for s in out['data_product']:
+        out[s + '_path'] = os.path.join(out['data_path'], s)
+    out['orig_path'] = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
+    out['edr_path'] = os.path.join(out['orig_path'], 'EDR')
+    logging.debug("edr_path: " + out['edr_path'])
+    out['orig_product'] = os.listdir(out['orig_path'])
+    for s in out['orig_product']:
+        out[s + '_path'] = out['orig_path'] + '/' + s
+    # TODO: turn this into a dict, and make a search function called get_orbit?
+    # Turn this into a normal iteration and generate lists
+
+    label_files =  glob.glob(os.path.join(out['EDR_path'], '*/data/*/*/*.lbl'))
+    logging.debug("Found {:d} label files".format(len(label_files)))
+
+    # For each label file, get the full name of the basename everything before the extension
+    out['orbit_full'] = [f.split('/')[-1].split('.')[0]
+                         for f in label_files]
+    # For each full orbit name, extract just the orbit and put that into a list
+    out['orbit'] = [s.split('_')[1] for s in out['orbit_full']]
+    # Extract the orbit path also as part of that name
+    out['orbit_path'] = ['/'.join(f.split('/')[-5:-1])
+                         for f in label_files]
+
+    # TODO: allow multiple files to map to one orbit name
+    dict_orbitinfo = {} # map orbit name prefix to full orbit name
+    for f in label_files:
+        orbit, orbitinfo = get_orbitinfo(f)
+
+        if orbit not in dict_orbitinfo:
+            dict_orbitinfo[orbit] = []
+
+        dict_orbitinfo[orbit].append(orbitinfo)
+
+    out['orbit_info'] = dict_orbitinfo
+    
+    out['dataset'] = os.path.basename(out['data_path'])
+    logging.debug("dataset: " + out['dataset'])
+    out['mrosh'] = [i.split('/')[0] for i in out['orbit_path']]
+    return out
+
+# TODO GNG: Propose making a member of SDSEnv
+def orbit2full(orbit,p=None):
+    # prefer not to use "2" to make code more internationally readable and
+    # less biased toward native English speakers
+    if p is None:
+        p=params()
+    logging.warning("Use of 'orbit2full()' is deprecated. Please use 'orbit_to_full()'")
+    return orbit_to_full(orbit, p)
+
+# TODO GNG: Propose making a member of SDSEnv
+def orbit_to_full(orbit, p=None):
+    """ 
+    Output the full orbit name(s) available for a given orbit
+    input "orbit" may either be the short orbit name or the full orbit name.
+    If the short orbit name, return a list of all full orbit names matching.
+
+    """
+    if p is None:
+        p=params()
+
+
+
+    return get_orbit_info(orbit, p)[0].get('name', None)
+
+
+def get_orbit_info(orbit, p=None):
+    if p is None:
+        p=params()
+
+    # Check if this is a short orbit name or a full orbit name
+    if '_' in orbit:
+        orbit_fullname = orbit
+        orbit = orbit_fullname.split('_')[1]
+    else:
+        orbit_fullname = ''
+
+    try:
+        if orbit_fullname != '':
+            return filter( lambda:x (x['name']==orbit_fullname),  p['orbit_info'][orbit] )
+        else:
+            return p['orbit_info'][orbit]
+        
+    except KeyError as e:
+        return [{}]
+
+
+def check(path, verbose=True):
+    """Check if file/path exist
+    """
+    path_exists = os.path.exists(path)
+    if verbose and not path_exists:
+        print('MISSING: ' + path)
+    return path_exists
+
+
+# TODO GNG: Propose making a member of SDSEnv
+def aux(orbit, p=None, count=-1):
+    """Output content of the auxilliary file for a given orbit
+    """
+    global aux_dtype
+    if p is None:
+        p=params()
+
+    list_orbit_info = get_orbit_info(orbit, p)
+
+    nitems = len( list_orbit_info )
+    if nitems > 1:
+       logging.warning("Orbit {:s} has {:d} files".format(orbit, nitems))
+    orbit_info = list_orbit_info[0]
+
+    if 'path' not in orbit_info: # orbit not found
+        return None
+    fil = os.path.join(p['edr_path'], orbit_info['path'], orbit_info['name'] + '_a.dat' )
+    #logging.debug("aux(): opening {:s}".format(fil))
+    out = np.fromfile(fil, dtype = aux_dtype, count = count)
     return out
 
 
@@ -190,12 +239,24 @@ def alt(orbit, typ='deriv', p=None):
     if p is None:
         p=params()
 
-    orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
-    k = p['orbit_full'].index(orbit_full)
-    fil = glob.glob( '/'.join( [p['alt_path'], p['orbit_path'][k], typ, '*'] ) )[0]
-    foo = check(fil)
-    out = np.load(fil)
-    return out
+    list_orbit_info = get_orbit_info(orbit, p)
+
+    nitems = len( list_orbit_info )
+    if nitems > 1:
+       logging.warning("Orbit {:s} has {:d} files".format(orbit, nitems))
+    orbit_info = list_orbit_info[0]
+
+    if 'path' not in orbit_info: # orbit not found
+        return None
+
+    #orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
+    #k = p['orbit_full'].index(orbit_full)
+    path1 = os.path.join(p['alt_path'], orbit_info['path'], typ, '*')
+    files = glob.glob( path1 )
+    if not files:
+        return None # no file found
+    # TODO: assert glob only has one result
+    return np.load(files[0])
 
 
 # TODO GNG: Propose making this a member of SDSEnv
@@ -226,8 +287,7 @@ def cmp(orbit, typ='ion', p=None):
     foo = check(fil)
     re = pd.read_hdf(fil,key='real').values
     im = pd.read_hdf(fil,key='imag').values
-    out = re + 1j*im
-    return out
+    return re + 1j*im
     
 
 # TODO GNG: Propose making this a member of SDSEnv
@@ -248,56 +308,83 @@ def srf(orbit, typ='cmp', p=None):
 # TODO GNG: Propose making this a member of SDSEnv
 def my(orbit, p=None):
     """Output martian year for a given orbit (gives the MY at the beginning of the orbit)
-    TODO GNG: make this use strptime
     """
+    global p_timestamp
+
     if p is None:
         p=params()
-    orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,  p)
-    a = aux(orbit_full, p)['GEOMETRY_EPOCH']
+
+    auxdata = aux(orbit, p, count=1)
+    if auxdata is None:
+        logging.debug("No data found for orbit '{:s}'".format(orbit))
+        return None
+
+    a = auxdata['GEOMETRY_EPOCH']
 
     # a=['2006-12-06T02:22:01.945' '2006-12-06T02:22:01.951'
-    logging.debug("a={!s}".format(a))
-    logging.debug("a[0]={!s}".format(a[0]))
+    #logging.debug("a={!s}".format(a))
+    #logging.debug("a[0]={!s}".format(a[0]))
 
-
-    yr = np.int( [np.str(a[0])][0][2:6] )
-    mnth = np.int( [np.str(a[0])][0][7:9] )
-    dy = np.int( [np.str(a[0])][0][10:12] )
-    hr = np.int([np.str(a[0])][0][13:15])
-    mnt = np.int([np.str(a[0])][0][16:18])
-    scnd = np.int([np.str(a[0])][0][19:21])
-
-
-    # timestr = [np.str(a[0])][0]
-
-    #yr   = np.int(timestr[ 2: 6])
-    #mnth = np.int(timestr[ 7: 9])
-    #dy   = np.int(timestr[10:12])
-    #hr   = np.int(timestr[13:15])
-    #mnt  = np.int(timestr[16:18])
-    #scnd = np.int(timestr[19:21])
-    # GNG: where is solar_longitude defined?
-    MY, Ls = solar_longitude.Ls(yr, mnth, dy, hr, mnt, scnd)
+    m_tim = p_timestamp.match(a[0].decode())
+    if m_tim:
+        yr, mnth, dy, hr, mnt, scnd = tuple([ int(s) for s in m_tim.group(1,2,3,4,5,6) ])
+        MY, Ls = solar_longitude.Ls(yr, mnth, dy, hr, mnt, scnd)
+    else:
+        logging.error("Can't parse timestamp for orbit {:s}: '{:s}'".format(orbit, a[0]))
+        MY = None
     return MY
 
 
 def test_my(p):
     orbitnames = sorted(p['orbit_info'].keys())
-    logging.info("Number of orbits: {:d}".format(len(orbitnames)))
+    logging.info("test_my: Number of orbits: {:d}".format(len(orbitnames)))
 
-    for orbit in orbitnames:
+    # what happens when you run my on something that doesn't exist
+    MYEAR = my('doesnt_exist',p)
+
+    for i, orbit in enumerate(orbitnames):
         try:
             MYEAR = my(orbit, p)
         except ValueError as e:
+            logging.info("orbit {:s}: error running my".format(orbit))
             raise # traceback.print_exc(file=sys.stdout)
             MYEAR = "ERROR"
-        logging.info("orbit {:s}: MY={!r}".format(orbit, MYEAR))
+        #logging.info("orbit {:s}: MY={!r}".format(orbit, MYEAR))
 
+        if i % 1000 == 0:
+            logging.info("test_my: {:d} of {:d}".format(i, len(orbitnames)) )
+
+        #if i > 4000:
+        #    break
+
+    logging.info("test_my: done")
+    return 0
+
+def test_alt(p):
+    orbitnames = sorted(p['orbit_info'].keys())
+    logging.info("test_alt: Test getting altimetry data. Number of orbits: {:d}".format(len(orbitnames)))
+
+    # what happens when you run my on something that doesn't exist
+    altdata = alt('doesnt_exist',p=p)
+
+    nsucceeded=0
+    nfailed=0
+
+    for i, orbit in enumerate(orbitnames):
+        altdata = alt(orbit, p=p)
+        if altdata is None:
+            nfailed += 1
+        else:
+            nsucceeded += 1
+        if i % 1000 == 0:
+            logging.info("test_alt: {:d} of {:d}".format(i, len(orbitnames)) )
+
+    logging.info("test_alt: done.  {:d} succeeded, {:d} failed".format(nsucceeded, nfailed)) 
     return 0
 
 
 
-def main():
+def main(): 
     import time
 
     t0 = time.time()
@@ -309,7 +396,12 @@ def main():
     p = params()
 
 
+    # Test what happens when you look for an orbit that doesn't exist
+    y = get_orbit_info('orbit_that_doesnt_exist', p)
+    assert(len(y) == 1 and len(y[0]) == 0) # should be a list with a dict
+
     test_my(p)
+    test_alt(p)
 
 
     logging.info("Done in {:0.1f} seconds".format(time.time() - t0))
