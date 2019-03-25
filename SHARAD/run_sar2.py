@@ -376,11 +376,7 @@ def main():
     #h5file.close()
 
     if args.maxtracks:
-<<<<<<< HEAD
-        logging.info("Limiting to processing first {:d} tracks".format(args.maxtracks))
-=======
         logging.info("Processing first {:d} tracks".format(args.maxtracks))
->>>>>>> 5e6d96123f4816d899133625927b72cf9ea48447
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
