@@ -31,7 +31,6 @@ import pandas as pd
 
 
 import sys
-sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
 import pvl
 
 def load_mola(pth):
@@ -62,7 +61,7 @@ def load_mola(pth):
 
     topo = np.zeros((lat_samp, lon_samp))
     for jj in range(lon_samp):
-        topo[:, jj] = dfr[0:lat_samp]['Line_'+str(jj)].as_matrix()
+        topo[:, jj] = dfr[0:lat_samp]['Line_'+str(jj)].values
     del dtype, arr, dfr, fil, out
 
     return topo
