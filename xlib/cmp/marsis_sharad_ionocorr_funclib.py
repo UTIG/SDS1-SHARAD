@@ -27,10 +27,6 @@ Version History
 import glob
 import numpy as np
 import pandas as pd
-
-
-
-import sys
 import pvl
 
 def load_mola(pth):
@@ -84,8 +80,6 @@ def extract_mola(data, lat, lon, bounds):
         topo: interpolated surface at the specified latitude and longitude
               [km]
     '''
-
-    import numpy as np
 
     minlat = bounds[0]
     maxlat = bounds[1]
@@ -174,7 +168,6 @@ def rngcmp(data, chirp_param, instrument):
         out: array of range compressed range lines expressed in the
              slow-time/fast-time domain.
     '''
-    import numpy as np
 
     # pre-define the output
     out = np.zeros((len(data), np.size(data, axis=1)), dtype=complex)
@@ -235,7 +228,6 @@ def ioncorr(data, TEC, chirp_param, instrument):
         out: array of ionosphere corrected range lines expressed in the
              slow-time/fast-time domain.
     '''
-    import numpy as np
 
     # pre-define the output
     out = np.zeros((len(data), np.size(data, axis=1)), dtype=complex)
@@ -289,7 +281,6 @@ def surfpick(data, threshold, n1, n2):
         out: fast-time samples corresponding to the picked surface echo
     '''
 
-    import numpy as np
 
     # pre-define the output
     out = np.zeros((len(data), 1), dtype=float)
@@ -326,7 +317,6 @@ def marsis_band_mute(data, raw_bands, bands_to_use, mar_channel):
         out: modified vector of surface echo picks
     '''
 
-    import numpy as np
 
     # find range lines not corresponding to the MARSIS frequencies of interest
     # and mute their surface picks
@@ -370,8 +360,6 @@ def topography(data, lat, long, mola, bounds):
          out: vector of MOLA topogrpahies for each range line where a surface
               pick exists [km]
     '''
-
-    import numpy as np
 
     # pre-define the output
     out = np.zeros((len(data), 1), dtype=float)
@@ -418,8 +406,6 @@ def tec_calc(TEC, sha_sp, sha_topo, sha_scalt, sha_rx, mar_sp, mar_topo, mar_sca
          out: vector of TEC estimates for each combination of SHARAD and MARSIS
               range lines [m^-3]
     '''
-
-    import numpy as np
 
     # prepare the output
     sha_num = len(sha_sp) - len(np.argwhere(np.isnan(sha_sp)))
@@ -496,8 +482,6 @@ def optimal_tecu(data, b=50):
         high: TEC one standard deviation higher than the optimal [TECU]
     '''
 
-    import numpy as np
-
     hist, edges = np.histogram(data, bins=b)
     cumhist = np.cumsum(hist)
     x = np.argmin(np.abs((cumhist / max(cumhist)) - 0.50))
@@ -540,13 +524,11 @@ def sharad_trim(sha_sp, marb1_sp, marb2_sp, method, number):
          out: vector of trimmed SHARAD surface picks
     '''
 
-    import numpy as np
-    import numpy.random
-
     if method == 'A':
         # define the number of existing MARSIS surface picks
         num_mar = len(marb1_sp) - len(np.argwhere(np.isnan(marb1_sp)))
-        num_mar = num_mar + (len(marb2_sp) - len(np.argwhere(np.isnan(marb2_sp))))
+        num_mar = num_mar + (len(marb2_sp) \
+                  - len(np.argwhere(np.isnan(marb2_sp))))
     elif method == 'B':
         num_mar = number
 
@@ -555,7 +537,7 @@ def sharad_trim(sha_sp, marb1_sp, marb2_sp, method, number):
         ind = np.argwhere(np.isfinite(sha_sp))
         ind = ind[:, 0]
         # define unique indices to be kept randomly from the surfpick index list
-        ind2 = np.sort(numpy.random.choice(ind, (num_mar, ), replace=False))
+        ind2 = np.sort(np.random.choice(ind, (num_mar, ), replace=False))
         # create the output
         out = np.full((len(sha_sp), 1), np.nan)
         # populate the output with SHARAD surfpicks
@@ -591,8 +573,6 @@ def trc_align(data, rxwin, scalt, instrument, marsis_band):
              domain.
     '''
 
-    import numpy as np
-
     # set parameters for each instrument
     if instrument == 'SHARAD':
         n = 3600
@@ -603,9 +583,9 @@ def trc_align(data, rxwin, scalt, instrument, marsis_band):
 
     # define the times by which the individual traces must be shifted
     if instrument == 'MARSIS' and marsis_band == '1':
-        rx = rxwin * (1 / 2.8E6) - (2000 * (scalt - 25) / 299792458 )
+        rx = rxwin * (1 / 2.8E6) - (2000 * (scalt - 25) / 299792458)
     elif instrument == 'MARSIS' and marsis_band == '2':
-        rx = rxwin * (1 / 2.8E6) - 450E-6 - (2000 * (scalt - 25) / 299792458) 
+        rx = rxwin * (1 / 2.8E6) - 450E-6 - (2000 * (scalt - 25) / 299792458)
     elif instrument == 'SHARAD':
         rx = rxwin
 
@@ -637,8 +617,6 @@ def iau2000_ellipsoid_radius(lat):
     -------------
       output is the radius of the martian ellipsoid [m]
     '''
-
-    import numpy as np
 
     # set the radii for Mars
     a = 3396.19E3        # equatorial martian ellipsoid radius [m]
@@ -681,8 +659,6 @@ def normalize_mola(radi, bounds, ddeg=64):
              [km]
     '''
 
-    import numpy as np
-
     # add back planetary radius to radi
     true_radi = radi + 3396E3
 
@@ -719,8 +695,6 @@ def mola2iautopo(dtm, lat_bounds):
       output is a topographic dtm normalized to the IAU2000 martian ellipsoid
          [km]
     '''
-
-    import numpy as np
 
     # define the latitude coordinates of the DTM grid
     lat = np.linspace(lat_bounds[0], lat_bounds[1], np.size(dtm, axis=0))
@@ -771,8 +745,6 @@ def altimetry_error(scalt, topo, surf_pk, rx, TECU, instrument, mar_channel='1',
       as defined from the spacecraft altitude and MOLA and the picked surface
       from the radargram
     '''
-
-    import numpy as np
 
     # define the one-way distances to the surface based on spacecraft altitude
     # and MOLA

@@ -104,7 +104,8 @@ def make_orbit_info(f):
 # TODO GNG: Improve globs to assert that there is only one file matching the pattern
 
 # TODO GNG: Propose class SDSEnv
-def params(data_path='/disk/daedalus/sds/targ/xtra/SHARAD', orig_path='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'):
+def params(data_path='/disk/daedalus/sds/targ/xtra/SHARAD', 
+           orig_path='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'):
     """Get various parameters defining the dataset
     """
     # GNG TODO: make this an object so that we can override params, then pass it in.
@@ -116,14 +117,14 @@ def params(data_path='/disk/daedalus/sds/targ/xtra/SHARAD', orig_path='/disk/kea
     # GNG TODO: convert this to use os.path
     out['data_path'] = data_path
     out['data_product'] = os.listdir(out['data_path'])
-    for s in out['data_product']:
-        out[s + '_path'] = os.path.join(out['data_path'], s)
+    for sname in out['data_product']:
+        out[s + '_path'] = os.path.join(out['data_path'], sname)
     out['orig_path'] = orig_path
     out['edr_path'] = os.path.join(out['orig_path'], 'EDR')
     logging.debug("edr_path: " + out['edr_path'])
     out['orig_product'] = os.listdir(out['orig_path'])
-    for s in out['orig_product']:
-        out[s + '_path'] = os.path.join(out['orig_path'] ,  s)
+    for sname in out['orig_product']:
+        out[s + '_path'] = os.path.join(out['orig_path'], sname)
     # TODO: turn this into a dict, and make a search function called get_orbit?
     # Turn this into a normal iteration and generate lists
 
@@ -333,7 +334,7 @@ def my(orbit, p=None):
 
     m_tim = p_timestamp.match(a[0].decode())
     if m_tim:
-        yr, mnth, dy, hr, mnt, scnd = tuple([ int(s) for s in m_tim.group(1,2,3,4,5,6) ])
+        yr, mnth, dy, hr, mnt, scnd = tuple([ int(s) for s in m_tim.group(1, 2, 3, 4, 5, 6) ])
         MY, Ls = solar_longitude.Ls(yr, mnth, dy, hr, mnt, scnd)
     else:
         logging.error("Can't parse timestamp for orbit {:s}: '{:s}'".format(orbit, a[0]))
@@ -352,15 +353,15 @@ def test_my(p):
 
 
     # what happens when you run my on something that doesn't exist
-    MYEAR = my('doesnt_exist',p)
-    MYEAR = my('doesntexist',p)
+    MYEAR = my('doesnt_exist', p=p)
+    MYEAR = my('doesntexist', p=p)
 
     for orbitnames in (orbitnames1, orbitnames2):
         logging.info("test_my: Number of orbits: {:d}".format(len(orbitnames)))
 
         for i, orbit in enumerate(orbitnames):
             try:
-                MYEAR = my(orbit, p)
+                MYEAR = my(orbit, p=p)
             except ValueError as e:
                 logging.info("orbit {:s}: error running my".format(orbit))
                 raise # traceback.print_exc(file=sys.stdout)
@@ -379,14 +380,12 @@ def test_alt(p):
     orbitnames2 = []
     for orbit in orbitnames1:
         for x in p['orbit_info'][orbit]:
-            orbitnames2.append( x['name'] )
+            orbitnames2.append(x['name'])
     orbitnames1.sort()
 
-
-
     # what happens when you run my on something that doesn't exist
-    altdata = alt('doesnt_exist',p=p)
-    altdata = alt('doesntexist',p=p)
+    altdata = alt('doesnt_exist', p=p)
+    altdata = alt('doesntexist', p=p)
 
     for orbitnames in (orbitnames1, orbitnames2):
         logging.info("test_alt: Test getting altimetry data. Number of orbits: {:d}".format(len(orbitnames)))

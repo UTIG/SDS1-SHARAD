@@ -15,6 +15,7 @@ __history__ = {
 
 b_plot=False
 
+import os
 import numpy as np
 import importlib.util
 
@@ -22,6 +23,8 @@ if b_plot:
     # GNG: on melt:
     # ModuleNotFoundError: No module named 'matplotlib'
     import matplotlib.pyplot as plt
+
+# I think we can just use a string and os.path.exists
 from pathlib import Path
 import pandas as pd
 
@@ -85,6 +88,8 @@ sza_bin[0, :] = np.arange(60, 100, dSZA, dtype=float)
 altimetry_error = np.zeros((10, int((maxSZA - minSZA) / dSZA)))
 altimetry_error[0, :] = np.arange(60, 100, dSZA, dtype=float)
 
+
+
 # import MOLA dataset for the NE quarter of MARS
 if area == 'NP AREA1':
     molaS = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr44n090hb.img')
@@ -106,6 +111,8 @@ elif area == 'OlympiaUndae':
 # normalize MOLA to IAU2000
 mola = L2.normalize_mola(mola, mola_limits, ddeg=128)
 
+SHARAD_root="/disk/kea/SDS/targ/xtra/SHARAD"
+
 # look into chunking the data in order to be able to load the data within each
 # SZA bin
 chunks = np.zeros((1, int((maxSZA - minSZA) / dSZA)))
@@ -113,8 +120,12 @@ if chunk_sharad:
 #    ii = 0
 #    if ii == 0:
     for ii in range(np.size(sza_bin, axis=1)):
-        if Path('/disk/kea/SDS/targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.h5').exists():
-            temp = np.array(pd.read_hdf('/disk/kea/SDS/targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.h5', 'sza'))
+        # GNG: did you mean for there to be a space in here, because this causes problems.
+        # GNG:_ perhaps
+        hdf_path1 = Path(os.path.join(SHARAD_root, 'sza', area, str(dSZA) + ' dSZA', 
+            str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA, 'data.h5') )
+        if hdf_path1.exists():
+            temp = np.array(pd.read_hdf(hdf_path1, 'sza'))
             chunks[0, ii] = np.ceil(len(temp) / chunk_sharad_size)
             del temp
 else:
@@ -128,10 +139,14 @@ chunks = chunks.astype(int)
 for ii in range(np.size(sza_bin, axis=1)):
 #for ii in range(0, 50):
 #for ii in [24, 70, 79]:
+    
+    path1 = Path('/disk/kea/SDS/targ/xtra/MARSIS/sza/' + area + '/' + str(dSZA) + ' dSZA/' + 
+            str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.npz')
 
-    if Path('/disk/kea/SDS/targ/xtra/MARSIS/sza/' + area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.npz').exists():
-
-        if Path('/disk/kea/SDS/targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.h5').exists():
+    if path1.exists():
+        path2 = Path('/disk/kea/SDS/targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + 
+            str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.h5')
+        if path2.exists():
 
 #            jj = 0
 #            if jj == 0:

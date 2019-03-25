@@ -21,14 +21,13 @@ import pickle
 import logging
 import gzip
 import sys
-import struct
 
 import pandas as pd
 import numpy as np
 import bitstring as bs
 import pvl
 
-g_debug=False
+g_debug = False
 
 def read_science(data_path, label_path, science=True, bc=True):
     global g_debug
@@ -191,8 +190,9 @@ def read_science(data_path, label_path, science=True, bc=True):
     dtype_r = np.dtype(dtype)
     arr = np.fromfile(fil, dtype=dtype_r)
     if science:
-        if pseudo_samples<3600: 
-            dtype_pd = np.dtype([('samples', 'V'+str(pseudo_samples)) if x==('samples', str(pseudo_samples)+'B') else x for x in dtype])
+        if pseudo_samples < 3600:
+            dtype_pd = np.dtype([('samples', 'V'+str(pseudo_samples))
+                if x == ('samples', str(pseudo_samples) + 'B') else x for x in dtype])
             arr_pd = np.fromfile(fil, dtype=dtype_pd)
             dfr = pd.DataFrame(arr_pd)
         else:
@@ -208,7 +208,7 @@ def read_science(data_path, label_path, science=True, bc=True):
     # Convert 6 and 4 bit samples
     if science and pseudo_samples < 3600:
         s = out['samples']
-        conv = np.empty((len(s),3600), dtype = 'i1')
+        conv = np.empty((len(s), 3600), dtype='i1')
         if pseudo_samples == 2700: 
             for j in range(len(s)):
                 conv[j] = [x for y in [
@@ -217,10 +217,11 @@ def read_science(data_path, label_path, science=True, bc=True):
                    ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, 
                      s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
             for i in range(0, 3600):
-                dfr['sample'+str(i)] = pd.Series(conv[:,i], index=dfr.index)
+                dfr['sample' + str(i)] = pd.Series(conv[:,i], index=dfr.index)
         elif pseudo_samples == 1800:
             for j in range(len(s)):
-                conv[j] = [x for y in [[s[j][i] >> 4,s[j][i] & 0xf] for i in range(1800)] for x in y]
+                conv[j] = [x for y in [[s[j][i] >> 4, s[j][i] & 0xf] 
+                          for i in range(1800)] for x in y]
             for i in range(0, 3600):
                 dfr['sample'+str(i)] = pd.Series(conv, index=dfr.index)
         else:
@@ -232,11 +233,11 @@ def read_science(data_path, label_path, science=True, bc=True):
         # Read the bitcolumns. These have been previously saved in np.void format
         # and are now converted into bitstrings which are evaluated bit per bit.
 
-        for k,bcl in enumerate(bitcolumns):
+        for bcl in bitcolumns:
             # A list of bitarray objects for data
-            bitdata = [ bs.ConstBitStream(bs1.tobytes()) for bs1 in out[bcl[0]] ]
+            bitdata = [bs.ConstBitStream(bs1.tobytes()) for bs1 in out[bcl[0]]]
 
-            for m,sub in enumerate(bcl[1]):
+            for sub in bcl[1]:
                 # GNG: TODO: should this be?
                 # if sub[0] == 'BIT_COLUMN':
                 if 'BIT_COLUMN' not in sub:
@@ -256,7 +257,7 @@ def read_science(data_path, label_path, science=True, bc=True):
                 if g_debug:
                     logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
 
-                conv = np.array( [ bit_select2( bits, start_bit, dtype) for bits in bitdata ] )
+                conv = np.array([bit_select2(bits, start_bit, dtype) for bits in bitdata])
                 dfr[name] = pd.Series(conv, index=dfr.index)
     return dfr
 
@@ -379,7 +380,8 @@ def test1():
 
 
 def main():
-    g_debug=True
+    global g_debug
+    g_debug = True
     test1()
 
 if __name__ == "__main__":

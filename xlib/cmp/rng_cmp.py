@@ -1,5 +1,5 @@
-
-authors__ = ['Gregor Steinbruegge, gregor@ig.utexas.edu',
+#!/usr/bin/env python3
+__authors__ = ['Gregor Steinbruegge, gregor@ig.utexas.edu',
              'Kirk Scanlan, kirk.scanlan@gmail.com']
 __version__ = '1.0'
 __history__ = {
@@ -12,7 +12,7 @@ __history__ = {
                  'to correct for the ionospheric distortion'}}
 
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 
@@ -78,7 +78,7 @@ def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
         # Without ionosphere - no phase
         C = -np.sin(phi)+1j*np.cos(phi)
         # Pad to 3600 samples
-        ref_chirp = np.pad(C, (3600-len(C), 0), 
+        ref_chirp = np.pad(C, (3600 - len(C), 0),
                            'constant', constant_values=0)
         # Flip and fft
         fs = np.fft.fft(np.flipud(ref_chirp))
@@ -112,7 +112,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         #hammingf = Hamming(15E6, 25E6)
         csnr = np.empty((len(fs), len(data)))
         # Perform range compression per filter and record SNR
-        fftdata  = np.fft.fft(data)
+        fftdata = np.fft.fft(data)
         # apply frequency domain filter if desired
         # (combine it with the original fft data)
         if chirp_filter:
@@ -137,13 +137,13 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         # Fit histogram by a Gauss function
         try:
             opt, cov = curve_fit(Gaussian, np.arange(len(hist)),
-                                 hist, 
+                                 hist,
                                  p0=[len(data)/2, resolution*maxTECU/2, 20])
         except:
             opt = [-1, 0, -1]
             cov = [-1, -1, -1]
 
-        if debug: 
+        if debug:
             print('Gauss fit opt/cov:', opt, cov)
 
         x0 = min(49, max(0, opt[1]))

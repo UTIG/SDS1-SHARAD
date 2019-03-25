@@ -70,25 +70,25 @@ def surface_amp(orbit, typ='cmp', gain=0, sav=True, **kwargs):
     #----------------------
 
     alty = alt[:,5]
-    y = alty*0
-    amp = alty*0
-    for i,val in enumerate(alty):
-       if np.isfinite(val) == False:
-           y[i] = np.nan
-           amp[i] = np.nan
-       else:
-           # Pulse amplitude
-           pls = np.abs(rdg[i,:])
-           # Product of the pulse with its derivative
-           prd = np.abs(np.roll(np.gradient(pls),2)*pls)
-           # interval within which to retrieve the surface
-           val = int(val)
-           itv = prd[val-2:val+6]
-           maxprd = itv.max()
-           maxind = val-2 + np.argmax(itv) # The value of the surface echo
-           maxvec = pls[maxind] # The y coordinate of the surface echo
-           y[i] = maxind
-           amp[i] = maxvec
+    y = alty * 0
+    amp = alty * 0
+    for i, val in enumerate(alty):
+        if np.isfinite(val) == False:
+            y[i] = np.nan
+            amp[i] = np.nan
+        else:
+            # Pulse amplitude
+            pls = np.abs(rdg[i, :])
+            # Product of the pulse with its derivative
+            prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
+            # interval within which to retrieve the surface
+            val = int(val)
+            itv = prd[val-2:val+6]
+            maxprd = itv.max()
+            maxind = val - 2 + np.argmax(itv) # The value of the surface echo
+            maxvec = pls[maxind] # The y coordinate of the surface echo
+            y[i] = maxind
+            amp[i] = maxvec
 
     #--------
     # Archive
@@ -204,8 +204,8 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     b = rsr.utils.inline_estim(amp2, frq=20e6, **kwargs)
     # Geometric losses
     b['rng'] = rng[ b['xo'].values  ]*1e3
-    b['lc'] = 10*np.log10( sr.utils.geo_loss(2*b['rng'].values) )
-    b['ln'] = 10*np.log10( sr.utils.geo_loss(b['rng'].values)**2  )
+    b['lc'] = 10*np.log10(sr.utils.geo_loss(2*b['rng'].values))
+    b['ln'] = 10*np.log10(sr.utils.geo_loss(b['rng'].values)**2)
     # Remove pre-added coherent geometric losses on received powers
     b['pt'] = b['pt'].values + b['lc'].values
     b['pc'] = b['pc'].values + b['lc'].values

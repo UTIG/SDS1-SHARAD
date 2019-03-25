@@ -1,12 +1,15 @@
+#!/usr/bin/env python3
+
 import time
 import os
-import cmp.pds3lbl as pds3
-import cmp.plotting as plotting
-import matplotlib.pyplot as plt
 import numpy as np
 import spiceypy as spice
 from scipy.constants import c
 from scipy.ndimage.interpolation import shift
+import matplotlib.pyplot as plt
+
+import cmp.pds3lbl as pds3
+import cmp.plotting as plotting
 
 def running_mean(x, N):
     xp = np.pad(x, (N//2, N-1-N//2), mode='edge')
@@ -37,15 +40,15 @@ r_offset = int(max(range_window_start))-r_tx0
 et = aux['EPHEMERIS_TIME']
 sc = np.empty(len(et))
 for i in range(len(et)):
-    scpos, lt = spice.spkgeo(-74,et[i],'J2000',4)
-    sc[i] = np.linalg.norm(scpos[0:3]) 
+    scpos, lt = spice.spkgeo(-74,et[i],'J2000', 4)
+    sc[i] = np.linalg.norm(scpos[0:3])
 
 sc_cor = np.array(2000*sc/c/0.0375E-6).astype(int)
-phase = -sc_cor+range_window_start
+phase = -sc_cor + range_window_start
 tx0 = int(min(phase))
 offset = int(max(phase) - tx0)
 
-pri_code = data['PULSE_REPETITION_INTERVAL'][0]                   
+pri_code = data['PULSE_REPETITION_INTERVAL'][0]
 if pri_code == 1:   pri = 1428E-6
 elif pri_code == 2: pri = 1429E-6
 elif pri_code == 3: pri = 1290E-6
@@ -66,7 +69,7 @@ for i in range(3600+offset):
     avg[:,i] = running_mean(radargram[:,i], sar_length)
 
 t1 = time.time()-t0
-print('done in',t1,'seconds')
+print('done in', t1, 'seconds')
 
 plt.style.use('dark_background')
 out=avg.transpose()
@@ -76,14 +79,14 @@ plt.show()
 
 delta = np.argmax(avg,axis=1)
 # ToF
-tx=(range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6
+tx=(range_window_start + delta - phase + tx0) * 0.0375E-6 + pri - 11.98E-6
 # One-way range in km
-d = tx*c/2000
+d = tx * c / 2000
 
 # Elevation from Mars reference sphere
-r = sc-d-3389
+r = sc - d - 3389
 
 plt.scatter(np.arange(len(r)), r, s=0.1)
-plt.scatter(np.arange(len(r)), topo-3389,s=0.1)
+plt.scatter(np.arange(len(r)), topo - 3389, s=0.1)
 plt.show()
 
