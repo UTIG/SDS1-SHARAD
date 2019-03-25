@@ -15,16 +15,16 @@ __history__ = {
                  'by numpy and only the bitstrings by the bitstring package.'
                  'This significantly speeds up the process'}}
 
-import numpy as np
-import glob, os
-import pandas as pd
+import glob
+import os
 import pickle
-#import assert
 import logging
 import gzip
 import sys
 import struct
-sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
+
+import pandas as pd
+import numpy as np
 import bitstring as bs
 import pvl
 
@@ -363,7 +363,6 @@ def test_cmp_gold(datafile, labelfile, goldfile):
     #assert(result)
 
 
-
 def test1():
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
@@ -379,17 +378,10 @@ def test1():
 
 
 
-
-
 def main():
     g_debug=True
     test1()
 
-
-
-
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-
-
