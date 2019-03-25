@@ -27,6 +27,30 @@ stdbuf -o 0 ./run_sar2.py -v | tee sar_crash.log
 
 
 import traceback
+import sys
+import os
+import time
+import logging
+import argparse
+import warnings
+import importlib.util
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, '../xlib/')
+from sar import sar
+import cmp.pds3lbl as pds3
+import misc.hdf as hdf
+
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
+#import matplotlib
+## Force matplotlib to not use any Xwindows backend.
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
+
 
 def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
                   recalc=20, Er=1, saving="hdf5", debug=False):
@@ -64,13 +88,6 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
                   position as well as the start and end of each aperture
 
     """
-    import sys
-    import numpy as np
-    import pandas as pd
-    sys.path.insert(0, '../xlib/sar/')
-    sys.path.insert(0, '../xlib/cmp/')
-    import sar
-    import pds3lbl as pds3
 
     taskname = taskinfo.get('name', "TaskXXX")
 
@@ -170,10 +187,10 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         # execute sar processing
         logging.debug("{:s}: Start of SAR processing".format(taskname))
         if focuser == 'Delay Doppler':
-            sar, columns = sar.delay_doppler(cmp_track, posting, aperture, bandwidth,
+            sardata, columns = sar.delay_doppler(cmp_track, posting, aperture, bandwidth,
                                             tlp, et, scrad, tpgpy, rxwot - min(rxwot), v, debugtag=taskname)
         elif focuser == 'Matched Filter':
-            sar, columns = sar.matched_filter(cmp_track, posting, aperture, Er, bandwidth,
+            sardata, columns = sar.matched_filter(cmp_track, posting, aperture, Er, bandwidth,
                                              recalc, tlp, et, rxwot)
         
         # save the result
@@ -199,7 +216,7 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
           
             if saving == "hdf5":
                 # restructure and save data
-                dfsar = pd.DataFrame(sar)
+                dfsar = pd.DataFrame(sardata)
                 dfcol = pd.DataFrame(columns)
                 dfsar.to_hdf(outputfile, key='sar',
                              complib = 'blosc:lz4', complevel=6)
@@ -227,30 +244,6 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
     
     return 0
 
-# standard python libraries and systemwide libraries
-import sys
-import os
-import numpy as np
-import multiprocessing
-import argparse
-import time
-import logging
-import warnings
-warnings.filterwarnings("ignore", message="numpy.dtype size changed")
-warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
-import pandas as pd
-import importlib.util
-
-#import matplotlib
-## Force matplotlib to not use any Xwindows backend.
-#matplotlib.use('Agg')
-#import matplotlib.pyplot as plt
-
-# TODO: import xlib and add relative to this path
-# project libraries
-sys.path.insert(0, '../xlib/misc')
-import prog
-import hdf
 
 
 def main():
@@ -264,13 +257,6 @@ def main():
     parser.add_argument('--tracklist', default="elysium.txt",
         help="List of tracks to process")
     parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
-    #parser.add_argument('-f','--format', help="When outputting to stdout, use this payload format (default=repr)", required=False, default='repr',choices= sorted(rawcat_fmts.keys()) )
-    #parser.add_argument('--compact', action="store_true", help="When outputting to stdout, use compact output format")
-    #parser.add_argument('--single','--full',  action="store_true", help="Output full data to a single transect directory (don't create per-transect directories)")
-    #parser.add_argument('--stream',help="Comma separated list of stream names to include in output")
-    # implies single core
-    parser.add_argument('--profile',  action="store_true", help='Profile execution performance', required=False)
-    #parser.add_argument('files', nargs='+', help='Input files to process')
 
     args = parser.parse_args()
 
@@ -301,14 +287,11 @@ def main():
     process_list=[]
     logging.info("Building task list from {:s}".format(args.tracklist))
 
-    #p = prog.Prog(len(lookup), prog_symbol='*')
-
     # Just run the first one
     #lookup = lookup[0:1]
 
     for i, path in enumerate(lookup):
     #for orbit in keys:
-        #p.print_Prog(i)
     #    gob = int(orbit.replace('/orbit', ''))
     #    path = lookup[gob]
     #    idx_start = h5file[orbit]['idx_start'][0]
