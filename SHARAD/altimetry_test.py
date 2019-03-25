@@ -40,7 +40,7 @@ r_offset = int(max(range_window_start))-r_tx0
 et = aux['EPHEMERIS_TIME']
 sc = np.empty(len(et))
 for i in range(len(et)):
-    scpos, lt = spice.spkgeo(-74,et[i],'J2000', 4)
+    scpos, lt = spice.spkgeo(-74,et[i], 'J2000', 4)
     sc[i] = np.linalg.norm(scpos[0:3])
 
 sc_cor = np.array(2000*sc/c/0.0375E-6).astype(int)
@@ -48,20 +48,22 @@ phase = -sc_cor + range_window_start
 tx0 = int(min(phase))
 offset = int(max(phase) - tx0)
 
+pri_table={
+1: 1428E-6,
+2: 1429E-6,
+3: 1290E-6,
+4: 2856E-6,
+5: 2984E-6,
+6: 2580E-6
+}
 pri_code = data['PULSE_REPETITION_INTERVAL'][0]
-if pri_code == 1:   pri = 1428E-6
-elif pri_code == 2: pri = 1429E-6
-elif pri_code == 3: pri = 1290E-6
-elif pri_code == 4: pri = 2856E-6
-elif pri_code == 5: pri = 2984E-6
-elif pri_code == 6: pri = 2580E-6 
-else: pri = 0
+pri = pri_table.get(pri_code, 0.0)
 
 radargram=np.zeros((len(data),3600+offset))
 for rec in range(len(cmp_track)):
     # adjust for range window start
-    dat=np.pad(cmp_track[rec],(0,offset),'constant', constant_values=0)
-    radargram[rec]=shift(abs(dat), phase[rec]-tx0, cval=0)
+    dat = np.pad(cmp_track[rec], (0, offset), 'constant', constant_values=0)
+    radargram[rec]=shift(abs(dat), phase[rec] - tx0, cval=0)
 
 avg = np.empty((len(data),3600+offset))
 
