@@ -35,56 +35,56 @@ import re
 import numpy as np
 import pandas as pd
 
-codepath=os.path.dirname(__file__)
+codepath = os.path.dirname(__file__)
 sys.path.append(os.path.normpath(os.path.join(codepath, "../xlib")) )
 #sys.path.append(os.path.normpath(os.path.join(codepath, "../xlib/rdr")))
 from rdr import solar_longitude
 
 #2006-12-06T02:22:01.951
-p_timestamp = re.compile("(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)\.(\d\d\d)")
+p_timestamp = re.compile(r'(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)\.(\d\d\d)')
 
 # TODO GNG: this definition can be made global in the module
 # READ AUX FILE
 aux_dtype = np.dtype([
-        ("SCET_BLOCK_WHOLE", '>u4'),
-        ("SCET_BLOCK_FRAC", '>u2'),
-        ("EPHEMERIS_TIME", '>i8'),
-        ("GEOMETRY_EPOCH", 'S23'),
-        ("SOLAR_LONGITUDE", '>f8'),
-        ("ORBIT_NUMBER", '>i4'),
-        ("X_MARS_SC_POSITION_VECTOR", '>f8'),
-        ("Y_MARS_SC_POSITION_VECTOR", '>f8'),
-        ("Z_MARS_SC_POSITION_VECTOR", '>f8'),
-        ("SPACECRAFT_ALTITUDE", '>f8'),
-        ("SUB_SC_EAST_LONGITUDE", '>f8'),
-        ("SUB_SC_PLANETOCENTRIC_LATITUDE", '>f8'),
-        ("SUB_SC_PLANETOGRAPHIC_LATITUDE", '>f8'),
-        ("X_MARS_SC_VELOCITY_VECTOR", '>f8'),
-        ("Y_MARS_SC_VELOCITY_VECTOR", '>f8'),
-        ("Z_MARS_SC_VELOCITY_VECTOR", '>f8'),
-        ("MARS_SC_RADIAL_VELOCITY", '>f8'),
-        ("MARS_SC_TANGENTIAL_VELOCITY", '>f8'),
-        ("LOCAL_TRUE_SOLAR_TIME", '>f8'),
-        ("SOLAR_ZENITH_ANGLE", '>f8'),
-        ("SC_PITCH_ANGLE", '>f8'),
-        ("SC_YAW_ANGLE", '>f8'),
-        ("SC_ROLL_ANGLE", '>f8'),
-        ("MRO_SAMX_INNER_GIMBAL_ANGLE", '>f8'),
-        ("MRO_SAMX_OUTER_GIMBAL_ANGLE", '>f8'),
-        ("MRO_SAPX_INNER_GIMBAL_ANGLE", '>f8'),
-        ("MRO_SAPX_OUTER_GIMBAL_ANGLE", '>f8'),
-        ("MRO_HGA_INNER_GIMBAL_ANGLE", '>f8'),
-        ("MRO_HGA_OUTER_GIMBAL_ANGLE", '>f8'),
-        ("DES_TEMP", '>f4'),
-        ("DES_5V", '>f4'),
-        ("DES_12V", '>f4'),
-        ("DES_2V5", '>f4'),
-        ("RX_TEMP", '>f4'),
-        ("TX_TEMP", '>f4'),
-        ("TX_LEV", '>f4'),
-        ("TX_CURR", '>f4'),
-        ("CORRUPTED_DATA_FLAG1", 'B'),
-        ("CORRUPTED_DATA_FLAG2", 'B'),
+    ("SCET_BLOCK_WHOLE", '>u4'),
+    ("SCET_BLOCK_FRAC", '>u2'),
+    ("EPHEMERIS_TIME", '>i8'),
+    ("GEOMETRY_EPOCH", 'S23'),
+    ("SOLAR_LONGITUDE", '>f8'),
+    ("ORBIT_NUMBER", '>i4'),
+    ("X_MARS_SC_POSITION_VECTOR", '>f8'),
+    ("Y_MARS_SC_POSITION_VECTOR", '>f8'),
+    ("Z_MARS_SC_POSITION_VECTOR", '>f8'),
+    ("SPACECRAFT_ALTITUDE", '>f8'),
+    ("SUB_SC_EAST_LONGITUDE", '>f8'),
+    ("SUB_SC_PLANETOCENTRIC_LATITUDE", '>f8'),
+    ("SUB_SC_PLANETOGRAPHIC_LATITUDE", '>f8'),
+    ("X_MARS_SC_VELOCITY_VECTOR", '>f8'),
+    ("Y_MARS_SC_VELOCITY_VECTOR", '>f8'),
+    ("Z_MARS_SC_VELOCITY_VECTOR", '>f8'),
+    ("MARS_SC_RADIAL_VELOCITY", '>f8'),
+    ("MARS_SC_TANGENTIAL_VELOCITY", '>f8'),
+    ("LOCAL_TRUE_SOLAR_TIME", '>f8'),
+    ("SOLAR_ZENITH_ANGLE", '>f8'),
+    ("SC_PITCH_ANGLE", '>f8'),
+    ("SC_YAW_ANGLE", '>f8'),
+    ("SC_ROLL_ANGLE", '>f8'),
+    ("MRO_SAMX_INNER_GIMBAL_ANGLE", '>f8'),
+    ("MRO_SAMX_OUTER_GIMBAL_ANGLE", '>f8'),
+    ("MRO_SAPX_INNER_GIMBAL_ANGLE", '>f8'),
+    ("MRO_SAPX_OUTER_GIMBAL_ANGLE", '>f8'),
+    ("MRO_HGA_INNER_GIMBAL_ANGLE", '>f8'),
+    ("MRO_HGA_OUTER_GIMBAL_ANGLE", '>f8'),
+    ("DES_TEMP", '>f4'),
+    ("DES_5V", '>f4'),
+    ("DES_12V", '>f4'),
+    ("DES_2V5", '>f4'),
+    ("RX_TEMP", '>f4'),
+    ("TX_TEMP", '>f4'),
+    ("TX_LEV", '>f4'),
+    ("TX_CURR", '>f4'),
+    ("CORRUPTED_DATA_FLAG1", 'B'),
+    ("CORRUPTED_DATA_FLAG2", 'B'),
 ])
 
 
@@ -161,7 +161,7 @@ def orbit2full(orbit,p=None):
     # prefer not to use "2" to make code more internationally readable and
     # less biased toward native English speakers
     if p is None:
-        p=params()
+        p = params()
     logging.warning("Use of 'orbit2full()' is deprecated. Please use 'orbit_to_full()'")
     return orbit_to_full(orbit, p)
 
@@ -175,14 +175,14 @@ def orbit_to_full(orbit, p=None):
 
     """
     if p is None:
-        p=params()
+        p = params()
 
     return get_orbit_info(orbit, p)[0].get('name', None)
 
 
 def get_orbit_info(orbit, p=None):
     if p is None:
-        p=params()
+        p = params()
 
     # Check if this is a short orbit name or a full orbit name
     if '_' in orbit:
@@ -201,7 +201,6 @@ def get_orbit_info(orbit, p=None):
             return list_ret
         else:
             return p['orbit_info'][orbit]
-        
     except KeyError as e:
         return [{}]
 
@@ -221,7 +220,7 @@ def aux(orbit, p=None, count=-1):
     """
     global aux_dtype
     if p is None:
-        p=params()
+        p = params()
 
     #logging.debug("getting info for orbit {:s}".format(orbit))
     list_orbit_info = get_orbit_info(orbit, p)
@@ -233,9 +232,9 @@ def aux(orbit, p=None, count=-1):
 
     if 'path' not in orbit_info: # orbit not found
         return None
-    fil = os.path.join(p['edr_path'], orbit_info['path'], orbit_info['name'] + '_a.dat' )
+    fil = os.path.join(p['edr_path'], orbit_info['path'], orbit_info['name'] + '_a.dat')
     #logging.debug("aux(): opening {:s}".format(fil))
-    out = np.fromfile(fil, dtype = aux_dtype, count = count)
+    out = np.fromfile(fil, dtype=aux_dtype, count=count)
     return out
 
 
@@ -244,13 +243,13 @@ def alt(orbit, typ='deriv', p=None):
     """Output data processed and archived by the altimetry processor
     """
     if p is None:
-        p=params()
+        p = params()
 
     list_orbit_info = get_orbit_info(orbit, p)
 
-    nitems = len( list_orbit_info )
+    nitems = len(list_orbit_info)
     if nitems > 1:
-       logging.warning("Orbit {:s} has {:d} files".format(orbit, nitems))
+        logging.warning("Orbit {:s} has {:d} files".format(orbit, nitems))
     orbit_info = list_orbit_info[0]
 
     if 'path' not in orbit_info: # orbit not found
@@ -273,27 +272,27 @@ def tec(orbit, typ='ion', p=None):
     """Output TEC data
     """
     if p is None:
-        p=params()
+        p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
     k = p['orbit_full'].index(orbit_full)
-    fil = glob.glob( '/'.join( [p['cmp_path'], p['orbit_path'][k], typ, '*TECU.txt']  )  )[0]
+    fil = glob.glob('/'.join([p['cmp_path'], p['orbit_path'][k], typ, '*TECU.txt']))[0]
     foo = check(fil)
     out = np.loadtxt(fil)
     return out
 
 
 # TODO GNG: Propose making this a member of SDSEnv
-def cmp(orbit, typ='ion', p=None):
+def cmp_data(orbit, typ='ion', p=None):
     """Output data processed and archived by the CMP processor
     """
     if p is None:
-        p=params()
+        p = params()
     orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
     k = p['orbit_full'].index(orbit_full)
     fil = glob.glob( '/'.join( [p['cmp_path'], p['orbit_path'][k], typ, '*.h5']   )   )[0]
     foo = check(fil)
-    re = pd.read_hdf(fil,key='real').values
-    im = pd.read_hdf(fil,key='imag').values
+    re = pd.read_hdf(fil, key='real').values
+    im = pd.read_hdf(fil, key='imag').values
     return re + 1j*im
     
 
@@ -302,11 +301,11 @@ def srf(orbit, typ='cmp', p=None):
     """Output data processed and archived by the altimetry processor
     """
     if p is None:
-        p=params()
+        p = params()
 
     orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
     k = p['orbit_full'].index(orbit_full)
-    fil = glob.glob( '/'.join( [p['srf_path'], p['orbit_path'][k], typ, '*']  )  )[0]
+    fil = glob.glob('/'.join([p['srf_path'], p['orbit_path'][k], typ, '*']))[0]
     foo = check(fil)
     out = np.load(fil)
     return out
@@ -319,7 +318,7 @@ def my(orbit, p=None):
     global p_timestamp
 
     if p is None:
-        p=params()
+        p = params()
 
     auxdata = aux(orbit, p, count=1)
     if auxdata is None:
@@ -427,7 +426,6 @@ def main():
 
     test_my(p)
     test_alt(p)
-
 
     logging.info("Done in {:0.1f} seconds".format(time.time() - t0))
 

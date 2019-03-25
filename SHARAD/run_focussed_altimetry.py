@@ -57,91 +57,100 @@ def sar_processor(rec):
         doppler[6:11,delta] = abs(np.fft.fft(signal[:,delta])[-5:])
 
     return rec,doppler,tx0
-corr_window = 1024
 
-aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt' 
-science_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat'
-cmp_track=np.load('/disk/daedalus/sds/targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy')
-data = pds3.read_science(science_path, label_path, science=True)
-aux = pds3.read_science(science_path.replace('_s.dat','_a.dat'), aux_path, science=False)
-spice.furnsh('/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm')
+def main():
 
-mini = 1000
-maxi = 1501
+    corr_window = 1024
 
-# map
-range_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
-topo = data['TOPOGRAPHY']
-et = aux['EPHEMERIS_TIME']
+    aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+    label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt' 
+    science_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat'
+    cmp_track=np.load('/disk/daedalus/sds/targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy')
+    data = pds3.read_science(science_path, label_path, science=True)
+    aux = pds3.read_science(science_path.replace('_s.dat','_a.dat'), aux_path, science=False)
+    spice.furnsh('/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm')
 
-sc = np.empty(len(et))
-sc_pos = np.empty((len(et),3))
-for i in range(len(et)):
-    state, lt = spice.spkgeo(-74,et[i],'J2000',4)
-    sc_pos[i] = state[0:3]
-    sc[i] = np.linalg.norm(sc_pos[i]) 
+    mini = 1000
+    maxi = 1501
 
-pri_code = data['PULSE_REPETITION_INTERVAL'][mini]                   
-if pri_code == 1:   pri = 1428E-6
-elif pri_code == 2: pri = 1429E-6
-elif pri_code == 3: pri = 1290E-6
-elif pri_code == 4: pri = 2856E-6
-elif pri_code == 5: pri = 2984E-6
-elif pri_code == 6: pri = 2580E-6 
-else: pri = 0
+    # map
+    range_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
+    topo = data['TOPOGRAPHY']
+    et = aux['EPHEMERIS_TIME']
 
-out = []
-process_list = []
-pool = multiprocessing.Pool(10)
-for i in range(mini,maxi):
-    process_list.append([i])
+    sc = np.empty(len(et))
+    sc_pos = np.empty((len(et), 3))
+    for i in range(len(et)):
+        state, lt = spice.spkgeo(-74, et[i], 'J2000', 4)
+        sc_pos[i] = state[0:3]
+        sc[i] = np.linalg.norm(sc_pos[i]) 
+    
+    pri_code = data['PULSE_REPETITION_INTERVAL'][mini]                   
+    if pri_code == 1:   pri = 1428E-6
+    elif pri_code == 2: pri = 1429E-6
+    elif pri_code == 3: pri = 1290E-6
+    elif pri_code == 4: pri = 2856E-6
+    elif pri_code == 5: pri = 2984E-6
+    elif pri_code == 6: pri = 2580E-6 
+    else: pri = 0
 
-results = [pool.apply_async(sar_processor, t) for t in process_list]
+    out = []
+    process_list = []
+    pool = multiprocessing.Pool(10)
+    for i in range(mini,maxi):
+        process_list.append([i])
 
-p = prog.Prog(len(process_list))
-alt = []
+    results = [pool.apply_async(sar_processor, t) for t in process_list]
 
-sar_track = np.zeros((len(cmp_track),3600))
-tx0s = np.zeros(len(cmp_track))
-i=0
-for result in results:
-    p.print_Prog(i)
-    rec, doppler, tx0 = result.get()
-    for j in range(0,6):
-        if rec+j<len(sar_track): sar_track[rec+j] += doppler[j]
-    for j in range(6,11):
-        k = 11-j
-        if rec-k>=0: sar_track[rec-k] += doppler[j]
-    tx0s[rec] = tx0 
-    i+=1
-for i in range(0,len(sar_track)):
-    dist=((np.argmax(sar_track[i])+tx0s[rec])*0.0375E-6+pri-11.98E-6)*c/2000
-    alt.append(dist)
+    p = prog.Prog(len(process_list))
+    alt = []
 
-np.save('sar_test',sar_track)
-np.save('alt_test',np.array(alt))
+    sar_track = np.zeros((len(cmp_track),3600))
+    tx0s = np.zeros(len(cmp_track))
+    i = 0
+    for result in results:
+        p.print_Prog(i)
+        rec, doppler, tx0 = result.get()
+        for j in range(0,6):
+            if rec + j < len(sar_track): sar_track[rec+j] += doppler[j]
+        for j in range(6,11):
+            k = 11 - j
+            if rec-k >= 0: sar_track[rec-k] += doppler[j]
+        tx0s[rec] = tx0 
+        i += 1
+    for i in range(0,len(sar_track)):
+        dist=((np.argmax(sar_track[i])+tx0s[rec])*0.0375E-6+pri-11.98E-6)*c/2000
+        alt.append(dist)
 
-#sar_track = np.load('sar_test.npy')
-#alt = np.load('alt_test.npy')
+    np.save('sar_test',sar_track)
+    np.save('alt_test',np.array(alt))
 
-d = np.array(alt)
-record = np.array(sar_track)
-plt.style.use('dark_background')
-out=record.transpose()
-out=out[~np.all(out == 0, axis=1)]
-plt.imshow(out,cmap='binary_r',aspect='auto')
-plt.show()
+    #sar_track = np.load('sar_test.npy')
+    #alt = np.load('alt_test.npy')
 
-plt.plot(sc-3389)
+    d = np.array(alt)
+    record = np.array(sar_track)
+    plt.style.use('dark_background')
+    out=record.transpose()
+    out=out[~np.all(out == 0, axis=1)]
+    plt.imshow(out,cmap='binary_r',aspect='auto')
+    plt.show()
 
-# Elevation from Mars reference sphere
-fig,ax=plt.subplots()  
-ax.set_ylim(-50,50)
-r = sc-d-3389
-plt.plot(r)
-plt.show()
-plt.scatter(np.arange(len(r)), r, s=0.1)
-plt.scatter(np.arange(len(r)), topo-3389,s=0.1)
-plt.show()
+    plt.plot(sc - 3389)
+
+    # Elevation from Mars reference sphere
+    fig,ax=plt.subplots()  
+    ax.set_ylim(-50,50)
+    r = sc - d - 3389
+    plt.plot(r)
+    plt.show()
+    plt.scatter(np.arange(len(r)), r, s=0.1)
+    plt.scatter(np.arange(len(r)), topo - 3389,s=0.1)
+    plt.show()
+
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
 

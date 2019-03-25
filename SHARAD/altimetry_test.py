@@ -63,7 +63,7 @@ for rec in range(len(cmp_track)):
 avg = np.empty((len(data),3600+offset))
 
 for i in range(3600+offset):
-    avg[:,i] = running_mean(radargram[:,i],sar_length)
+    avg[:,i] = running_mean(radargram[:,i], sar_length)
 
 t1 = time.time()-t0
 print('done in',t1,'seconds')

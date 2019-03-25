@@ -70,7 +70,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
         # Load data
-        science_path=infile.replace('_a.dat','_s.dat')
+        science_path=infile.replace('_a.dat', '_s.dat')
         data = pds3.read_science(science_path, label_path, science=True)
         aux  = pds3.read_science(infile      , aux_path,   science=False)
 
@@ -81,9 +81,9 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         if idx_start is None or idx_end is None:
             idx_start = 0
             idx_end = len(data)
-        idx = np.arange(idx_start,idx_end)
+        idx = np.arange(idx_start, idx_end)
 
-        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)) )
+        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
 
         # Chop raw data
         raw_data = chop_raw_data(data, idx, idx_start)
@@ -101,27 +101,27 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         elif tps == 6: presum = 32
         elif tps == 7: presum = 64
         SDI = data['SDI_BIT_FIELD'][idx_start]
-        bps = 8    
+        bps = 8
 
         # Decompress the data
-        decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI) 
+        decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI)
         # TODO: E_track can just be a list of tuples
-        E_track = np.empty((idx_end-idx_start,2))
+        E_track = np.empty((idx_end-idx_start, 2))
         # Get groundtrack distance and define 30 km chunks
         tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
         tlp0 = tlp[0]
-        chunks=[]
-        i0=0
+        chunks = []
+        i0 = 0
         for i in range(len(tlp)):
-            if tlp[i]>tlp0+30: 
-                 chunks.append([i0,i]) 
-                 i0=i
-                 tlp0=tlp[i]
-        if len(chunks)==0: chunks.append([0,idx_end-idx_start])
-        if (tlp[-1]-tlp[i0])>=15: chunks.append([i0, idx_end-idx_start])
-        else: chunks[-1][1]=idx_end-idx_start
+            if tlp[i] > tlp0+30: 
+                chunks.append([i0,i]) 
+                i0 = i
+                tlp0 = tlp[i]
+        if len(chunks) == 0: chunks.append([0, idx_end-idx_start])
+        if (tlp[-1] - tlp[i0]) >= 15: chunks.append([i0, idx_end-idx_start])
+        else: chunks[-1][1] = idx_end - idx_start
 
-        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)) )
+        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks) )
         # Compress the data chunkwise and reconstruct
 
 
@@ -130,10 +130,11 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             start,end = chunks[i]
 
             #check if ionospheric correction is needed
-            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
+            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end] < 100)[0]
             b_iono = len(iono_check) != 0
             minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f}  Ionospheric Correction: {!r}'.format(
+            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f} ' 
+                          ' Ionospheric Correction: {!r}'.format(
                 taskname, i, len(chunks), minsza, b_iono) )
 
             E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(
@@ -156,10 +157,10 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             #path_file = path_file.replace(data_file,'')
             #new_path = path_outroot+path_file+'ion/'
             data_file   = os.path.basename(infile)
-            outfilebase = data_file.replace('.dat','.h5')
+            outfilebase = data_file.replace('.dat', '.h5')
             outfile     = os.path.join(outdir, outfilebase)
 
-            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,outdir) )
+            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname, outdir) )
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
 
@@ -171,8 +172,8 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             if saving == 'hdf5':
                 #dfreal = pd.DataFrame(real)
                 #dfimag = pd.DataFrame(imag)
-                pd.DataFrame(real).to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
-                pd.DataFrame(imag).to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
+                pd.DataFrame(real).to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
+                pd.DataFrame(imag).to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
             elif saving == 'npy':
                 # Round it just like in an hdf5 and save as side-by-side arrays
                 cmp_track = np.vstack([real, imag])
