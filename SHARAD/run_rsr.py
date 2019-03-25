@@ -53,11 +53,11 @@ def surface_amp(orbit, typ='cmp', gain=0, sav=True, **kwargs):
     #----------
 
     p = get.params()
-    orbit_full = orbit if orbit.find('_') is 1 else get.orbit2full(orbit)
+    orbit_full = orbit if orbit.find('_') is 1 else get.orbit_to_full(orbit, p)
 
-    alt = get.alt(orbit_full)
-    rdg = get.cmp(orbit_full)
-    aux = get.aux(orbit_full)
+    alt = get.alt(orbit_full, p=p)
+    rdg = get.cmp(orbit_full, p=p)
+    aux = get.aux(orbit_full, p=p)
 
     utc = aux['EPHEMERIS_TIME']
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
@@ -174,9 +174,9 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     #----------
 
     p = get.params()
-    orbit_full = orbit if orbit.find('_') is 1 else get.orbit2full(orbit)
+    orbit_full = orbit if orbit.find('_') is 1 else get.orbit_to_full(orbit,p=p)
 
-    aux = get.aux(orbit_full)
+    aux = get.aux(orbit_full, p=p)
     utc = aux['EPHEMERIS_TIME']
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
     lon = aux['SUB_SC_EAST_LONGITUDE']
