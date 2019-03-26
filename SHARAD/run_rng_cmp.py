@@ -70,11 +70,11 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
         # Load data
-        science_path=infile.replace('_a.dat', '_s.dat')
+        science_path = infile.replace('_a.dat', '_s.dat')
         data = pds3.read_science(science_path, label_path, science=True)
         aux  = pds3.read_science(infile      , aux_path,   science=False)
 
-        stamp1=time.time()-time_start
+        stamp1=time.time() - time_start
         logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
 
         # Array of indices to be processed
@@ -88,18 +88,14 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         # Chop raw data
         raw_data = chop_raw_data(data, idx, idx_start)
 
+        # Tracking presumming table. Converts TPS field into presumming count
+        tps_table = (1,2,3,4,8,16,32,64)
+
         if data['COMPRESSION_SELECTION'][idx_start] == 0: compression = 'static'
         else: compression = 'dynamic'
         tps = data['TRACKING_PRE_SUMMING'][idx_start]
         assert(tps >= 0 and tps <= 7)
-        if tps == 0: presum = 1
-        elif tps == 1: presum = 2
-        elif tps == 2: presum = 3
-        elif tps == 3: presum = 4
-        elif tps == 4: presum = 8
-        elif tps == 5: presum = 16
-        elif tps == 6: presum = 32
-        elif tps == 7: presum = 64
+        presum = tps_table[tps]
         SDI = data['SDI_BIT_FIELD'][idx_start]
         bps = 8
 
@@ -117,11 +113,16 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
                 chunks.append([i0,i]) 
                 i0 = i
                 tlp0 = tlp[i]
-        if len(chunks) == 0: chunks.append([0, idx_end-idx_start])
-        if (tlp[-1] - tlp[i0]) >= 15: chunks.append([i0, idx_end-idx_start])
-        else: chunks[-1][1] = idx_end - idx_start
 
-        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks) )
+        if len(chunks) == 0:
+            chunks.append([0, idx_end-idx_start])
+
+        if (tlp[-1] - tlp[i0]) >= 15:
+            chunks.append([i0, idx_end-idx_start])
+        else: 
+            chunks[-1][1] = idx_end - idx_start
+
+        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks) ))
         # Compress the data chunkwise and reconstruct
 
 
@@ -147,7 +148,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         list_cmp_track = None  # free memory
 
 
-        stamp3=time.time()-time_start-stamp1
+        stamp3 = time.time() - time_start - stamp1
         logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
 
         if saving and outdir != "":
@@ -174,12 +175,14 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
                 #dfimag = pd.DataFrame(imag)
                 pd.DataFrame(real).to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
                 pd.DataFrame(imag).to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
+                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
             elif saving == 'npy':
                 # Round it just like in an hdf5 and save as side-by-side arrays
                 cmp_track = np.vstack([real, imag])
 
                 outfile = os.path.join(outdir, data_file.replace('.dat','.npy') )
                 np.save(outfile,cmp_track)
+                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
             elif saving == 'none':
                 pass
             else:
@@ -187,6 +190,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
             outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
             np.savetxt(outfile_TECU,E_track)
+            logging.info("{:s}: Wrote {:s}".format(taskname, outfile_TECU))
 
 
         if radargram:
@@ -194,8 +198,8 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx]
             tx0=data['RECEIVE_WINDOW_OPENING_TIME'][0]
             tx=np.empty(len(data))
-            # GNG: this seems likely to be wrong. Should be:
-            #for rec in range(len(data['RECEIVE_WINDOW_OPENING_TIME'])):
+            # TODO GNG: this seems likely to be wrong. Should be:
+            # data[rec]['RECEIVE_WINDOW_OPENING_TIME'] - tx0
             for rec in range(len(data)):
                 tx[rec]=data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
             cmp.plotting.plot_radargram(cmp_track,tx,samples=3600)
@@ -213,12 +217,8 @@ def chop_raw_data(data, idx, idx_start):
     raw_data=np.zeros((len(idx),3600),dtype=np.complex)
     for j in range(3600):
         k = 'sample' + str(j)
-        #logging.debug("raw_data[{:s},{:d}]=data[{:s}][{:s}].values".format(str(idx-idx_start), j, k,str(idx)) )
-        #logging.debug("raw_data[{:s},{:d}]=data[{:s}][{:s}].values".format(":", j, k,str(idx)) )
-        #raw_data[idx-idx_start,j]=data[k][idx].values
         raw_data[:,j]=data[k][idx].values
     return raw_data
-
 
 
 
