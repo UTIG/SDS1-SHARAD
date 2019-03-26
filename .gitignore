@@ -10,7 +10,6 @@ __pycache__
 # output files
 *.log
 SPICE
-xover
 *.swp
 .nfs*
 *.h5
