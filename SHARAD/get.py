@@ -12,6 +12,11 @@ __history__ = {
 """
 # Propose calling this SDSEnv
 
+SHARADEnv
+SharadData
+SHARADData
+
+
 sdsenv = SDSEnv(name='SHARAD')
 
 sdsenv.orbit_data(orbitname)
@@ -271,6 +276,7 @@ def alt(orbit, typ='deriv', p=None):
 # TODO GNG: Propose parallel function tec_filepaths?
 def tec(orbit, typ='ion', p=None):
     """Output TEC data
+    Total Electron Content
     """
     if p is None:
         p = params()
@@ -299,7 +305,7 @@ def cmp_data(orbit, typ='ion', p=None):
 
 # TODO GNG: Propose making this a member of SDSEnv
 def srf(orbit, typ='cmp', p=None):
-    """Output data processed and archived by the altimetry processor
+    """Output data processed and archived by the altimetry processor (surface)
     """
     if p is None:
         p = params()
