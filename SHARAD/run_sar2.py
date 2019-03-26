@@ -52,6 +52,19 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 #import matplotlib.pyplot as plt
 
 
+# Code mapping PRI codes to actual pulse repetition intervals
+pri_table={
+1: 1428E-6,
+2: 1429E-6,
+3: 1290E-6,
+4: 2856E-6,
+5: 2984E-6,
+6: 2580E-6
+}
+
+
+
+
 def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler',
                   recalc=20, Er=1, saving="hdf5", debug=False):
     """
@@ -146,19 +159,13 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
 
         logging.debug("{:s}: Length of selected EDR sci data: {:d}".format(taskname, len(data)) )
         logging.debug("{:s}: Length of selected EDR aux data: {:d}".format(taskname, len(aux)) )
-    
+
         # load relevant spacecraft position information from EDR files
         pri_code = data['PULSE_REPETITION_INTERVAL'].values
         rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values
-        for j in range(len(pri_code)):                   
-            if pri_code[j] == 1:   pri = 1428E-6
-            elif pri_code[j] == 2: pri = 1429E-6
-            elif pri_code[j] == 3: pri = 1290E-6
-            elif pri_code[j] == 4: pri = 2856E-6
-            elif pri_code[j] == 5: pri = 2984E-6
-            elif pri_code[j] == 6: pri = 2580E-6
-            else: pri = 0
-            rxwot[j] = rxwot[j] * 0.0375E-6 + pri - 11.98E-6
+        for j,code in enumerate(pri_code):
+            pri = pri_table.get(code, 0.0)
+            rxwot[j] *= 0.0375E-6 + pri - 11.98E-6
         et = aux['EPHEMERIS_TIME'].values
         tlp = data['TLP_INTERPOLATE'].values
         scrad = data['RADIUS_INTERPOLATE'].values
