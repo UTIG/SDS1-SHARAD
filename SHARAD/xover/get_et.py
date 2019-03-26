@@ -6,7 +6,12 @@ __history__ = {
     '1.0':
         {'date': 'October 29, 2018',
          'author': 'Gregor Steinbruegge, UTIG',
-         'info': 'First release.'}}
+         'info': 'First release.'},
+    '1.1':
+        {'date': 'March 26, 2019',
+         'author': 'Gregory Ng, UTIG',
+         'info': 'Reorganized code.'}
+}
 
 """
 This is a short script to extract only the ephemeris time from
@@ -16,14 +21,14 @@ These times are mainly used for the cross-over search.
 
 import sys
 import os
+import glob
+
 import numpy as np
-import importlib.util
+import pvl
+sys.path.append("../../xlib/cmp")
+import pds3lbl as pds3
 
 def read_science_np(label_path,data_path):
-    import pvl
-    import numpy as np
-    import glob
-    import os
 
     PDS3_DATA_TYPE_TO_DTYPE = {
     'DATE' : '>i',
@@ -43,7 +48,7 @@ def read_science_np(label_path,data_path):
     'SUN_UNSIGNED_INTEGER': '>u',
     'VAX_INTEGER': '<i',
     'VAX_UNSIGNED_INTEGER': '<u',
-}
+    }
 
     label=pvl.load(label_path)
     dtype=[]
@@ -126,44 +131,47 @@ def read_science_np(label_path,data_path):
     out = np.reshape(a, [columns, rows])
     return out
 
-spec = importlib.util.spec_from_file_location('prog','/disk/kea/SDS/code/xtra/MISC/prog.py')
-prog = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(prog)
-spec = importlib.util.spec_from_file_location('pds3lbl','/disk/kea/SDS/code/xtra/SHARAD/CMP/pds3lbl.py')
-pds3 = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(pds3)
 
-# get a list of all files in sharad data folder
-file_list=[]
-raw='/disk/kea/SDS/orig/supl/SHARAD/raw/'
-for path, subdirs, files in os.walk(raw):
-    for name in files:
-        file_list.append(os.path.join(path, name))
 
-# identify data records and corresponding label files
-records=[]
-lbls=[]
-for f in file_list:
-    if '_a_a.dat' in f:
-        #if '1748102' in f or '1855601' in f:
-        records.append(f)
-        #print(f)
-        lbls.append(f.replace('_a_a.dat','_a.lbl'))
-#np.savetxt('lookup.txt',np.array(records),fmt='%s')
-#quit()
-# path to science auxillary label file
-lbl_file=raw+'/mrosh_0001/label/auxiliary.fmt'
+def main()
+    # get a list of all files in sharad data folder
+    # GNG TODO: this outputt path is no longer there.
+    file_list=[]
+    # identify data records and corresponding label files
+    raw='/disk/kea/SDS/orig/supl/SHARAD/raw/'
+    records=[]
+    lbls=[]
+    for path, subdirs, files in os.walk(raw):
+        for name in files:
+            f = os.path.join(path, name)
+            if f.endswith('_a_a.dat'):
+                #if '1748102' in f or '1855601' in f:
+                #print(f)
+                records.append(f)
+                lbls.append(f.replace('_a_a.dat','_a.lbl'))
 
-p=prog.Prog(int(len(records)))
-print (len(records))
-for i in range(len(records)):
-    p.print_Prog(int(i))
-    rec=pds3.read_science(lbl_file,records[i],science=False)
-    rec2=read_science_np(lbl_file,records[i])[0]
-    et = rec['EPHEMERIS_TIME']#np.zeros(len(rec))
-    print(rec['SCET_BLOCK_WHOLE'])
-    #for j in range(len(rec)):
-    #    et[j]=np.double(rec[j][2])#+np.double(rec[j][1])/(2.0**16)
-    #    print (et[j])
-    quit()
-    #np.save('/disk/kea/SDS/code/xtra/SHARAD/XOVER/mc11_'+str(i).zfill(5),et)
+
+    #np.savetxt('lookup.txt',np.array(records),fmt='%s')
+    #quit()
+    # path to science auxillary label file
+    lbl_file=os.path.join(raw,'mrosh_0001/label/auxiliary.fmt')
+
+    #p=prog.Prog(int(len(records)))
+    print("Found {:d} record files in {:s}".format(len(records), raw))
+    for i, record in enumerate(records):
+        #p.print_Prog(int(i))
+        rec=pds3.read_science(lbl_file,record,science=False)
+        rec2=read_science_np(lbl_file,record)[0]
+        et = rec['EPHEMERIS_TIME']#np.zeros(len(rec))
+        print(rec['SCET_BLOCK_WHOLE'])
+        #for j in range(len(rec)):
+        #    et[j]=np.double(rec[j][2])#+np.double(rec[j][1])/(2.0**16)
+        #    print (et[j])
+        quit()
+        #np.save('/disk/kea/SDS/code/xtra/SHARAD/XOVER/mc11_'+str(i).zfill(5),et)
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
