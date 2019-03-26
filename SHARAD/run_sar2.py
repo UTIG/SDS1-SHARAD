@@ -91,7 +91,10 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
       Er        : relative dielectric permittivity of the subsurface
                   - only required for matched filter SAR processing and tests
                     show results are not strongly affected
-      saving    : Flag to save the SAR output. True=save, False=don't save
+      saving    : Flag describing output save format
+                  hdf5 - save in HDF5 format
+                  npy  - save in numpy format
+                  none - don't save output data
       debug     : Enter debug mode - show more info
 
     Output:
@@ -120,7 +123,8 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
 
         # create cmp path
         path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-        path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+        path_file = os.path.relpath(path, inputroot)
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
         cmp_path = os.path.join(path_root, path_file, 'ion', data_file.replace('_a.dat','_s.h5'))
@@ -134,14 +138,9 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         real = np.array(pd.read_hdf(cmp_path, 'real'))	
         imag = np.array(pd.read_hdf(cmp_path, 'imag'))
         cmp_track = real + 1j * imag
-        if idx_start is not None:
-            idx_start = max(0,idx_start)
-        else:
-            idx_start = 0
-        if idx_end is not None:
-            idx_end = min(len(cmp_track),idx_end)
-        else:
-            idx_end = len(cmp_track)
+
+        idx_start = 0            if idx_start is None else max(0, idx_start)
+        idx_end = len(cmp_track) if idx_end   is None else min(len(cmp_track), idx_end)
         cmp_track = cmp_track[idx_start:idx_end]
 
         logging.debug("{:s}: Processing track from start={:d} end={:d} (length={:d})".format(
@@ -171,12 +170,8 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         scrad = data['RADIUS_INTERPOLATE'].values
         if focuser == 'Delay Doppler':
             tpgpy = data['TOPOGRAPHY'].values
-            vt = data['TANGENTIAL_VELOCITY_INTERPOLATE'].values
-            vr = data['RADIAL_VELOCITY_INTERPOLATE'].values
-            v = np.zeros(len(vt), dtype=float)
-            for j in range(len(vt)):
-                #v[j] = np.sqrt(vt[j]**2 + vr[j]**2)
-                v[j] = np.hypot( vt[j], vr[j] )
+            v = np.hypot(data['TANGENTIAL_VELOCITY_INTERPOLATE'].values, 
+                         data['RADIAL_VELOCITY_INTERPOLATE'].values)
         
         # correct the rx window opening times for along-track changes in spacecraft
         # radius
@@ -202,20 +197,7 @@ def sar_processor(taskinfo, posting, aperture, bandwidth, focuser='Delay Doppler
         
         # save the result
         if saving and outputfile is not None:
-            #save_root = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
-            #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-            #data_file = os.path.basename(path_file)
-            #path_file = os.path.dirname(path_file)
-            #new_path = save_root + path_file
-            #new_path = new_path + str(posting) + 'm/'
-            #new_path = new_path + str(aperture) + 's/'
-            #new_path = new_path + str(bandwidth) + 'Hz/'
-            #if focuser == 'Matched Filter':
-            #    new_path = new_path + str(Er) + 'Er/'
             new_path = os.path.dirname(outputfile)
-
-            #outputfile = os.path.join(new_path, data_file.replace(".dat", ".h5"))
-
             logging.debug("{:s}: Saving to file: {:s}".format(taskname, outputfile))
 
             if not os.path.exists(new_path):
@@ -275,7 +257,7 @@ def main():
     # Set number of cores
     nb_cores = args.jobs
     # Set output base directory
-    outdir = args.output
+    outputroot = args.output
 
     # set SAR processing variables
     posting = 115
@@ -294,9 +276,7 @@ def main():
     process_list=[]
     logging.info("Building task list from {:s}".format(args.tracklist))
 
-    # Just run the first one
-    #lookup = lookup[0:1]
-
+    inputroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
     for i, path in enumerate(lookup):
     #for orbit in keys:
     #    gob = int(orbit.replace('/orbit', ''))
@@ -306,11 +286,11 @@ def main():
         logging.debug("[{:03d} of {:03d}] Building task for {:s}".format(i+1, len(lookup), path))
     
         # check if file has already been processed
-        path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        path_file = os.path.relpath(path, inputroot)
         data_file = os.path.basename(path_file)
         orbit_name = data_file[2:7]
         path_file = os.path.dirname(path_file)
-        new_path = os.path.join(outdir, path_file, 
+        new_path = os.path.join(outputroot, path_file, 
             str(posting) + 'm', 
             str(aperture) + 's',
             str(bandwidth) + 'Hz')
@@ -380,17 +360,13 @@ def main():
     params_pos = (posting,aperture,bandwidth,focuser,recalc,Er)
     params_named = {'saving':args.ofmt,'debug':args.verbose}
     if nb_cores <= 1:            
-        run_sp(          params_pos, params_named, process_list)
+        for t in process_list:
+            params2 = (t,) + params_pos
+            sar_processor( *params2, **params_named )
     else:
         run_mp(nb_cores, params_pos, params_named, process_list)
     logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ) )
 
-
-
-def run_sp(params_pos, params_named, process_list):
-    for t in process_list:
-        params2 = (t,) + params_pos
-        sar_processor( *params2, **params_named )
 
 def run_mp(nb_cores, params_pos, params_named, process_list):
     pool = multiprocessing.Pool(nb_cores)
