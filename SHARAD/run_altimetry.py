@@ -7,12 +7,27 @@ __history__ = {
          'author': 'Gregor Steinbruegge, UTIG',
          'info': 'First release.'}}
 
+import sys
+import os
+import importlib.util
+import multiprocessing
+import time
+import logging
+
+import numpy as np
+import matplotlib.pyplot as plt
+import spiceypy as spice
+import pandas as pd
+
+sys.path.append('../xlib')
+#import misc.prog as prog
+import misc.hdf as hdf
+
+import altimetry.beta5 as b5
+
+
 
 def alt_processor(path, idx_start=None, idx_end=None, b_save=False):
-
-    import altimetry.beta5 as b5
-    import numpy as np
-    import os
 
     try:
         # create cmp path
@@ -42,20 +57,6 @@ def alt_processor(path, idx_start=None, idx_end=None, b_save=False):
             return 0
     except Exception as e:
         print(e)
-
-import sys
-import os
-import numpy as np
-import importlib.util
-import pandas as pd
-import multiprocessing
-import time
-import logging
-sys.path.append('../xlib')
-#import misc.prog as prog
-import misc.hdf as hdf
-import matplotlib.pyplot as plt
-import spiceypy as spice
 
 # Set number of cores
 nb_cores = 8
