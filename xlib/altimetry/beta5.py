@@ -7,15 +7,19 @@ __history__ = {
          'author': 'Gregor Steinbruegge, UTIG',
          'info': 'Initial Release.'}}
 
+import time
+from math import tan, pi, erf, sqrt
+
 import numpy as np
 from scipy.constants import c
 from scipy.ndimage.interpolation import shift
 import spiceypy as spice
 import pandas as pd
-from misc import coord as crd
 from scipy.optimize import least_squares
-from math import tan, pi, erf, sqrt
+
+from misc import coord as crd
 import cmp.pds3lbl as pds3
+
 
 def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
                     idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
@@ -38,25 +42,25 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     idx_start (optional): integer
         Start index for processing track. Default is 0.
     idx_end (optional): integer
-        End index for processing track. Default is None.
+        End index for processing track. Default is None. [TODO: what does "None" mean?]
     use_spice (optional): boolean
         Specifies is spacecraft position is taken from the EDR
         data or if it is re-computed using a spice kernel.
-        IMPORTANT NOTE: If spice is set to True then a valid
+        IMPORTANT NOTE: If use_spice is set to True then, a valid
                         kernel must be furnished!
     ft_avg(optional): integer
-        Window for fast time averaging. Set to None to turn off.
+        Window for fast time averaging [TODO: units]. Set to None to turn off.
         Default is 10.
     max_slope (optional): double
-        Maximum slope to be considered in coherent averaging.
+        Maximum slope, in degrees, to be considered in coherent averaging.
         Default is 25 degrees.
     noise_scale (optional): double
         Scaling factor for the rms noise used within the threshold
         detection. Default is set to 20.
     fix_pri (optional): integer
-        Pulse repetition interval code. If None it will be taken from
+        Pulse repetition interval code. If None, it will be taken from
         the input data, otherwise it can be set to a fixed code.
-        Fixing it avoids reading the bitcolumns in the input making
+        Fixing it avoids reading the bitcolumns in the input, making
         the reading faster.
     fine (optional): boolean
         Apply fine detection with beta-5 model fit. Default is True.
@@ -75,21 +79,23 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     Output if generated as data frame.
     """
 
+    t0 = time.time()
     #============================
     # Read and prepare input data
     #============================
 
     # Read input data
-    if fix_pri is None:
-        dbc = True
-    else:
-        dbc = False
+    dbc = fix_pri is None
     data = pds3.read_science(science_path, label_science, science=True, bc=dbc)
     aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'),
                             label_aux, science=False, bc=False)
     re = pd.read_hdf(cmp_path, key='real').values[idx_start:idx_end]
     im = pd.read_hdf(cmp_path, key='imag').values[idx_start:idx_end]
     cmp_track = re+1j*im
+
+    t1 = time.time()
+    print("Read input elapsed time: {:0.2f} sec".format(t1-t0))
+    t0 = t1
 
     # Get Range window start
     range_window_start = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
@@ -114,6 +120,10 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         lon = aux['SUB_SC_EAST_LONGITUDE'].values[idx_start:idx_end]
         lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values[idx_start:idx_end]
 
+    t1 = time.time()
+    print("Spice Geometry calculations: {:0.2f} sec".format(t1-t0))
+    t0 = t1
+
     # Calculate offsets for radargram
     sc_cor = np.array(2000*sc/c/0.0375E-6).astype(int)
     phase = -sc_cor+range_window_start
@@ -126,6 +136,9 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         pri_code = np.full_like(sc, fix_pri)
 
+    # TODO GNG: Alternative coding suggestion using list comprehensions
+    # pri_table = { 1 : 1428E-6, 2: 1429E-6, 3: 1290E-6, 4: 2856E-6, 5: 2984E-6, 6: 2580E-6 }
+    # pri = [ pri_table.get( pri_code, float('nan') ) for x in pri_code ]
     pri = np.zeros(len(pri_code))
     pri[np.where(pri_code == 1)] = 1428E-6
     pri[np.where(pri_code == 2)] = 1429E-6
@@ -134,12 +147,23 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     pri[np.where(pri_code == 5)] = 2984E-6
     pri[np.where(pri_code == 6)] = 2580E-6
 
+    t1 = time.time()
+    print("Calc offsets for radargram and get shot frequency: {:0.2f} sec".format(t1-t0))
+    t0 = t1
+
+
     # Compute SAR apertures for coherent and incoherent stacking
     sc_alt = aux['SPACECRAFT_ALTITUDE'].values*1000
     vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'].values*1000
     fresnel = np.sqrt(sc_alt*c/10E6+(c/(20E6))**2)
     sar_window = int(np.mean(2*fresnel/vel_t/pri)/2)
     coh_window = int(np.mean((c/10E6/tan(max_slope*pi/180)/vel_t/pri)))
+
+    t1 = time.time()
+    print("Compute SAR apertures: {:0.2f} sec".format(t1-t0))
+    t0 = t1
+
+
 
     #========================
     # Actual pulse processing
@@ -151,10 +175,17 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         for i in range(len(cmp_track)):
             rmean = running_mean(abs(cmp_track[i]),10)
             wvfrm[i] = rmean-np.mean(rmean)
+            #wvfrm[i] = running_mean(abs(cmp_track[i]),10)
+            #wvfrm[i] -= np.mean(wvfrm[i])
             wvfrm[i,:10] = wvfrm[i,20:30]
             wvfrm[i,-10:] = wvfrm[i,-30:-20] 
     else:
         wvfrm = cmp_track
+
+    t1 = time.time()
+    print("Waveform smoothing: {:0.2f} sec".format(t1-t0))
+    t0 = t1
+
 
     # Construct radargram
     radargram=np.zeros((len(cmp_track),3600),dtype=np.complex)
@@ -165,31 +196,60 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # distance of the first pulse-limited footprint and according to max
     # slope specification.
     avg_c = np.empty((len(data[idx_start:idx_end]), 3600), dtype=np.complex)
+    #avg_c = []
     for i in range(3600):
         avg_c[:, i] = running_mean(radargram[:, i], coh_window)
+        #avg_c.append(running_mean(radargram[:, i], coh_window))
 
     avg = np.empty((len(data[idx_start:idx_end]), 3600))
+    #avg = []
     for i in range(3600):
         avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))
+        #avg_c = running_mean(radargram[:, i], coh_window)
+        #avg[:, i] = abs(running_mean(abs(avg_c), sar_window))
+        #avg.append( abs(running_mean(abs(avg_c[i]), sar_window)) )
+
+    t1 = time.time()
+    print("Construct radargram and slow time averaging: {:0.2f} sec".format(t1-t0))
+    t0 = t1
+
 
     # Coarse detection
+    # GNG TODO: Does this want to be numpy or would a list work better?
     coarse = np.zeros(len(avg), dtype=int)
+    # GNG TODO: With the way this is used, a list of ndarrays still seems better.
+    # TODO: along-axis?
     deriv = np.zeros((len(avg), 3599))
 
     for i in range(len(avg)):
         deriv[i] = abs(np.diff(avg[i]))
 
+
+    # TODO: does this yield to parallel prefix sum or vectorizing?
+    print("deriv shape: {!r}".format(deriv.shape))
     noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
-    for i in range(0, len(deriv)):
+    for i in range(len(deriv)):
         found = False
-        for lvl in np.arange(1, 0, -0.1):
-            for j in range(int(phase[i]-tx0)+20,
-                           min(int(phase[i]-tx0)+1020, len(deriv[i]))):
-                if deriv[i, j] > noise[i]*lvl:
+        j0 = int(phase[i]-tx0)+20
+        j1 = min(int(phase[i]-tx0)+1020, len(deriv[i]))
+        # Round up to the next highest level
+        #lvlstart = np.ceil(np.max(deriv[i]) / noise[i] * 10.0) / 10.0
+        #lvlstart = min(max(lvlstart, 0.1 ), 1.0)
+        lvlstart = 1.0
+
+        for lvl in np.arange(lvlstart, 0, -0.1):
+            noise_threshold = noise[i]*lvl
+            for j in range(j0, j1):
+                if deriv[i, j] > noise_threshold:
                     coarse[i] = j
                     found = True
                     break
             if found == True: break
+
+
+    t1 = time.time()
+    print("Coarse detection: {:0.2f} sec".format(t1-t0))
+    t0 = t1
 
     # Perform least-squares fit of waveform according to beta-5 re-tracking
     # model
@@ -209,6 +269,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         delta = coarse
 
+
     # Time-of-Flight (ToF)
     tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6
     # One-way range in km
@@ -217,11 +278,18 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Elevation from Mars CoM
     r = sc-d
 
+
+    # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
+    # Seems like it just wants to be a python list.
+    # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
     spots = np.empty((len(r), 4))
     columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius']
     for i in range(len(r)):
         spots[i, :] = [ets[i], lat[i], lon[i], r[i]]
     df = pd.DataFrame(spots, columns=columns)
+    t1 = time.time()
+    print("LSQ, Frame Conversion, DataFrame building: {:0.2f} sec".format(t1-t0))
+    t0 = t1
 
     return df
 
