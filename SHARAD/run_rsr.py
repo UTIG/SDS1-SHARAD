@@ -105,7 +105,7 @@ def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
 
 
         if typ is 'cmp':
-            archive_path = os.path.join(senv.out['srf_path'], orbit_info['path'], typ)
+            archive_path = os.path.join(senv.out['srf_path'], orbit_info['relpath'], typ)
         else:
             assert(False)
         if not os.path.exists(archive_path):

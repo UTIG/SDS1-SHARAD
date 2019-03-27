@@ -106,15 +106,19 @@ def make_orbit_info(f):
     orbit_path = os.path.join(* f.split('/')[-5:-1])
 
     return orbit, {
-        'name': orbit_name1, # full basic orbit name (excluding .lbl; this is orbit_full)
-        'file': f,           # full filename
-        'path': orbit_path,  # relative path to the file
+        # full basic orbit name (excluding .lbl; this is orbit_full)
+        'name': orbit_name1,
+        # full filename and path (previously 'file')
+        'fullpath': f,
+        # relative path to the directory containing 
+        # the data files (previously 'path')
+        'relpath': orbit_path, 
     }
 
 # TODO GNG: Improve globs to assert that there is only one file matching the pattern
 
-
 class SHARADEnv:
+    """ Class for interacting with data files in the SHARAD dataset """
     def __init__(self, data_path='/disk/kea/SDS/targ/xtra/SHARAD', 
                      orig_path='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'):
         """Get various parameters defining the dataset
@@ -124,31 +128,27 @@ class SHARADEnv:
         self.data_path = data_path
         self.orig_path = orig_path
 
-        self.out={}
-        # GNG TODO: make this use SDS environment variable
-        self.out['data_product'] = os.listdir(self.data_path)
-        for sname in self.out['data_product']:
-            self.out[sname + '_path'] = os.path.join(self.data_path, sname)
-        self.out['orig_product'] = os.listdir(self.orig_path)
-        for sname in self.out['orig_product']:
-            self.out[sname + '_path'] = os.path.join(self.orig_path, sname)
-        # TODO: turn this into a dict, and make a search function called get_orbit?
-        # Turn this into a normal iteration and generate lists
-
         self.index_files()
-
-
-        #out['dataset'] = os.path.basename(out['data_path'])
-        #logging.debug("dataset: " + out['dataset'])
-        # This isn't ever used.
-        #self.mrosh = [i.split('/')[0] for i in out['orbit_path']]
 
 
     def index_files(self):
         """ Index files under the specified root directories """
-        logging.debug("Indexing files in {:s}".format( self.edr_path() ) )
+        logging.debug("Indexing files in {:s}".format( self.get_edr_path() ) )
 
-        globpat = os.path.join(self.edr_path(), '*/data/*/*/*.lbl')
+        self.out={}
+        # GNG TODO: make this use SDS environment variable
+        
+        #self.out['data_product'] = os.listdir(self.data_path)
+        for sname in os.listdir(self.data_path):
+            self.out[sname + '_path'] = os.path.join(self.data_path, sname)
+
+        for sname in os.listdir(self.orig_path):
+            self.out[sname + '_path'] = os.path.join(self.orig_path, sname)
+        # TODO: turn this into a dict, and make a search function called get_orbit?
+        # Turn this into a normal iteration and generate lists
+
+
+        globpat = os.path.join(self.get_edr_path(), '*/data/*/*/*.lbl')
         label_files =  glob.glob(globpat)
 
         logging.debug("Found {:d} label files".format(len(label_files)))
@@ -171,8 +171,13 @@ class SHARADEnv:
 
             self.orbitinfo[orbit].append(orbitinfo)
 
+        #out['dataset'] = os.path.basename(out['data_path'])
+        #logging.debug("dataset: " + out['dataset'])
+        # This isn't ever used.
+        #self.mrosh = [i.split('/')[0] for i in out['orbit_path']]
 
-    def edr_path(self):
+
+    def get_edr_path(self):
         return os.path.join( self.orig_path, 'EDR' )
 
     # TODO GNG: Propose making a member of SDSEnv
@@ -184,15 +189,24 @@ class SHARADEnv:
         If the short orbit name, return a list of all orbits matching that orbit
 
         """
-        return self.get_orbit_info(orbit)[0].get('name', None)
+        return self.get_orbit_info(orbit, True).get('name', None)
 
 
-    def get_orbit_info(self, orbit):
-        # Check if this is a short orbit name or a full orbit name
+    def get_orbit_info(self, orbit, b_single=False):
+        """ 
+        Check if this is a short orbit name or a full orbit name
+        If b_single is True, then return a single item, and throw a
+        warning if there is more than one result.
+        If b_single is False (default), then returns a list of all items
+        matching the orbit search criterion
+        """
+
         if '_' in orbit:
+            # This is a full  name
             orbit_fullname = orbit
             orbit = orbit_fullname.split('_')[1]
         else:
+            # This is a short name
             orbit_fullname = ''
 
         try:
@@ -202,8 +216,23 @@ class SHARADEnv:
                 for x in self.orbitinfo[orbit]:
                     if x['name'] == orbit_fullname:
                         list_ret.append(x)
-                return list_ret
+                if b_single:
+                    if len(list_ret) > 1:
+                        logging.warning("SHARADEnv found {:d} " 
+                                        "files for orbit {:s}".format(
+                                        len(list_ret), orbit))
+                    return list_ret[0]
+                else:
+                    return list_ret
             else:
+                if b_single:
+                    if len(self.orbitinfo[orbit]) > 1:
+                        logging.warning("SHARADEnv found {:d} " 
+                                        "files for orbit {:s}".format(
+                                        len(self.orbitinfo[orbit]), orbit))
+                    return self.orbitinfo[orbit][0]
+                else:
+                    return self.orbitinfo[orbit]
                 return self.orbitinfo[orbit]
         except KeyError as e:
             return [{}]
@@ -227,16 +256,11 @@ class SHARADEnv:
         global aux_dtype
 
         #logging.debug("getting info for orbit {:s}".format(orbit))
-        list_orbit_info = self.get_orbit_info(orbit)
+        orbit_info = self.get_orbit_info(orbit, True)
 
-        nitems = len( list_orbit_info )
-        if nitems > 1:
-           logging.warning("Orbit {:s} has {:d} files".format(orbit, nitems))
-        orbit_info = list_orbit_info[0]
-
-        if 'path' not in orbit_info: # orbit not found
+        if 'relpath' not in orbit_info: # orbit not found
             return None
-        fil = os.path.join(self.edr_path(), orbit_info['path'], orbit_info['name'] + '_a.dat')
+        fil = os.path.join(self.get_edr_path(), orbit_info['relpath'], orbit_info['name'] + '_a.dat')
         #logging.debug("aux(): opening {:s}".format(fil))
         out = np.fromfile(fil, dtype=aux_dtype, count=count)
         return out
@@ -246,19 +270,14 @@ class SHARADEnv:
         """Output data processed and archived by the altimetry processor
         """
 
-        list_orbit_info = self.get_orbit_info(orbit)
+        orbit_info = self.get_orbit_info(orbit, True)
 
-        nitems = len(list_orbit_info)
-        if nitems > 1:
-            logging.warning("Orbit {:s} has {:d} files".format(orbit, nitems))
-        orbit_info = list_orbit_info[0]
-
-        if 'path' not in orbit_info: # orbit not found
+        if 'relpath' not in orbit_info: # orbit not found
             return None
 
         #orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
         #k = p['orbit_full'].index(orbit_full)
-        path1 = os.path.join(self.out['alt_path'], orbit_info['path'], typ, '*')
+        path1 = os.path.join(self.out['alt_path'], orbit_info['relpath'], typ, '*')
         files = glob.glob(path1)
         if not files:
             return None # no file found
@@ -271,9 +290,9 @@ class SHARADEnv:
         """Output total electron content data
         Total Electron Content
         """
-        orbit_full = orbit if orbit.find('_') is 1 else self.orbit_to_full(orbit)
-        k = senv.orbit_full.index(orbit_full)
-        fil = glob.glob('/'.join(self.out['cmp_path'], self.orbit_path[k], typ, '*TECU.txt'))[0]
+        orbit_info = self.get_orbit_info(orbit, True)
+
+        fil = glob.glob('/'.join(self.out['cmp_path'], self.orbit_info['relpath'], typ, '*TECU.txt'))[0]
         #foo = check(fil)
         out = np.loadtxt(fil)
         return out
@@ -282,11 +301,10 @@ class SHARADEnv:
     def cmp_data(self,orbit, typ='ion'):
         """Output data processed and archived by the CMP processor
         """
-        list_orbit_info = self.get_orbit_info(orbit)
-        orbit_info = list_orbit_info[0]
+        orbit_info = self.get_orbit_info(orbit, True)
         
-        globpat = os.path.join( self.out['cmp_path'],  orbit_info['path'], typ, '*.h5' )
-        fil = glob.glob(globpat)[0]
+        globpat = os.path.join( self.out['cmp_path'],  orbit_info['relpath'], typ, '*.h5' )
+        fil = sorted(glob.glob(globpat))[0]
         re = pd.read_hdf(fil, key='real').values
         im = pd.read_hdf(fil, key='imag').values
         return re + 1j*im
@@ -295,6 +313,7 @@ class SHARADEnv:
     def srf_data(self,orbit, typ='cmp'):
         """Output data processed and archived by the altimetry processor (surface)
         """
+        
         orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
         k = senv.orbit_full.index(orbit_full)
         globpat = os.path.join(self.srf_path, self.orbit_path[k], typ, '*')
@@ -313,19 +332,15 @@ class SHARADEnv:
             logging.debug("No data found for orbit '{:s}'".format(orbit))
             return None
 
-        a = auxdata['GEOMETRY_EPOCH']
-
         # a=['2006-12-06T02:22:01.945' '2006-12-06T02:22:01.951'
-        #logging.debug("a={!s}".format(a))
-        #logging.debug("a[0]={!s}".format(a[0]))
-
-        m_tim = p_timestamp.match(a[0].decode())
-        if m_tim:
-            yr, mnth, dy, hr, mnt, scnd = tuple([ int(s) for s in m_tim.group(1, 2, 3, 4, 5, 6) ])
-            MY, Ls = solar_longitude.Ls(yr, mnth, dy, hr, mnt, scnd)
-        else:
-            logging.error("Can't parse timestamp for orbit {:s}: '{:s}'".format(orbit, a[0]))
-            MY = None
+        try:
+            ts = auxdata['GEOMETRY_EPOCH'][0].decode()
+            jsec = solar_longitude.ISO8601_to_J2000(ts)
+            MY, Ls = solar_longitude.Ls_J2000(jsec)
+        except ValueError as e:
+            logging.error("Can't parse timestamp for orbit {:s}: '{:s}'".format(orbit, ts))
+            MY, Ls = None, None
+        
         return MY
 
 
