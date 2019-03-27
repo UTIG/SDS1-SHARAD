@@ -100,13 +100,14 @@ for path in lookup:
 
 print('start processing',len(process_list),'tracks')
 
-pool = multiprocessing.Pool(nb_cores)
-results = [pool.apply_async(alt_processor, t) for t in process_list]
 
-#p = prog.Prog(len(process_list))
-i=0
-for result in results:
-    #p.print_Prog(i)
-    flag = result.get()
-    i+=1
-print('done')
+if nb_cores <= 1:
+    for t in process_list:
+        result = alt_processor(*t)
+else:
+    pool = multiprocessing.Pool(nb_cores)
+    results = [pool.apply_async(alt_processor, t) for t in process_list]
+    for i,result in enumerate(results):
+        flag = result.get()
+        print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
+    print('done')
