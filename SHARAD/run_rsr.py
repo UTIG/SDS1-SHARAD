@@ -16,14 +16,14 @@ import sys
 import numpy as np
 import pandas as pd
 
-import get
+import SHARADEnv
 
 sys.path.append('../xlib/')
 import rsr
 import subradar as sr
 
 
-def surface_amp(orbit, typ='cmp', gain=0, sav=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
 
@@ -52,12 +52,11 @@ def surface_amp(orbit, typ='cmp', gain=0, sav=True, **kwargs):
     # Load data
     #----------
 
-    p = get.params()
-    orbit_full = orbit if orbit.find('_') is 1 else get.orbit_to_full(orbit, p)
+    orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
-    alt = get.alt(orbit_full, p=p)
-    rdg = get.cmp(orbit_full, p=p)
-    aux = get.aux(orbit_full, p=p)
+    alt = senv.alt_data(orbit_full)
+    rdg = senv.cmp_data(orbit_full)
+    aux = senv.aux_data(orbit_full)
 
     utc = aux['EPHEMERIS_TIME']
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
@@ -100,10 +99,13 @@ def surface_amp(orbit, typ='cmp', gain=0, sav=True, **kwargs):
     #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
 
     if sav is True:
-        k = p['orbit_full'].index(orbit_full)
+        #k = p['orbit_full'].index(orbit_full)
+        list_orbit_info = senv.get_orbit_info(orbit_full)
+        orbit_info = list_orbit_info[0]
+
 
         if typ is 'cmp':
-            archive_path = os.path.join(p['srf_path'], p['orbit_path'][k], typ)
+            archive_path = os.path.join(senv.out['srf_path'], orbit_info['path'], typ)
         else:
             assert(False)
         if not os.path.exists(archive_path):
@@ -173,10 +175,10 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     # Load data
     #----------
 
-    p = get.params()
-    orbit_full = orbit if orbit.find('_') is 1 else get.orbit_to_full(orbit,p=p)
+    senv = SHARADEnv.SHARADEnv()
+    orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
-    aux = get.aux(orbit_full, p=p)
+    aux = senv.aux_data(orbit_full)
     utc = aux['EPHEMERIS_TIME']
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
     lon = aux['SUB_SC_EAST_LONGITUDE']
@@ -187,7 +189,7 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     # Get surface amplitude
     #----------------------
 
-    surf = surface_amp(orbit, **kwargs)
+    surf = surface_amp(senv, orbit, **kwargs)
     amp = surf['amp'].values
 
     #-------------------------------
