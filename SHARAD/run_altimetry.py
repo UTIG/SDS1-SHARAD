@@ -62,7 +62,7 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
                 orbit_data = {obn: df}
                 h5.save_dict('sharad', orbit_data)
                 h5.close()
-            elif save_format == 'csvgz':
+            elif save_format == 'csv':
                 #fname1 = fname.replace('_a.dat', '.csv.gz')
                 #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)
                 logging.info("Writing to " + outputfile)
@@ -126,7 +126,7 @@ with open(tracklist, 'r') as flist:
         path_file = os.path.relpath(path, path_edr)
         data_file = os.path.basename(path)
         #outfile = os.path.join(path_out, path_file, 'beta5', data_file.replace('.dat', '.npy'))
-        outfile = os.path.join(path_out, relpath, 'beta5', data_file.replace('.dat', '.csv.gz'))
+        outfile = os.path.join(path_out, relpath, 'beta5', data_file.replace('.dat', '.csv'))
 
         if not os.path.exists(outfile):
             process_list.append({
@@ -134,7 +134,7 @@ with open(tracklist, 'r') as flist:
                 'outputfile' : outfile, 
                 'idx_start' : None,
                 'idx_end' : None,
-                'save_format' : 'csvgz'})
+                'save_format' : 'hdf5'})
 
 #p.close_Prog()
 #h5file.close()
