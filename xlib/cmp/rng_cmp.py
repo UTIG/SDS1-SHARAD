@@ -16,7 +16,6 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 
-
 def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
     """
     This subroutine creates SHARAD reference chirps used for
@@ -255,4 +254,247 @@ def decompressSciData(data, compression, presum, bps, SDI):
         # TODO: logging, should this be an exception?
         print('Decompression Error: Compression Type {} not understood'.format(compression))
     return
+
+
+
+def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX",
+                  chrp_filt=True, verbose=False, saving='hdf5'):
+    """
+    Processor for individual SHARAD tracks. Intended for multi-core processing
+    Takes individual tracks and returns pulse compressed data.
+
+    Input:
+    -----------
+      infile    : Path to track file to be processed.
+      outdir    : Path to directory to write output data
+      idx_start : Start index for processing.
+      idx_end   : End index for processing.
+      chrp_filt : Apply a filter to the reference chirp
+      verbose   : Gives feedback in the terminal.
+
+    Output:
+    -----------
+      E          : Optimal E value
+      cmp_pulses : Compressed pulses
+
+    """
+
+    try:
+        time_start = time.time()
+        # Get science data structure
+        label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
+        aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+        # Load data
+        science_path = infile.replace('_a.dat', '_s.dat')
+        data = pds3.read_science(science_path, label_path, science=True)
+        aux  = pds3.read_science(infile      , aux_path,   science=False)
+
+        stamp1=time.time() - time_start
+        logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
+
+        # Array of indices to be processed
+        if idx_start is None or idx_end is None:
+            idx_start = 0
+            idx_end = len(data)
+        idx = np.arange(idx_start, idx_end)
+
+        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
+
+        # Chop raw data
+        raw_data = chop_raw_data(data, idx, idx_start)
+
+        compression = 'static' if (data['COMPRESSION_SELECTION'][idx_start] == 0) else 'dynamic'
+
+        # Tracking presumming table. Converts TPS field into presumming count
+        tps_table = (1,2,3,4,8,16,32,64)
+        tps = data['TRACKING_PRE_SUMMING'][idx_start]
+        assert(tps >= 0 and tps <= 7)
+        presum = tps_table[tps]
+        SDI = data['SDI_BIT_FIELD'][idx_start]
+        bps = 8
+
+        # Decompress the data
+        decompressed = decompressSciData(raw_data, compression, presum, bps, SDI)
+        # TODO: E_track can just be a list of tuples
+        E_track = np.empty((idx_end-idx_start, 2))
+        # Get groundtrack distance and define 30 km chunks
+        tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
+        tlp0 = tlp[0]
+        chunks = []
+        i0 = 0
+        for i in range(len(tlp)):
+            if tlp[i] > tlp0+30:
+                chunks.append([i0,i])
+                i0 = i
+                tlp0 = tlp[i]
+
+        if len(chunks) == 0:
+            chunks.append([0, idx_end-idx_start])
+
+        if (tlp[-1] - tlp[i0]) >= 15:
+            chunks.append([i0, idx_end-idx_start])
+        else:
+            chunks[-1][1] = idx_end - idx_start
+
+        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks) ))
+        # Compress the data chunkwise and reconstruct
+
+
+        list_cmp_track=[]
+        for i, chunk in enumerate(chunks):
+            start,end = chunks[i]
+
+            #check if ionospheric correction is needed
+            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end] < 100)[0]
+            b_iono = len(iono_check) != 0
+            minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
+            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f} '
+                          ' Ionospheric Correction: {!r}'.format(
+                taskname, i, len(chunks), minsza, b_iono) )
+
+            E, sigma, cmp_data = us_rng_cmp(
+                decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
+            list_cmp_track.append(cmp_data)
+            E_track[start:end,0] = E
+            E_track[start:end,1] = sigma
+
+        cmp_track = np.vstack(list_cmp_track)
+        list_cmp_track = None  # free memory
+
+
+        stamp3 = time.time() - time_start - stamp1
+        logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
+
+        if saving and outdir != "":
+            data_file   = os.path.basename(infile)
+            outfilebase = data_file.replace('.dat', '.h5')
+            outfile     = os.path.join(outdir, outfilebase)
+
+            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname, outdir) )
+            if not os.path.exists(outdir):
+                os.makedirs(outdir)
+
+            # restructure of data save
+            real = np.array(np.round(cmp_track.real), dtype=np.int16)
+            imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
+            cmp_track = None # free memory
+            if saving == 'hdf5':
+                pd.DataFrame(real).to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
+                pd.DataFrame(imag).to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
+                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
+            elif saving == 'npy':
+                # Round it just like in an hdf5 and save as side-by-side arrays
+                cmp_track = np.vstack([real, imag])
+
+                outfile = os.path.join(outdir, data_file.replace('.dat','.npy') )
+                np.save(outfile,cmp_track)
+                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
+            elif saving == 'none':
+                pass
+            else:
+                logging.error("{:s}: Unrecognized output format '{:s}'".format(taskname, saving))
+
+            outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
+            np.savetxt(outfile_TECU,E_track)
+            logging.info("{:s}: Wrote {:s}".format(taskname, outfile_TECU))
+
+
+    except Exception as e:
+
+        logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
+        for line in traceback.format_exc().split("\n"):
+            logging.error('{:s}: {:s}'.format(taskname, line) )
+        return 1
+    logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
+    return 0
+
+def chop_raw_data(data, idx, idx_start):
+    raw_data=np.zeros((len(idx),3600),dtype=np.complex)
+    for j in range(3600):
+        k = 'sample' + str(j)
+        raw_data[:,j]=data[k][idx].values
+    return raw_data
+
+
+def main():
+
+    # TODO: improve description
+    parser = argparse.ArgumentParser(description='Run SAR processing')
+    parser.add_argument('-o','--output', default='./rng_cmp_data',
+                        help="Output base directory")
+    parser.add_argument('--ofmt', default='npy', choices=('hdf5','npy','none'),
+                        help="Output file format")
+
+    #parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    parser.add_argument('--tracklist', default=None, #"elysium.txt",
+        help="List of tracks to process")
+    parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
+
+    args = parser.parse_args()
+
+    #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+        format="rng_cmp: [%(levelname)-7s] %(message)s")
+
+
+    # Read lookup table associating gob's with tracks
+    if args.tracklist is None:
+        lookup = (
+            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr03xxx/edr0336603/e_0336603_001_ss19_700_a_a.dat',
+            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm286/edr5272901/e_5272901_001_ss19_700_a_a.dat',
+            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm278/edr5116601/e_5116601_001_ss19_700_a_a.dat',
+            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_a.dat',
+        )
+    else:
+        lookup = np.genfromtxt(args.tracklist, dtype = 'str')
+
+    # Build list of processes
+    logging.info("Building task list for test")
+    process_list=[]
+    path_outroot = args.output
+
+    logging.debug("Base output directory: " + path_outroot)
+    for i,infile in enumerate(lookup):
+        path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        data_file = os.path.basename(path_file)
+        path_file = os.path.dirname(path_file)
+        outdir    = os.path.join(path_outroot,path_file, 'ion')
+
+        logging.debug("Adding " + infile)
+        process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
+
+    if args.maxtracks > 0:
+        process_list = process_list[0:args.maxtracks]
+
+    if args.dryrun:
+        sys.exit(0)
+
+    logging.info("Start processing {:d} tracks".format(len(process_list)))
+
+    start_time = time.time()
+    named_params = {'saving':args.ofmt,'chrp_filt':True,'verbose':args.verbose}
+    # Single processing (for profiling)
+    for t in process_list:
+        test_cmp_processor(*t, **named_params)
+    logging.info("Done in {:0.2f} seconds".format( time.time() - start_time ) )
+
+
+if __name__ == "__main__":
+    # execute and import only if run as a script
+    import argparse
+    import sys
+    import logging
+    import os
+    import time
+    import traceback
+
+    import pandas as pd
+
+    import pds3lbl as pds3
+
+
+    main()
 
