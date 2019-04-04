@@ -137,15 +137,15 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         pri_code = np.full_like(sc, fix_pri)
 
     # TODO GNG: Alternative coding suggestion using list comprehensions
-    # pri_table = { 1 : 1428E-6, 2: 1429E-6, 3: 1290E-6, 4: 2856E-6, 5: 2984E-6, 6: 2580E-6 }
-    # pri = [ pri_table.get( pri_code, float('nan') ) for x in pri_code ]
-    pri = np.zeros(len(pri_code))
-    pri[np.where(pri_code == 1)] = 1428E-6
-    pri[np.where(pri_code == 2)] = 1429E-6
-    pri[np.where(pri_code == 3)] = 1290E-6
-    pri[np.where(pri_code == 4)] = 2856E-6
-    pri[np.where(pri_code == 5)] = 2984E-6
-    pri[np.where(pri_code == 6)] = 2580E-6
+    pri_table = { 1 : 1428E-6, 2: 1429E-6, 3: 1290E-6, 4: 2856E-6, 5: 2984E-6, 6: 2580E-6 }
+    pri = np.array([ pri_table.get( x, float('nan') ) for x in pri_code ] )
+    #pri = np.zeros(len(pri_code))
+    #pri[np.where(pri_code == 1)] = 1428E-6
+    #pri[np.where(pri_code == 2)] = 1429E-6
+    #pri[np.where(pri_code == 3)] = 1290E-6
+    #pri[np.where(pri_code == 4)] = 2856E-6
+    #pri[np.where(pri_code == 5)] = 2984E-6
+    #pri[np.where(pri_code == 6)] = 2580E-6
 
     t1 = time.time()
     print("Calc offsets for radargram and get shot frequency: {:0.2f} sec".format(t1-t0))
@@ -175,7 +175,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         for i in range(len(cmp_track)):
             rmean = running_mean(abs(cmp_track[i]),10)
             wvfrm[i] = rmean-np.mean(rmean)
-            #wvfrm[i] = running_mean(abs(cmp_track[i]),10)
+            #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
             #wvfrm[i] -= np.mean(wvfrm[i])
             wvfrm[i,:10] = wvfrm[i,20:30]
             wvfrm[i,-10:] = wvfrm[i,-30:-20] 
@@ -195,19 +195,19 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Perform averaging in slow time. Pulse is averaged over the 1/4 the
     # distance of the first pulse-limited footprint and according to max
     # slope specification.
-    avg_c = np.empty((len(data[idx_start:idx_end]), 3600), dtype=np.complex)
+    #avg_c = np.empty((len(data[idx_start:idx_end]), 3600), dtype=np.complex)
     #avg_c = []
-    for i in range(3600):
-        avg_c[:, i] = running_mean(radargram[:, i], coh_window)
-        #avg_c.append(running_mean(radargram[:, i], coh_window))
+    #for i in range(3600):
+    #    #avg_c[:, i] = running_mean(radargram[:, i], coh_window)
+    #    avg_c.append(running_mean(radargram[:, i], coh_window))
 
     avg = np.empty((len(data[idx_start:idx_end]), 3600))
     #avg = []
     for i in range(3600):
-        avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))
-        #avg_c = running_mean(radargram[:, i], coh_window)
-        #avg[:, i] = abs(running_mean(abs(avg_c), sar_window))
-        #avg.append( abs(running_mean(abs(avg_c[i]), sar_window)) )
+        #avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))
+        avg_c = running_mean(radargram[:, i], coh_window)
+        avg[:, i] = np.abs(running_mean(np.abs(avg_c), sar_window))
+        #avg.append( abs(running_mean(abs(avg_c), sar_window)) )
 
     t1 = time.time()
     print("Construct radargram and slow time averaging: {:0.2f} sec".format(t1-t0))
@@ -215,36 +215,46 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
 
     # Coarse detection
-    # GNG TODO: Does this want to be numpy or would a list work better?
     coarse = np.zeros(len(avg), dtype=int)
-    # GNG TODO: With the way this is used, a list of ndarrays still seems better.
-    # TODO: along-axis?
     deriv = np.zeros((len(avg), 3599))
 
     for i in range(len(avg)):
-        deriv[i] = abs(np.diff(avg[i]))
+        deriv[i] = np.abs(np.diff(avg[i]))
 
 
     # TODO: does this yield to parallel prefix sum or vectorizing?
-    print("deriv shape: {!r}".format(deriv.shape))
     noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
     for i in range(len(deriv)):
-        found = False
+        #found = False
         j0 = int(phase[i]-tx0)+20
         j1 = min(int(phase[i]-tx0)+1020, len(deriv[i]))
+        # Find the noise level to set the threshold to, and set the starting
+        # lvl to that, to accelerate the search.
         # Round up to the next highest level
-        #lvlstart = np.ceil(np.max(deriv[i]) / noise[i] * 10.0) / 10.0
-        #lvlstart = min(max(lvlstart, 0.1 ), 1.0)
-        lvlstart = 1.0
+        if not np.isnan(noise[i]) and noise[i] > 0:
+            lvlstart = np.ceil(np.max(deriv[i]) / noise[i] * 10.0) / 10.0
+            lvlstart = min(max(lvlstart, 0.1 ), 1.0)
+        else:
+            lvlstart = 1.0
+        #lvlstart = 1.0
+        #print("lvlstart={:f}".format(lvlstart))
 
         for lvl in np.arange(lvlstart, 0, -0.1):
             noise_threshold = noise[i]*lvl
+            """ 
             for j in range(j0, j1):
                 if deriv[i, j] > noise_threshold:
                     coarse[i] = j
                     found = True
                     break
-            if found == True: break
+            if found == True:
+                break
+            """
+            idxes = np.argwhere(deriv[i][j0:j1] > noise_threshold)
+            if len(idxes) > 0:
+                coarse[i] = idxes[0] + j0
+                #found = True
+                break
 
 
     t1 = time.time()
@@ -258,7 +268,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         b3 = 100
         b4 = 2
         b5 = 3E-2
-        for i in range(0, len(avg[idx_start:idx_end])):
+        for i in range(len(avg[idx_start:idx_end])):
             wdw = avg[i, max(coarse[i]-100, 0):min(coarse[i]+100, len(avg[i]))]
             b1 = np.mean(wdw[0:128])
             b2 = max(wdw)-b1
