@@ -32,36 +32,47 @@ def main():
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
         format="run_altimetry: [%(levelname)-7s] %(message)s")
 
+    # TODO: improve description
+    parser = argparse.ArgumentParser(description='Run SHARAD altimetry processing')
+    parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','csv','none'),
+                        help="Output file format")
+
+    parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    parser.add_argument('--tracklist', default="elysium.txt",
+        help="List of tracks to process")
+    parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
+
+
 
     # Set number of cores
-    nb_cores = 1
+    nb_cores = args.jobs
     kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
     spice.furnsh(kernel_path)
 
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
     #keys = h5file.keys()
-    #tracklist = 'lookup.txt',dtype='str')
-    #tracklist = 'EDR_Cyril_SouthPole_Path.txt', dtype = 'str')
-    #tracklist = 'EDR_Cyril_Path.txt', dtype = 'str')
+    #tracklist = 'lookup.txt'
+    #tracklist = 'EDR_Cyril_SouthPole_Path.txt'
+    #tracklist = 'EDR_Cyril_Path.txt'
     tracklist = 'EDR_NorthPole_Path.txt'
 
     # Build list of processes
-    print('build task list')
+    logging.info('build task list')
     process_list=[]
-    #p=prog.Prog(len(keys))
-    #p = prog.Prog(len(lookup))
     path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
     path_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
     #path_out = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
     path_out = './alt/'
 
+    ext = {'hdf5':'.h5','csv':'.csv', 'none':''}
 
     #for orbit in keys:
-    with  open(tracklist, 'r') as flist:
+    with open(tracklist, 'r') as flist:
         for i,path in enumerate(flist):
             path = path.rstrip()
-            #p.print_Prog(i)
             #gob = int(orbit.replace('/orbit', ''))
             #path = lookup[gob]
             #path ='/disk/daedalus/sds/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat'
@@ -70,8 +81,7 @@ def main():
             relpath = os.path.dirname(os.path.relpath(path, path_edr))
             path_file = os.path.relpath(path, path_edr)
             data_file = os.path.basename(path)
-            #outfile = os.path.join(path_out, path_file, 'beta5', data_file.replace('.dat', '.npy'))
-            outfile = os.path.join(path_out, relpath, 'beta5', data_file.replace('.dat', '.csv'))
+            outfile = os.path.join(path_out, relpath, 'beta5', data_file.replace('.dat', ext[args.ofmt]))
 
             if not os.path.exists(outfile):
                 process_list.append({
@@ -79,14 +89,13 @@ def main():
                     'outputfile' : outfile, 
                     'idx_start' : None,
                     'idx_end' : None,
-                    'save_format' : 'hdf5'})
+                    'save_format' : args.ofmt})
 
-    #p.close_Prog()
+    if args.maxtracks > 0:
+        # Limit to first args.maxtracks tracks
+        process_list = process_list[0:args.maxtracks]
 
-    # Limit to first 20 tracks
-    process_list = process_list[0:20]
-
-    print('start processing',len(process_list),'tracks')
+    logging.info("Start processing {:d} tracks".format(len(process_list))
     #sys.exit(1)
 
     if nb_cores <= 1:
