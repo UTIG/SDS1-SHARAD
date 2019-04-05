@@ -13,6 +13,7 @@ import importlib.util
 import multiprocessing
 import time
 import logging
+import argparse
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,13 +26,9 @@ sys.path.append('../xlib')
 import misc.hdf as hdf
 
 import altimetry.beta5 as b5
-import gzip
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
-        format="run_altimetry: [%(levelname)-7s] %(message)s")
-
     # TODO: improve description
     parser = argparse.ArgumentParser(description='Run SHARAD altimetry processing')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/alt',
@@ -45,7 +42,13 @@ def main():
     parser.add_argument('--tracklist', default="EDR_NorthPole_Path.txt",
         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
+    
+    args = parser.parse_args()
 
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+ 
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+        format="run_altimetry: [%(levelname)-7s] %(message)s")
 
 
     # Set number of cores
@@ -77,13 +80,16 @@ def main():
                     'idx_start' : None,
                     'idx_end' : None,
                     'save_format' : args.ofmt})
+                logging.debug("[{:d}] {:s}".format(i+1,str(process_list[-1])))
 
-    if args.maxtracks > 0:
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
         process_list = process_list[0:args.maxtracks]
 
-    logging.info("Start processing {:d} tracks".format(len(process_list))
-    #sys.exit(1)
+    if args.dryrun:
+        sys.exit(1)
+
+    logging.info("Start processing {:d} tracks".format(len(process_list)) )
 
     if nb_cores <= 1:
         for i,t in enumerate(process_list):
@@ -91,7 +97,7 @@ def main():
             print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
     else:
         pool = multiprocessing.Pool(nb_cores)
-        results = [pool.apply_async(alt_processor, None, t) for t in process_list]
+        results = [pool.apply_async(alt_processor, [], t) for t in process_list]
         for i,result in enumerate(results):
             flag = result.get()
             print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
@@ -133,8 +139,8 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
             outfile='north_pole_beta5.h5'
             logging.info("Writing to " + outfile)
             h5 = hdf.hdf(outfile, mode='a')
-            orbit_data = {obn: df}
-            h5.save_dict('sharad', orbit_data)
+            orbitdata = {obn: df}
+            h5.save_dict('sharad', orbitdata)
             h5.close()
         elif save_format == 'csv':
             #fname1 = fname.replace('_a.dat', '.csv.gz')
@@ -148,7 +154,7 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
             pass
         else:
             logging.warning("Unrecognized output format '{:s}'".format(save_format))
-
+        return 0
     except Exception as e:
         taskname="error"
         for line in traceback.format_exc().split("\n"):
