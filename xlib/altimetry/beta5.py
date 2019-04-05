@@ -9,6 +9,7 @@ __history__ = {
 
 import time
 from math import tan, pi, erf, sqrt
+import logging
 
 import numpy as np
 from scipy.constants import c
@@ -94,7 +95,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     cmp_track = re+1j*im
 
     t1 = time.time()
-    print("Read input elapsed time: {:0.2f} sec".format(t1-t0))
+    logging.debug("Read input elapsed time: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
     # Get Range window start
@@ -121,7 +122,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values[idx_start:idx_end]
 
     t1 = time.time()
-    print("Spice Geometry calculations: {:0.2f} sec".format(t1-t0))
+    logging.debug("Spice Geometry calculations: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
     # Calculate offsets for radargram
@@ -148,7 +149,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     #pri[np.where(pri_code == 6)] = 2580E-6
 
     t1 = time.time()
-    print("Calc offsets for radargram and get shot frequency: {:0.2f} sec".format(t1-t0))
+    logging.debug("Calc offsets for radargram and get shot frequency: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
 
@@ -160,7 +161,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     coh_window = int(np.mean((c/10E6/tan(max_slope*pi/180)/vel_t/pri)))
 
     t1 = time.time()
-    print("Compute SAR apertures: {:0.2f} sec".format(t1-t0))
+    logging.debug("Compute SAR apertures: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
 
@@ -183,7 +184,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         wvfrm = cmp_track
 
     t1 = time.time()
-    print("Waveform smoothing: {:0.2f} sec".format(t1-t0))
+    logging.debug("Waveform smoothing: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
 
@@ -210,7 +211,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         #avg.append( abs(running_mean(abs(avg_c), sar_window)) )
 
     t1 = time.time()
-    print("Construct radargram and slow time averaging: {:0.2f} sec".format(t1-t0))
+    logging.debug("Construct radargram and slow time averaging: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
 
@@ -237,7 +238,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         else:
             lvlstart = 1.0
         #lvlstart = 1.0
-        #print("lvlstart={:f}".format(lvlstart))
+        #logging.debug("lvlstart={:f}".format(lvlstart))
 
         for lvl in np.arange(lvlstart, 0, -0.1):
             noise_threshold = noise[i]*lvl
@@ -258,7 +259,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
 
     t1 = time.time()
-    print("Coarse detection: {:0.2f} sec".format(t1-t0))
+    logging.debug("Coarse detection: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
     # Perform least-squares fit of waveform according to beta-5 re-tracking
@@ -298,7 +299,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         spots[i, :] = [ets[i], lat[i], lon[i], r[i]]
     df = pd.DataFrame(spots, columns=columns)
     t1 = time.time()
-    print("LSQ, Frame Conversion, DataFrame building: {:0.2f} sec".format(t1-t0))
+    logging.debug("LSQ, Frame Conversion, DataFrame building: {:0.2f} sec".format(t1-t0))
     t0 = t1
 
     return df
