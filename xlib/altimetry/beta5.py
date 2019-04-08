@@ -76,8 +76,9 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         Longitude
     r: double
         Radius from CoM
- 
-    Output if generated as data frame.
+    avg: double (array)
+        Unfocussed SAR radargram (smoothed in fast time)
+    
     """
 
     t0 = time.time()
@@ -93,6 +94,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     re = pd.read_hdf(cmp_path, key='real').values[idx_start:idx_end]
     im = pd.read_hdf(cmp_path, key='imag').values[idx_start:idx_end]
     cmp_track = re+1j*im
+    tecu = np.genfromtxt(cmp_path.replace('.h5','_TECU.txt'))[idx_start:idx_end,0]
 
     t1 = time.time()
     logging.debug("Read input elapsed time: {:0.2f} sec".format(t1-t0))
@@ -130,6 +132,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     phase = -sc_cor+range_window_start
     tx0 = int(min(phase))
     offset = int(max(phase) - tx0)
+    shift_param = phase-tx0
 
     # Get the shot frequency.
     if fix_pri is None:
@@ -196,25 +199,18 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Perform averaging in slow time. Pulse is averaged over the 1/4 the
     # distance of the first pulse-limited footprint and according to max
     # slope specification.
-    #avg_c = np.empty((len(data[idx_start:idx_end]), 3600), dtype=np.complex)
-    #avg_c = []
-    #for i in range(3600):
-    #    #avg_c[:, i] = running_mean(radargram[:, i], coh_window)
-    #    avg_c.append(running_mean(radargram[:, i], coh_window))
 
-    avg = np.empty((len(data[idx_start:idx_end]), 3600))
-    #avg = []
+    max_window = max(coh_window, sar_window)
+    radargram_ext = np.empty((len(radargram)+2*max_window,3600),dtype=np.complex) 
     for i in range(3600):
-        #avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))
-        avg_c = running_mean(radargram[:, i], coh_window)
-        avg[:, i] = np.abs(running_mean(np.abs(avg_c), sar_window))
-        #avg.append( abs(running_mean(abs(avg_c), sar_window)) )
+        radargram_ext[:,i] = np.pad(radargram[:,i], (max_window, max_window), 'edge')
+    avg_c = np.empty((len(radargram_ext), 3600), dtype=np.complex)
+    for i in range(3600):
+        avg_c[:, i] = running_mean(radargram_ext[:, i], coh_window)
 
-    t1 = time.time()
-    logging.debug("Construct radargram and slow time averaging: {:0.2f} sec".format(t1-t0))
-    t0 = t1
-
-
+    avg = np.empty((len(radargram), 3600))
+    for i in range(3600):
+        avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))[max_window:-max_window]
     # Coarse detection
     coarse = np.zeros(len(avg), dtype=int)
     deriv = np.zeros((len(avg), 3599))
@@ -280,23 +276,24 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         delta = coarse
 
-
+    # Ionospheric delay
+    disp = 1.69E-6/20E6*tecu*1E+16
+    dt_ion = disp/(2*np.pi*20E6)
     # Time-of-Flight (ToF)
-    tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6
+    tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
     # One-way range in km
     d = tx*c/2000
 
     # Elevation from Mars CoM
     r = sc-d
 
-
     # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
     # Seems like it just wants to be a python list.
     # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
-    spots = np.empty((len(r), 4))
-    columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius']
+    spots = np.empty((len(r), 7))
+    columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', 'idx_coarse', 'idx_fine', 'range']
     for i in range(len(r)):
-        spots[i, :] = [ets[i], lat[i], lon[i], r[i]]
+        spots[i, :] = [ets[i], lat[i], lon[i], r[i], (coarse-shift_param)[i], (delta-shift_param)[i], r[i]]
     df = pd.DataFrame(spots, columns=columns)
     t1 = time.time()
     logging.debug("LSQ, Frame Conversion, DataFrame building: {:0.2f} sec".format(t1-t0))

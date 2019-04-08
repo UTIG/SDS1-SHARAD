@@ -101,7 +101,9 @@ def main():
         for i,result in enumerate(results):
             flag = result.get()
             print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
-        print('done')
+    print('done')
+
+
 
 
 
@@ -123,31 +125,38 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
         #cmp_path = path_root_cmp+path_file+'ion/'+data_file.replace('_a.dat','_s.h5')
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+
         science_path = inpath.replace('_a.dat','_s.dat')
 
+        if not os.path.exists(cmp_path): 
+            logging.warning(cmp_path + " does not exist")
+        science_path=inpath.replace('_a.dat','_s.dat')
         if not os.path.exists(cmp_path): 
             logging.warning(cmp_path + " does not exist")
             return 0
 
         logging.info("Reading " + cmp_path)
-        df = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
-                                idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
-                                max_slope=25, noise_scale=20, fix_pri=1, fine=False)
+        result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
+                                    idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
+                                    max_slope=25, noise_scale=20, fix_pri=1, fine=True)
 
-        #new_path = path_root_alt+path_file+'beta5/'
+        outputdir = os.path.dirname(outputfile)
+
         if save_format == 'hdf5':
-            outfile='north_pole_beta5.h5'
-            logging.info("Writing to " + outfile)
-            h5 = hdf.hdf(outfile, mode='a')
-            orbitdata = {obn: df}
-            h5.save_dict('sharad', orbitdata)
-            h5.close()
+            if not os.path.exists( outputdir ):
+                os.makedirs( outputdir )
+
+            h5 = hdf.hdf(outputfile, mode='w')
+            orbit_data = {obn: result}
+            h5.save_dict('beta5', orbit_data)
+            h5.close()  
         elif save_format == 'csv':
             #fname1 = fname.replace('_a.dat', '.csv.gz')
             #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)
             logging.info("Writing to " + outputfile)
-            if not os.path.exists( os.path.dirname(outputfile) ):
-                os.makedirs( os.path.dirname(outputfile) )
+
+            if not os.path.exists( outputdir ):
+                os.makedirs( outputdir )
 
             df.to_csv(outputfile)
         elif save_format == '':
@@ -165,4 +174,5 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
 if __name__ == "__main__":
     # execute only if run as a script
     main()
+
 
