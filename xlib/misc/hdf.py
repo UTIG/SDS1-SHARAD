@@ -1,7 +1,18 @@
+#!/usr/bin/env python3
+
+import time
+import warnings
+import os
+
+import pandas as pd
+
+
 class hdf:
     def __init__(self, path, **kwargs):
-        import pandas as pd
         self.file = pd.HDFStore(path, **kwargs)
+
+    def __enter__(self):
+        return self
 
     def keys(self, group, full_path=True):
         node = self.file.get_node(group)
@@ -44,11 +55,19 @@ class hdf:
             return np.concatenate([data[key].values for key in data.keys()])
 
     def close(self):
-        self.file.close()
+        try:
+            close_it = self.file.close
+        except AttributeError:
+            pass
+        else:
+            close_it()
+
+    def __exit__(self, *exc_info):
+        return self.close()
 
     def save_dict(self, group, grouped_data, verbose=False):
         keys = grouped_data.keys()
-        if (verbose):
+        if verbose:
             from pydlr.misc.prog import Prog
             pr = Prog(keys)
         for key in keys:
@@ -102,10 +121,6 @@ class hdf:
         self.save_label(**label)
 
     def save_label(self, **kwargs):
-        import pandas as pd
-        import time
-        import os
-        import warnings
         kwargs.update({'date': time.strftime("%d.%m.%Y-%H:%M:%S",
                                              time.localtime()),
                        'user': os.getenv('USER')})
@@ -115,3 +130,5 @@ class hdf:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             self.file['label'] = pd.Series(kwargs)
+
+
