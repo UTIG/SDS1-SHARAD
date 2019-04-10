@@ -54,11 +54,11 @@ def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
 
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
-    alt = senv.alt_data(orbit_full)
-    rdg = senv.cmp_data(orbit_full)
-    aux = senv.aux_data(orbit_full)
+    alt = senv.alt_data(orbit)
+    rdg = senv.cmp_data(orbit)
+    aux = senv.aux_data(orbit)
 
-    utc = aux['EPHEMERIS_TIME']
+    et = aux['EPHEMERIS_TIME']
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
     lon = aux['SUB_SC_EAST_LONGITUDE']
     rng = aux['SPACECRAFT_ALTITUDE']
@@ -68,7 +68,7 @@ def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
     # Get surface amplitude
     #----------------------
 
-    alty = alt[:,5]
+    alty = alt['idx_fine']
     y = alty * 0
     amp = alty * 0
     for i, val in enumerate(alty):
@@ -93,7 +93,7 @@ def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
     # Archive
     #--------
 
-    out = {'utc':utc, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp}
+    out = {'et':et, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp}
     out = pd.DataFrame(data=out)
     #out = out.reindex(columns=['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp'])
     #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
@@ -266,7 +266,7 @@ def main():
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
 
-    b = rsr_processor('0887601', sampling=30000, sav=False)
+    b = rsr_processor('0444801', sampling=250, sav=False)
 
     if args.output != "":
         # TODO: improve naming
