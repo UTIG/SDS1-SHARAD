@@ -54,7 +54,7 @@ def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
 
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
-    alt = senv.alt_data(orbit)
+    alt = senv.alt_data(orbit, typ='beta5', ext='h5')
     rdg = senv.cmp_data(orbit)
     aux = senv.aux_data(orbit)
 
@@ -265,8 +265,7 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-
-    b = rsr_processor('0444801', sampling=250, sav=False)
+    b = rsr_processor('0444801', sampling=250, sav=True)
 
     if args.output != "":
         # TODO: improve naming

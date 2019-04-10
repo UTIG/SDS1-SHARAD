@@ -267,7 +267,7 @@ class SHARADEnv:
         return out
 
 
-    def alt_data(self, orbit, typ='beta5', ext='h5'):
+    def alt_data(self, orbit, typ='deriv', ext='npy'):
         """Output data processed and archived by the altimetry processor
         """
 
@@ -292,10 +292,7 @@ class SHARADEnv:
                 out[key] = vec
         elif ext is 'npy':
             d = np.load(files[0])
-            out = {'et': d[:,0],
-                   'spot_radius': d[:,3],
-                   'idx_fine': d[:,4],
-                   'range': d[:,5], }
+            out = d
         return out
 
 
