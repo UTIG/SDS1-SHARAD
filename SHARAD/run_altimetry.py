@@ -9,10 +9,12 @@ __history__ = {
 
 def alt_processor(path, idx_start=None, idx_end=None):
 
-    import altimetry.beta5 as b5
+    import sys
+    sys.path.insert(0, '/disk/tio/SDS/code/work/gbs/xlib/altimetry/')
+    import beta5 as b5
     import numpy as np
     import os
-
+   
     try:
         # create cmp path
         path_root_alt = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
@@ -27,9 +29,10 @@ def alt_processor(path, idx_start=None, idx_end=None):
         science_path=path.replace('_a.dat','_s.dat')
         if os.path.exists(cmp_path): 
             result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
-                                        idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
+                                        idx_start=idx_start, idx_end=idx_end, use_spice=False, ft_avg=10,
                                         max_slope=25, noise_scale=20, fix_pri=1, fine=True)
 
+            """
             new_path = path_root_alt+path_file+'beta5/'
             if not os.path.exists(new_path):
                 os.makedirs(new_path)
@@ -37,7 +40,10 @@ def alt_processor(path, idx_start=None, idx_end=None):
             orbit_data = {obn: result}
             h5.save_dict('beta5', orbit_data)
             h5.close()  
-
+            """
+            import matplotlib.pyplot as plt
+            plt.plot(result['idx_coarse'])
+            plt.show()
         else:
             print('warning',cmp_path,'does not exist')
             return 0
@@ -85,6 +91,7 @@ for path in lookup:
     #path = lookup[gob]
     #path ='/disk/daedalus/sds/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat'
     #path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1748102/e_1748102_001_ss19_700_a_a.dat'
+    path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr08xxx/edr0887601/e_0887601_001_ss05_700_a_a.dat'
 
     #idx_start = h5file[orbit]['idx_start'][0]
     #idx_end = h5file[orbit]['idx_end'][0]
@@ -94,8 +101,9 @@ for path in lookup:
     path_root = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
     new_path = path_root+path_file+'beta5/'
     if not os.path.exists(new_path+data_file.replace('.dat','.h5')):
-        process_list.append([path,None,None])
+        process_list.append([path,85500,None])
         i+=1
+        break
     else:
         print('folder ' + new_path + ' already exists')
 p.close_Prog()
