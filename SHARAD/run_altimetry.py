@@ -9,14 +9,12 @@ __history__ = {
 
 import sys
 import os
-import importlib.util
 import multiprocessing
 import time
 import logging
 import argparse
 
 import numpy as np
-import matplotlib.pyplot as plt
 import spiceypy as spice
 import pandas as pd
 import traceback
@@ -140,29 +138,23 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
                                     idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
                                     max_slope=25, noise_scale=20, fix_pri=1, fine=True)
 
+        if save_format == '':
+            return 0
+
+        logging.info("Writing to " + outputfile)
         outputdir = os.path.dirname(outputfile)
+        if not os.path.exists( outputdir ):
+            os.makedirs( outputdir )
 
         if save_format == 'hdf5':
-            if not os.path.exists( outputdir ):
-                os.makedirs( outputdir )
-
-            h5 = hdf.hdf(outputfile, mode='w')
             orbit_data = {obn: result}
-            h5.save_dict('beta5', orbit_data)
-            h5.close()  
+            with hdf.hdf(outputfile, mode='w') as h5:
+                h5.save_dict('beta5', orbit_data)
         elif save_format == 'csv':
-            #fname1 = fname.replace('_a.dat', '.csv.gz')
-            #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)
-            logging.info("Writing to " + outputfile)
-
-            if not os.path.exists( outputdir ):
-                os.makedirs( outputdir )
-
             df.to_csv(outputfile)
-        elif save_format == '':
-            pass
         else:
             logging.warning("Unrecognized output format '{:s}'".format(save_format))
+            return 1
         return 0
     except Exception as e:
         taskname="error"
