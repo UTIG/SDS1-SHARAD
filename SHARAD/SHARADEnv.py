@@ -1,4 +1,4 @@
-#!/usr/bin/env python3  
+#!/usr/bin/env python3
 # Tools to explore SHARAD data
 
 __authors__ = ['Cyril Grima, cyril.grima@gmail.com']
@@ -44,6 +44,7 @@ import re
 
 import numpy as np
 import pandas as pd
+import h5py as h5
 
 codepath = os.path.dirname(__file__)
 sys.path.append(os.path.normpath(os.path.join(codepath, "../xlib")) )
@@ -110,16 +111,16 @@ def make_orbit_info(f):
         'name': orbit_name1,
         # full filename and path (previously 'file')
         'fullpath': f,
-        # relative path to the directory containing 
+        # relative path to the directory containing
         # the data files (previously 'path')
-        'relpath': orbit_path, 
+        'relpath': orbit_path,
     }
 
 # TODO GNG: Improve globs to assert that there is only one file matching the pattern
 
 class SHARADEnv:
     """ Class for interacting with data files in the SHARAD dataset """
-    def __init__(self, data_path='/disk/kea/SDS/targ/xtra/SHARAD', 
+    def __init__(self, data_path='/disk/kea/SDS/targ/xtra/SHARAD',
                      orig_path='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'):
         """Get various parameters defining the dataset
         """
@@ -137,7 +138,7 @@ class SHARADEnv:
 
         self.out={}
         # GNG TODO: make this use SDS environment variable
-        
+
         #self.out['data_product'] = os.listdir(self.data_path)
         for sname in os.listdir(self.data_path):
             self.out[sname + '_path'] = os.path.join(self.data_path, sname)
@@ -182,7 +183,7 @@ class SHARADEnv:
 
     # TODO GNG: Propose making a member of SDSEnv
     def orbit_to_full(self, orbit):
-        """ 
+        """
         Output the full orbit name(s) available for a given orbit
         input "orbit" may either be the short orbit name (such as 0704902)
         or the full orbit name (such as e_0704902_001_ss05_700_a)
@@ -193,7 +194,7 @@ class SHARADEnv:
 
 
     def get_orbit_info(self, orbit, b_single=False):
-        """ 
+        """
         Check if this is a short orbit name or a full orbit name
         If b_single is True, then return a single item, and throw a
         warning if there is more than one result.
@@ -218,7 +219,7 @@ class SHARADEnv:
                         list_ret.append(x)
                 if b_single:
                     if len(list_ret) > 1:
-                        logging.warning("SHARADEnv found {:d} " 
+                        logging.warning("SHARADEnv found {:d} "
                                         "files for orbit {:s}".format(
                                         len(list_ret), orbit))
                     return list_ret[0]
@@ -227,7 +228,7 @@ class SHARADEnv:
             else:
                 if b_single:
                     if len(self.orbitinfo[orbit]) > 1:
-                        logging.warning("SHARADEnv found {:d} " 
+                        logging.warning("SHARADEnv found {:d} "
                                         "files for orbit {:s}".format(
                                         len(self.orbitinfo[orbit]), orbit))
                     return self.orbitinfo[orbit][0]
@@ -266,7 +267,7 @@ class SHARADEnv:
         return out
 
 
-    def alt_data(self, orbit, typ='deriv'):
+    def alt_data(self, orbit, typ='deriv', ext='npy'):
         """Output data processed and archived by the altimetry processor
         """
 
@@ -277,12 +278,22 @@ class SHARADEnv:
 
         #orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
         #k = p['orbit_full'].index(orbit_full)
-        path1 = os.path.join(self.out['alt_path'], orbit_info['relpath'], typ, '*')
+        path1 = os.path.join(self.out['alt_path'], orbit_info['relpath'], typ, '*.') + ext
         files = glob.glob(path1)
         if not files:
             return None # no file found
         # TODO: assert glob only has one result
-        return np.load(files[0])
+        if ext is 'h5':
+            d = h5.File(files[0], 'r')[typ][orbit]
+            out = {'et':d['block0_values'][:,0]}
+            for i, val in enumerate(d['block0_items'][:]):
+                key = str(val).replace('b','').replace('\'','')
+                vec = d['block0_values'][:,i]
+                out[key] = vec
+        elif ext is 'npy':
+            d = np.load(files[0])
+            out = d
+        return out
 
 
     # TODO GNG: Propose parallel function tec_filepaths?
@@ -302,18 +313,18 @@ class SHARADEnv:
         """Output data processed and archived by the CMP processor
         """
         orbit_info = self.get_orbit_info(orbit, True)
-        
+
         globpat = os.path.join( self.out['cmp_path'],  orbit_info['relpath'], typ, '*.h5' )
         fil = sorted(glob.glob(globpat))[0]
         re = pd.read_hdf(fil, key='real').values
         im = pd.read_hdf(fil, key='imag').values
         return re + 1j*im
-    
+
 
     def srf_data(self,orbit, typ='cmp'):
         """Output data processed and archived by the altimetry processor (surface)
         """
-        
+
         orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
         k = senv.orbit_full.index(orbit_full)
         globpat = os.path.join(self.srf_path, self.orbit_path[k], typ, '*')
@@ -340,7 +351,7 @@ class SHARADEnv:
         except ValueError as e:
             logging.error("Can't parse timestamp for orbit {:s}: '{:s}'".format(orbit, ts))
             MY, Ls = None, None
-        
+
         return MY
 
 
@@ -393,7 +404,7 @@ def test_alt(senv):
 
         nsucceeded=0
         nfailed=0
-    
+
         for i, orbit in enumerate(orbitnames):
             altdata = senv.alt_data(orbit)
             if altdata is None:
@@ -403,12 +414,12 @@ def test_alt(senv):
             if i % 2000 == 0:
                 logging.info("test_alt: {:d} of {:d}".format(i, len(orbitnames)) )
 
-        logging.info("test_alt: done.  {:d} succeeded, {:d} failed".format(nsucceeded, nfailed)) 
+        logging.info("test_alt: done.  {:d} succeeded, {:d} failed".format(nsucceeded, nfailed))
     return 0
 
 
 
-def main(): 
+def main():
     import time
 
     t0 = time.time()
