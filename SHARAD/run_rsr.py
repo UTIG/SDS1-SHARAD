@@ -23,7 +23,7 @@ import rsr
 import subradar as sr
 
 
-def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', winwidth=[-2,6], gain=0, sav=True, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
 
@@ -82,10 +82,15 @@ def surface_amp(senv, orbit, typ='cmp', gain=0, sav=True, **kwargs):
             prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
             # interval within which to retrieve the surface
             val = int(val)
-            itv = prd[val-2:val+6]
-            maxprd = itv.max()
-            maxind = val - 2 + np.argmax(itv) # The value of the surface echo
-            maxvec = pls[maxind] # The y coordinate of the surface echo
+            itv = prd[val+winwidth[0]:val+winwidth[1]]
+            if len(itv):
+                maxprd = np.max(itv)
+                maxind = val - 2 + np.argmax(itv) # The value of the surface echo
+                maxvec = pls[maxind] # The y coordinate of the surface echo
+            else:
+                maxprd = None
+                maxind = None
+                maxvec = None
             y[i] = maxind
             amp[i] = maxvec
 
@@ -203,9 +208,10 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     pdb = 20*np.log10(amp) + gain - Lc
     amp2 = 10**(pdb/20)
     # RSR process
-    b = rsr.utils.inline_estim(amp2, frq=20e6, **kwargs)
+    #b = rsr.utils.inline_estim(amp2, frq=20e6, **kwargs)
+    b = rsr.run.along(amp2, **kwargs)
     # Geometric losses
-    b['rng'] = rng[ b['xo'].values  ]*1e3
+    b['rng'] = rng[ b['xo'].values.astype(int)  ]*1e3
     b['lc'] = 10*np.log10(sr.utils.geo_loss(2*b['rng'].values))
     b['ln'] = 10*np.log10(sr.utils.geo_loss(b['rng'].values)**2)
     # Remove pre-added coherent geometric losses on received powers
@@ -218,10 +224,10 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     b['rc'] = b['pc'].values - b['lc'].values
     b['rn'] = b['pn'].values - b['as'].values - b['ln'].values
     # reformat/clean results
-    b['utc'] = utc[ b['xo'].values ]
-    b['lon'] = lon[ b['xo'].values ]
-    b['lat'] = lat[ b['xo'].values ]
-    b['roll'] = roll[ b['xo'].values ]
+    b['utc'] = utc[ b['xo'].values.astype(int) ]
+    b['lon'] = lon[ b['xo'].values.astype(int) ]
+    b['lat'] = lat[ b['xo'].values.astype(int) ]
+    b['roll'] = roll[ b['xo'].values.astype(int) ]
     b = b.rename(index=str, columns={"flag":"ok"})
     #b = b.drop(columns=['as', 'eps', 'sh'])
     #b = b[['utc', 'lat', 'lon', 'rng', 'roll', 'xa', 'xo', 'xb', 'pt', 'pc', 'pn', 'mu', 'lc', 'ln', 'rc', 'rn', 'crl', 'chsqr', 'ok']]
@@ -231,16 +237,18 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     #--------
 
     if sav is True:
-        k = p['orbit_full'].index(orbit_full)
+        #k = p['orbit_full'].index(orbit_full)
+        list_orbit_info = senv.get_orbit_info(orbit_full)
+        orbit_info = list_orbit_info[0]
         if typ is 'cmp':
-            archive_path = os.path.join(p['rsr_path'], p['orbit_path'][k], typ)
+            archive_path = os.path.join(senv.out['rsr_path'], orbit_info['relpath'], typ)
         else:
             assert(False)
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
-        fil = os.path.join(archive_path, orbit_full + '.txt')
+        fil = os.path.join(archive_path,  orbit_full + '.txt')
         b.to_csv(fil, index=None, sep='\t')
-        print('CREATED: ' + fil)
+        print("CREATED: " + fil )
 
     return b
 
@@ -248,30 +256,31 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description='RSR processing routines')
-    parser.add_argument('-o','--output', default='', help="Output directory")
-    parser.add_argument(     '--ofmt',   default='npy',choices=('hdf5','npy','none'), help="Output data format")
-    #parser.add_argument('-j','--jobs', type=int, default=3, help="Number of jobs (cores) to use for processing")
+    #parser.add_argument('-o','--output', default='', help="Output directory")
+    #parser.add_argument(     '--ofmt',   default='npy',choices=('hdf5','npy','none'), help="Output data format")
+    parser.add_argument('orbit', help='Orbit number (including leading zeroes)')
+    parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
-    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    #parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     #parser.add_argument('--tracklist', default="elysium.txt",
     #    help="List of tracks to process")
     #parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
+    parser.add_argument('-w', '--winsize', type=int, default=1000, help='Number of consecutive echoes within a window where statistics are determined')
+    parser.add_argument('-s', '--sampling', type=int, default=250, help='Step at which a window is repeated')
 
     args = parser.parse_args()
-
-
 
     loglevel=logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-    b = rsr_processor('0444801', sampling=250, sav=True)
+    b = rsr_processor(args.orbit, winsize=args.winsize, sampling=args.sampling, nbcores=args.jobs, verbose=args.verbose, sav=True)
 
-    if args.output != "":
+    #if args.output != "":
         # TODO: improve naming
-        outfile = os.path.join(args.output, "rsr.npy")
-        logging.debug("Saving to " + outfile)
-        np.save(outfile, b)
+    #    outfile = os.path.join(args.output, "rsr.npy")
+    #    logging.debug("Saving to " + outfile)
+    #    np.save(outfile, b)
 
 if __name__ == "__main__":
     # execute only if run as a script
