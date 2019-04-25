@@ -23,7 +23,7 @@ import rsr
 import subradar as sr
 
 
-def surface_amp(senv, orbit, typ='cmp', winwidth=[-2,6], gain=0, sav=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbose=True, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
 
@@ -53,6 +53,9 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-2,6], gain=0, sav=True, **kwa
     #----------
 
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
+
+    if verbose is True:
+        print('PROCESSING: Surface echo extraction for ' + orbit_full)
 
     alt = senv.alt_data(orbit, typ='beta5', ext='h5')
     rdg = senv.cmp_data(orbit)
@@ -122,7 +125,7 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-2,6], gain=0, sav=True, **kwa
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
+def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, verbose=True, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique applied along
     a SHARAD orbit
@@ -201,6 +204,9 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
     # Get surface coefficients (RSR)
     #-------------------------------
 
+    if verbose is True:
+        print('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
+
     # Amplitude with gain and 2-way coherent geometric losses
     # If Geo losses are not applied, the amplitudes would be << 1 and
     # the RSR fitting would fail. Geo losses are removed after processing.
@@ -248,7 +254,8 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, **kwargs):
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
         b.to_csv(fil, index=None, sep='\t')
-        print("CREATED: " + fil )
+        if verbose is True:
+            print("CREATED: " + fil )
 
     return b
 
@@ -267,6 +274,9 @@ def main():
     #parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
     parser.add_argument('-w', '--winsize', type=int, default=1000, help='Number of consecutive echoes within a window where statistics are determined')
     parser.add_argument('-s', '--sampling', type=int, default=250, help='Step at which a window is repeated')
+    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-6,7], help='2 numbers defining the fast-time relative boundaries around the altimetry surface return where the surface will be looked for')
+    parser.add_argument('-b', '--bins', type=str, default='fd', help='Method to compute the bin width (inherited from numpy.histogram)')
+    parser.add_argument('-f', '--fit_model', type=str, default='hk', help='Name of the function (in pdf module) to use for the fit')
 
     args = parser.parse_args()
 
@@ -274,7 +284,7 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-    b = rsr_processor(args.orbit, winsize=args.winsize, sampling=args.sampling, nbcores=args.jobs, verbose=args.verbose, sav=True)
+    b = rsr_processor(args.orbit, winsize=args.winsize, sampling=args.sampling, nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth, bins=args.bins, fit_model=args.fit_model, sav=True)
 
     #if args.output != "":
         # TODO: improve naming
