@@ -91,9 +91,9 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbo
                 maxind = val - 2 + np.argmax(itv) # The value of the surface echo
                 maxvec = pls[maxind] # The y coordinate of the surface echo
             else:
-                maxprd = None
-                maxind = None
-                maxvec = None
+                maxprd = 0
+                maxind = 0
+                maxvec = 0
             y[i] = maxind
             amp[i] = maxvec
 
@@ -119,7 +119,7 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbo
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
-        out.to_csv(fil, index=None, sep='\t')
+        out.to_csv(fil, index=None, sep=',')
         #print("CREATED: " + fil )
 
     return out
@@ -253,7 +253,7 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, verbose=True, **kwar
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
-        b.to_csv(fil, index=None, sep='\t')
+        b.to_csv(fil, index=None, sep=',')
         if verbose is True:
             print("CREATED: " + fil )
 
