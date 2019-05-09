@@ -157,11 +157,11 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
 
     # Compute SAR apertures for coherent and incoherent stacking
-    sc_alt = aux['SPACECRAFT_ALTITUDE'].values*1000
-    vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'].values*1000
+    sc_alt = aux['SPACECRAFT_ALTITUDE'].values[idx_start:idx_end]*1000
+    vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'].values[idx_start:idx_end]*1000
     fresnel = np.sqrt(sc_alt*c/10E6+(c/(20E6))**2)
     sar_window = int(np.mean(2*fresnel/vel_t/pri)/2)
-    coh_window = int(np.mean((c/10E6/tan(max_slope*pi/180)/vel_t/pri)))
+    coh_window = int(np.mean((c/20E6/4/tan(max_slope*pi/180)/vel_t/pri)))
 
     t1 = time.time()
     logging.debug("Compute SAR apertures: {:0.2f} sec".format(t1-t0))
@@ -205,12 +205,19 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     for i in range(3600):
         radargram_ext[:,i] = np.pad(radargram[:,i], (max_window, max_window), 'edge')
     avg_c = np.empty((len(radargram_ext), 3600), dtype=np.complex)
-    for i in range(3600):
-        avg_c[:, i] = running_mean(radargram_ext[:, i], coh_window)
+    if coh_window > 1:
+        for i in range(3600):
+            avg_c[:, i] = running_mean(radargram_ext[:, i], coh_window)
+    else:
+        avg_c = radargram_ext
 
     avg = np.empty((len(radargram), 3600))
-    for i in range(3600):
-        avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))[max_window:-max_window]
+    if sar_window > 1:
+        for i in range(3600):
+            avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))[max_window:-max_window]
+    else:
+        avg = abs(avg_c)
+
     # Coarse detection
     coarse = np.zeros(len(avg), dtype=int)
     deriv = np.zeros((len(avg), 3599))
@@ -272,7 +279,10 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
             res = least_squares(model5, [b1, b2, b3, b4, b5], args=wdw,
                                 bounds=([-500, 0, 0, 0, 0],
                                         [np.inf, np.inf, np.inf, np.inf, 1]))
-            delta[i] = res.x[2]+max(coarse[i]-100, 0)
+            if res.x[2] < shift_param[i]:
+                delta[i] = coarse[i]
+            else:
+                delta[i] = res.x[2]+max(coarse[i]-100, 0)
     else:
         delta = coarse
 
@@ -290,6 +300,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
     # Seems like it just wants to be a python list.
     # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
+
     spots = np.empty((len(r), 7))
     columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', 'idx_coarse', 'idx_fine', 'range']
     for i in range(len(r)):
