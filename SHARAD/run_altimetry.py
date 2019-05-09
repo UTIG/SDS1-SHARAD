@@ -19,12 +19,12 @@ import spiceypy as spice
 import pandas as pd
 import traceback
 
-sys.path.append('../xlib')
+sys.path.append('../xlib/altimetry/')
 #import misc.prog as prog
 import misc.hdf as hdf
 
-import altimetry.beta5 as b5
-
+#import altimetry.beta5 as b5
+import beta5 as b5
 
 def main():
     # TODO: improve description
@@ -48,7 +48,6 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_altimetry: [%(levelname)-7s] %(message)s")
 
-
     # Set number of cores
     nb_cores = args.jobs
     kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
@@ -71,14 +70,14 @@ def main():
             data_file = os.path.basename(path)
             outfile = os.path.join(path_out, relpath, 'beta5', data_file.replace('.dat', ext[args.ofmt]))
 
-            if not os.path.exists(outfile):
-                process_list.append({
+            #if not os.path.exists(outfile):
+            process_list.append({
                     'inpath' : path, 
                     'outputfile' : outfile, 
-                    'idx_start' : None,
+                    'idx_start' : 0,
                     'idx_end' : None,
                     'save_format' : args.ofmt})
-                logging.debug("[{:d}] {:s}".format(i+1,str(process_list[-1])))
+            logging.debug("[{:d}] {:s}".format(i+1,str(process_list[-1])))
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
@@ -102,10 +101,7 @@ def main():
     print('done')
 
 
-
-
-
-def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=''):
+def alt_processor(inpath, outputfile, idx_start=0, idx_end=None, save_format=''):
     try:
         # create cmp path
         path_root_alt = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
@@ -135,7 +131,7 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
 
         logging.info("Reading " + cmp_path)
         result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
-                                    idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
+                                    idx_start=idx_start, idx_end=idx_end, use_spice=False, ft_avg=10,
                                     max_slope=25, noise_scale=20, fix_pri=1, fine=True)
 
         if save_format == '':
@@ -147,9 +143,9 @@ def alt_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
             os.makedirs( outputdir )
 
         if save_format == 'hdf5':
-            orbit_data = {obn: result}
-            with hdf.hdf(outputfile, mode='w') as h5:
-                h5.save_dict('beta5', orbit_data)
+            orbit_data = {'orbit'+str(obn): result}
+            h5 = hdf.hdf(outputfile, mode='w')
+            h5.save_dict('beta5', orbit_data)
         elif save_format == 'csv':
             df.to_csv(outputfile)
         else:
