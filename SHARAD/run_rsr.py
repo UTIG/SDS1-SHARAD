@@ -23,7 +23,7 @@ import rsr
 import subradar as sr
 
 
-def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbose=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-20,20], gain=0, sav=True, verbose=True, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
 
@@ -75,7 +75,7 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbo
     y = alty * 0
     amp = alty * 0
     for i, val in enumerate(alty):
-        if np.isfinite(val) == False:
+        if (np.isfinite(val) == False) or (val == 0):
             y[i] = np.nan
             amp[i] = np.nan
         else:
@@ -85,10 +85,10 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbo
             prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
             # interval within which to retrieve the surface
             val = int(val)
-            itv = prd[val+winwidth[0]:val+winwidth[1]]
+            itv = prd[val+ywinwidth[0]:val+ywinwidth[1]]
             if len(itv):
                 maxprd = np.max(itv)
-                maxind = val - 2 + np.argmax(itv) # The value of the surface echo
+                maxind = val + ywinwidth[0] + np.argmax(itv) # The value of the surface echo
                 maxvec = pls[maxind] # The y coordinate of the surface echo
             else:
                 maxprd = 0
@@ -125,7 +125,7 @@ def surface_amp(senv, orbit, typ='cmp', winwidth=[-6,7], gain=0, sav=True, verbo
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, verbose=True, **kwargs):
+def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique applied along
     a SHARAD orbit
@@ -207,43 +207,36 @@ def rsr_processor(orbit, typ='cmp', gain=-210.57, sav=True, verbose=True, **kwar
     if verbose is True:
         print('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
 
-    # Amplitude with gain and 2-way coherent geometric losses
-    # If Geo losses are not applied, the amplitudes would be << 1 and
-    # the RSR fitting would fail. Geo losses are removed after processing.
-    Lc = 10*np.log10( sr.utils.geo_loss(2*rng*1e3)   )
-    pdb = 20*np.log10(amp) + gain - Lc
+    pdb = 20*np.log10(amp) + gain
     amp2 = 10**(pdb/20)
+
     # RSR process
-    #b = rsr.utils.inline_estim(amp2, frq=20e6, **kwargs)
     b = rsr.run.along(amp2, **kwargs)
-    # Geometric losses
+
+    # 2-way Geometric losses
     b['rng'] = rng[ b['xo'].values.astype(int)  ]*1e3
     b['lc'] = 10*np.log10(sr.utils.geo_loss(2*b['rng'].values))
     b['ln'] = 10*np.log10(sr.utils.geo_loss(b['rng'].values)**2)
-    # Remove pre-added coherent geometric losses on received powers
-    b['pt'] = b['pt'].values + b['lc'].values
-    b['pc'] = b['pc'].values + b['lc'].values
-    b['pn'] = b['pn'].values + b['lc'].values
+
     # Pulse-limited footprint surface area
     b['as'] = 10*np.log10( np.pi * sr.utils.footprint_rad_pulse(b['rng'].values, 10e6)**2 )
+
     # Surface coefficients
     b['rc'] = b['pc'].values - b['lc'].values
-    b['rn'] = b['pn'].values - b['as'].values - b['ln'].values
+    b['rn'] = b['pn'].values - b['ln'].values - b['as'].values
+
     # reformat/clean results
     b['utc'] = utc[ b['xo'].values.astype(int) ]
     b['lon'] = lon[ b['xo'].values.astype(int) ]
     b['lat'] = lat[ b['xo'].values.astype(int) ]
     b['roll'] = roll[ b['xo'].values.astype(int) ]
     b = b.rename(index=str, columns={"flag":"ok"})
-    #b = b.drop(columns=['as', 'eps', 'sh'])
-    #b = b[['utc', 'lat', 'lon', 'rng', 'roll', 'xa', 'xo', 'xb', 'pt', 'pc', 'pn', 'mu', 'lc', 'ln', 'rc', 'rn', 'crl', 'chsqr', 'ok']]
 
     #--------
     # Archive
     #--------
 
     if sav is True:
-        #k = p['orbit_full'].index(orbit_full)
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
         if typ is 'cmp':
