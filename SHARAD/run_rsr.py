@@ -23,7 +23,7 @@ import rsr
 import subradar as sr
 
 
-def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-20,20], gain=0, sav=True, verbose=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, verbose=True, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
 
@@ -266,8 +266,8 @@ def main():
     #    help="List of tracks to process")
     #parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
     parser.add_argument('-w', '--winsize', type=int, default=1000, help='Number of consecutive echoes within a window where statistics are determined')
-    parser.add_argument('-s', '--sampling', type=int, default=250, help='Step at which a window is repeated')
-    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-6,7], help='2 numbers defining the fast-time relative boundaries around the altimetry surface return where the surface will be looked for')
+    parser.add_argument('-s', '--sampling', type=int, default=100, help='Step at which a window is repeated')
+    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100], help='2 numbers defining the fast-time relative boundaries around the altimetry surface return where the surface will be looked for')
     parser.add_argument('-b', '--bins', type=str, default='fd', help='Method to compute the bin width (inherited from numpy.histogram)')
     parser.add_argument('-f', '--fit_model', type=str, default='hk', help='Name of the function (in pdf module) to use for the fit')
 
