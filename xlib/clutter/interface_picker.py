@@ -21,8 +21,8 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
         kk = 1
     quit_picking = 'No'
     
-    cmin = np.ceil(np.min(data) / 5) * 5
-    cmax = np.floor(np.max(data) / 5) * 5
+    #cmin = np.ceil(np.min(data) / 5) * 5
+    #cmax = np.floor(np.max(data) / 5) * 5
 
     while quit_picking == 'No':
 
@@ -37,9 +37,9 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
         #fM = plt.get_current_fig_manager()
         #fM.window.showMaximized()
         plt.title('pick opposite corners of the zone of interest')
-        plt.clim([cmin, cmax])
-        plt.show()
+        #plt.clim([cmin, cmax])
         zoom = np.rint(plt.ginput(2, show_clicks=True, timeout=-1, mouse_pop=3)).astype(int)
+        #plt.show()
         plt.close()
 
         # define the zoomed in area
@@ -56,8 +56,8 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
             #fM = plt.get_current_fig_manager()
             #fM.window.showMaximized()
             plt.title('pick upper bounds of the reflection of interest - enter to end')
-            plt.clim([cmin, cmax])
-            plt.show()
+            #plt.clim([cmin, cmax])
+            #plt.show()
             top = np.rint(plt.ginput(-1, show_clicks=True, timeout=-1, mouse_pop=3)).astype(int)
             plt.close()
 
@@ -71,8 +71,8 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
             #fM = plt.get_current_fig_manager()
             #fM.window.showMaximized()
             plt.title('pick lower bounds of the reflection of interest - enter to end')
-            plt.clim([cmin, cmax])
-            plt.show()
+            #plt.clim([cmin, cmax])
+            #plt.show()
             bottom = np.rint(plt.ginput(-1, show_clicks=True, timeout=-1, mouse_pop=3)).astype(int)
             plt.close()
 
@@ -116,14 +116,14 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
                        aspect='auto')
             #fM = plt.get_current_fig_manager()
             #fM.window.showMaximized()
-            plt.title('picked interfaces in zoom area')
-            plt.clim([cmin, cmax])
+            plt.title('picked interfaces in zoom area - close to continue')
+            #plt.clim([cmin, cmax])
             plt.show()
 
             # query whether to re-define the zoom area
             if messagebox.askyesno("Python", "Quit picking in this zoom area?"):
                 redefine_zoom = 'Yes'
-            plt.close()
+            #plt.close()
 
         kk += 1
 
@@ -139,7 +139,7 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
         #fM = plt.get_current_fig_manager()
         #fM.window.showMaximized()
         plt.title('all picked interfaces')
-        plt.clim([cmin, cmax])
+        #plt.clim([cmin, cmax])
         plt.show()
 
     return interfaces
@@ -155,8 +155,8 @@ def remover(data, interfaces, color='viridis', plt_final=False):
     kk = 1
     quit_picking = 'No'
     
-    cmin = np.ceil(np.min(data) / 5) * 5
-    cmax = np.floor(np.max(data) / 5) * 5
+    #cmin = np.ceil(np.min(data) / 5) * 5
+    #cmax = np.floor(np.max(data) / 5) * 5
 
     while quit_picking == 'No':
 

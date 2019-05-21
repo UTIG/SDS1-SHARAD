@@ -12,6 +12,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from tkinter import *
 from scipy import ndimage
 from scipy import integrate
 from scipy import signal
@@ -130,7 +131,8 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
 
     # load the MARFA dataset
     mag, phs = load_marfa(line, channel, pth)
-    mag = mag[trim[0]:trim[1], trim[2]:trim[3]]
+    if trim[3] != 0:
+        mag = mag[trim[0]:trim[1], trim[2]:trim[3]]
 
     # incoherently stack to desired trace spacing
     if fresnel != 1:
@@ -282,7 +284,7 @@ def stacked_power_image(magA, phsA, magB, phsB, fresnel, mode):
 
     return output
 
-def stacked_correlation_map(cmpA, cmpB, fresnel):
+def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
     '''
     producing a correlation map at the desired trace posting interval from the
     two antenna datasets. Taken from Rosen et al. (2000) - Equation 57
@@ -294,6 +296,9 @@ def stacked_correlation_map(cmpA, cmpB, fresnel):
       frensel: trace spacing according to Fresnel zone
                -- must be given in integers of the trace spacing for the input
                   radargrams
+            n: fast-time smoother required during implementation
+               of the Castelletti et al. (2018) approach
+      az_step: azimuthal sample interval during multi-look
 
     Outputs:
     ------------
@@ -306,19 +311,49 @@ def stacked_correlation_map(cmpA, cmpB, fresnel):
 
     # calculate correlation map and average (multi-look) if desired
     if fresnel != 1:
-        top = np.divide(stack(np.multiply(cmpA, np.conj(cmpB)), fresnel, datatype='complex'), fresnel)
-        bottomA = np.divide(stack(np.square(np.abs(cmpA)), fresnel), fresnel)
-        bottomB = np.divide(stack(np.square(np.abs(cmpB)), fresnel), fresnel)
+        
+        #top = np.divide(stack(np.multiply(cmpA, np.conj(cmpB)), fresnel, datatype='complex'), fresnel)
+        #bottomA = np.divide(stack(np.square(np.abs(cmpA)), fresnel), fresnel)
+        #bottomB = np.divide(stack(np.square(np.abs(cmpB)), fresnel), fresnel)
+        
+        # setup bounds for each multilook window (output range line in middle)
+        indices = np.arange(np.floor(fresnel / 2) + 1, np.size(cmpA, axis=1), fresnel) - 1
+        if np.size(cmpA, axis=1) - indices[-1] < np.floor(fresnel / 2):
+            col = len(indices) - 1
+        else:
+            col = len(indices)
+        # predefine the correlation map
+        corrmap = np.zeros((np.size(cmpA, axis=0), col), dtype=float)
+        # calculate correlation map
+        for ii in range(col):
+            num = np.floor((fresnel / 2) / az_step)
+            val = np.multiply(az_step, np.arange(-num, num + 0.1))
+            val = indices[ii] + val
+            #start_ind = int(indices[ii] - np.floor(fresnel / 2))
+            #end_ind = int(indices[ii] + np.floor(fresnel / 2))
+            for jj in range(len(cmpA)):
+                ywindow = np.arange(jj, jj + n, 1)
+                viable = np.argwhere(ywindow <= len(cmpA) - 1)
+                ywindow = ywindow[viable]
+                #S1 = cmpA[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
+                #S2 = cmpB[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
+                S1 = cmpA[ywindow.astype(int), val.astype(int)]
+                S2 = cmpB[ywindow.astype(int), val.astype(int)]
+                top = np.mean(np.multiply(S1, np.conj(S2)))
+                bottomA = np.mean(np.square(np.abs(S1)))
+                bottomB = np.mean(np.square(np.abs(S2)))
+                bottom = np.sqrt(np.multiply(bottomA, bottomB))
+                corrmap[jj, ii] = np.abs(np.divide(top, bottom))
     else:
         top = np.multiply(cmpA, np.conj(cmpB))
         bottomA = np.square(np.abs(cmpA))
         bottomB = np.square(np.abs(cmpB))
-    bottom = np.sqrt(np.multiply(bottomA, bottomB))
-    corrmap = np.divide(top, bottom)
+        bottom = np.sqrt(np.multiply(bottomA, bottomB))
+        corrmap = np.abs(np.divide(top, bottom))
   
     return corrmap
 
-def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2):
+def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_step=1):
     '''
     producing a phase interferogram at the desired trace posting interval from
     the two antenna datasets
@@ -336,6 +371,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2):
          roll: True/False flag to apply roll correction
             n: fast-time smoother required during implementation
                of the Castelletti et al. (2018) approach
+      az_step: azimuthal sample interval during multi-look
 
     Output:
     ------------
@@ -364,18 +400,24 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2):
         output = np.zeros((np.size(cmpA, axis=0), col), dtype=float)
         # calculate interferogram
         for ii in range(col):
-            start_ind = int(indices[ii] - np.floor(fresnel / 2))
-            end_ind = int(indices[ii] + np.floor(fresnel / 2))
+            num = np.floor((fresnel / 2) / az_step)
+            val = np.multiply(az_step, np.arange(-num, num + 0.1))
+            val = indices[ii] + val
+            #start_ind = int(indices[ii] - np.floor(fresnel / 2))
+            #end_ind = int(indices[ii] + np.floor(fresnel / 2))
             for jj in range(len(cmpA)):
                 ywindow = np.arange(jj, jj + n, 1)
                 viable = np.argwhere(ywindow <= len(cmpA) - 1)
                 ywindow = ywindow[viable]
-                S1 = cmpA[ywindow.astype(int), start_ind:end_ind]
-                S2 = cmpB[ywindow.astype(int), start_ind:end_ind]
+                #S1 = cmpA[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
+                #S2 = cmpB[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
+                S1 = cmpA[ywindow.astype(int), val.astype(int)]
+                S2 = cmpB[ywindow.astype(int), val.astype(int)]
                 temp = np.mean(np.multiply(S1, np.conj(S2)))
                 output[jj, ii] = np.angle(temp)
             if roll:
-                output[:, ii] = output[:, ii] - np.mean(rollphase[start_ind:end_ind])
+                #output[:, ii] = output[:, ii] - np.mean(rollphase[start_ind:end_ind])
+                output[:, ii] = output[:, ii] - np.mean(rollphase[val.astype(int)])
         #inter = np.zeros((len(cmpA), np.size(cmpA, axis=1)), dtype=float)
         #for ii in range(np.size(cmpA, axis=1)):    
         #    #if ii % 500 == 0:
@@ -477,8 +519,8 @@ def empirical_pdf(fc, B, fresnel, gamma, phi_m=0):
 
     # calculate the nadir emprirical interferometric phase pdf
     phi = np.linspace(-np.pi, np.pi, 10000)
-    phi = (2 * np.pi * B * np.sin(phi)) / (299792458 / fc)
-    f = ipdf(fresnel, gamma, phi, (phi_m / 180) * np.pi)
+    #phi = (2 * np.pi * B * np.sin(phi)) / (299792458 / fc)
+    f = ipdf(fresnel, gamma, phi, np.deg2rad(phi_m))
 
     return phi, f
 
@@ -517,13 +559,14 @@ def empirical_sample_mean(N, Nf, iphi, gamma, phi_m=0):
         # SNR or number of looks is too small
         simulations = int(5E5)
         M = np.zeros((simulations, 1), dtype=float)
-        phi = np.linspace(-np.pi, np.pi, 1000)
-        f = ipdf(N, gamma, phi, np.deg2rad(phi_m))
+        #phi = np.linspace(-np.pi, np.pi, 10000)
+        f = ipdf(N, gamma, iphi, np.deg2rad(phi_m))
         for ii in range(simulations):
             # draw Nf samples from the emprirical interferometric phase pdf
-            phin = np.random.choice(f, Nf)
+            phin = np.random.choice(iphi, Nf, p=np.divide(f, sum(f)))
             # calculate the sample mean of the selected Nf samples
-            M[ii] = np.angle(np.mean(np.exp(np.multiply(1j, phin))), deg=True)
+            #M[ii] = np.angle(np.mean(np.exp(np.multiply(1j, phin))), deg=True)
+            M[ii] = np.rad2deg(np.mean(phin))
         sigma_m = np.sqrt(np.var(M))
 
     return sigma_m
@@ -828,12 +871,12 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path, output_sam
     #plt.subplot(311); plt.imshow(np.abs(bxdsA[sigwin[0]:sigwin[1], :]), aspect='auto'); plt.title('bxdsA')
     #plt.subplot(312); plt.imshow(np.abs(bxdsB[sigwin[0]:sigwin[1], :]), aspect='auto'); plt.title('bxdsB')
     #plt.subplot(313)
-    #plt.plot(bxdsA[0:200, 1000], label='bxdsA')
-    #plt.plot(bxdsA[0:200, 2000], label='bxdsA')
-    #plt.plot(bxdsA[0:200, 3000], label='bxdsA')
-    #plt.plot(bxdsB[0:200, 1000], label='bxdsB')
-    #plt.plot(bxdsB[0:200, 2000], label='bxdsB')
-    #plt.plot(bxdsB[0:200, 3000], label='bxdsB')
+    #plt.plot(20 * np.log10(np.abs(bxdsA[0:200, 0000])), label='bxdsA - 0')
+    #plt.plot(20 * np.log10(np.abs(bxdsA[0:200, 1000])), label='bxdsA - 1000')
+    #plt.plot(20 * np.log10(np.abs(bxdsA[0:200, 2000])), label='bxdsA - 2000')
+    #plt.plot(20 * np.log10(np.abs(bxdsB[0:200, 0000])), label='bxdsB - 0')
+    #plt.plot(20 * np.log10(np.abs(bxdsB[0:200, 1000])), label='bxdsB - 1000')
+    #plt.plot(20 * np.log10(np.abs(bxdsB[0:200, 2000])), label='bxdsB - 2000')
     #plt.legend()
     #plt.show()
 
@@ -1261,32 +1304,155 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
 
     return signalout
 
+def complex_correlation_coefficient(cmp1, cmp2):
+    '''
+    Calculate the complex correlation coefficient between two complex
+    valued datasets.
 
+    Inputs
+    ----------------
+        cmp1: complex-valued dataset 1
+        cmp2: complex-valued dataset 2
 
+    Outputs:
+    ----------------
+      complex valued correlation coefficient
+    '''
 
+    tempA = np.mean(np.multiply(cmp1, np.conj(cmp2)))
+    tempB = np.sqrt(np.multiply(np.mean(np.square(np.abs(cmp1))), np.mean(np.square(np.abs(cmp2)))))
+    out = np.divide(tempA, tempB)
 
+    return out
 
+def azimuth_pixel2pixel_coherence(data, FOI, roll_range=100, ft_step=1):
+    '''
+    Assessment of the coherence between azimuth pixels as a function
+    of the distance between them. Non-independent azimuth pixels will
+    exhibit greater pixel-to-pixel coherence than truly independent
+    ones. Based on discussion presented in Lee et al. (1994).
 
+    The algorithm will only evaluate pixel-to-pixel coherence in the fast-
+    time sample range covering the defined the feature-of-interest.
 
+    Inputs:
+    ----------------
+           data: complex-valued data relating to one of the two
+                 interferometric channels
+                 -- fast-time samples as rows
+                 -- range lines as columns
+            FOI: array of ones and zeros where ones correspond to the
+                 picked feature-of-interest being evaluated for possible
+                 off-nadir clutter
+                 -- fast-time samples as rows
+                 -- range lines as columns
+     roll_range: range of azimuth sample to roll the data over when
+                 evaluating pixel-to-pixel coherency
+        ft_step: fast-time sample interval at which to evaluate the azimuthal
+                 pixel-to-pixel coherence
 
+    Outputs:
+    ----------------
+            rho: array of the pixel-to-pixel coherency
+                 -- rows contain evaluations of the pixel-to-pixel coherency
+                    for individual fast-time samples in the input radar data
+                 -- columns represent the distances over which the coherency
+                    was evaluated
+          rolls: list of the distances between pixels over which the
+                 pixel-to-pixel coherency was calculated
+     ft_samples: list of fast-time samples along with coherencies were evaluated
+    '''
 
+    # from FOI, identify fast-time samples covering the FOI
+    test = np.zeros((len(FOI)), dtype=float)
+    for ii in range(len(FOI)):
+        if np.nansum(FOI[ii, :]) != 0:
+            test[ii] = 1
+    start_sample = np.min(np.argwhere(test == 1))
+    end_sample = np.max(np.argwhere(test == 1))
+    ft_samples = np.arange(start_sample, end_sample, ft_step)
 
+    # define the pixel-to-pixel distances to test
+    rolls = np.arange(0, roll_range + 1)
 
+    # calculate the pixel-to-pixel coherence
+    rho = np.zeros((len(ft_samples), len(rolls)), dtype=float)
+    for ii in range(len(ft_samples)):
+        cmp1 = data[ft_samples[ii], :]
+        for jj in range(len(rolls)):
+            cmp2 = np.roll(cmp1, rolls[jj])
+            rho[ii, jj] = np.abs(complex_correlation_coefficient(cmp1, cmp2))
 
+    return rho, rolls, ft_samples
 
+def independent_azimuth_samples(cmpA, cmpB, FOI, roll_range=100, ft_step=1):
+    '''
+    Function to determine the azimuth sample interval between independent
+    range lines.
+    
+    Inputs:
+    ----------------
+           cmpA: complex-valued antenna A radargram
+                 -- fast-time samples as rows
+                 -- range lines as columns
+           cmpB: complex-valued antenna B radargram
+                 -- fast-time samples as rows
+                 -- range lines as columns
+            FOI: array of ones and zeros where ones correspond to the
+                 picked feature-of-interest being evaluated for possible
+                 off-nadir clutter
+                 -- fast-time samples as rows
+                 -- range lines as columns
+     roll_range: range of azimuth sample to roll the data over when
+                 evaluating pixel-to-pixel coherency
+        ft_step: fast-time sample interval at which to evaluate the azimuthal
+                 pixel-to-pixel coherence
 
+    Outputs:
+    ----------------
+      output is the azimuth distances [samples] between independent range lines
+    '''
 
+    # evaluate pixel-to-pixel stability
+    rhoA, rolls, ft_samples = azimuth_pixel2pixel_coherence(cmpA, FOI, roll_range=roll_range, ft_step=ft_step)
+    rhoB, _, _ = azimuth_pixel2pixel_coherence(cmpB, FOI, roll_range=roll_range, ft_step=ft_step)
 
+    # plot the pixel-to-pixel correlation
+    plt.figure()
+    plt.subplot(211)
+    num = 0
+    for ii in range(len(rhoA)):
+        num += 1
+        plt.plot(rhoA[ii, :], label=str(ft_samples[ii]))
+    plt.title('Antenna A pixel-to-pixel coherence')
+    plt.ylim([0, 1]); plt.xlim([0, len(rolls)])
+    plt.xlabel('pixel-to-pixel distance [samples]')
+    plt.xticks(np.arange(0, len(rolls)), rolls)
+    plt.ylabel('coherence')
+    if num <= 15: plt.legend()
+    plt.subplot(212)
+    num = 0
+    for ii in range(len(rhoB)):
+        num += 1
+        plt.plot(rhoB[ii, :], label=str(ft_samples[ii]))
+    plt.title('Antenna B pixel-to-pixel coherence')
+    plt.ylim([0, 1]); plt.xlim([0, len(rolls)])
+    plt.xlabel('pixel-to-pixel distance [samples]')
+    plt.xticks(np.arange(0, len(rolls)), rolls)
+    plt.ylabel('coherence')
+    if num <= 15: plt.legend()
 
+    # define the number of azimuth samples between independent looks
+    def callback():
+        global az_step
+        az_step = e1.get()
+    master = Tk()
+    Label(master, text='Interval between independent looks (Enter to assign)').grid(row=0)
+    e1 = Entry(master)
+    e1.grid(row=0, column=1)
+    Button(master, text='Enter', command=callback).grid(row=1, column=0, sticky=W, pady=4)
+    Button(master, text='Done', command=master.quit).grid(row=1, column=1, sticky=W, pady=4)
+    plt.show()
 
-
-
-
-
-
-
-
-
-
-
+    return az_step
 
