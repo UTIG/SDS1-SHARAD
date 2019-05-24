@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Usage: run_pylint2
+
+# Output pylint results to individual text files
+
+
+#CODEDIR=$1
+CODEDIR=..
+
+
+
+function report_file
+{
+    local FILENAME=$1
+    local FILEPATH=$2
+    local LOGFILE=$3
+
+    # warnings
+    local NWARN=`grep -c '^W:' $FILEPATH`
+    # conventions
+    local NCONV=`grep -c '^C:' $FILEPATH`
+    # refactor
+    local NREFAC=`grep -c '^R:' $FILEPATH`
+    # error
+    local NERR=`grep -c '^E:' $FILEPATH`
+    # fatal
+    local NFATAL=`grep -c '^F:' $FILEPATH`
+
+    #echo "${FILENAME}: $NWARN warnings, $NCONV convention, $NREFAC refactor, $NERR error, $NFATAL fatal" | tee -a $LOGFILE
+    printf "%3d fatal, %3d error, %3d refactor, %3d convention, %3d warning: %s\n" \
+        $NFATAL $NERR $NREFAC $NCONV $NWARN $FILENAME |  tee -a $LOGFILE
+}
+
+logbasename=`date "+pylint_%Y%m%d-%H%M"`
+
+S0=`basename $0`
+
+PYLINT=pylint
+#PYLINT_FLAGS="superfluous-parens"
+PYLINT_FLAGS="--reports=n"
+
+# Run linter from the file's current working directory
+logbase1="${logbasename}.log"
+
+logfile1=`pwd`/$logbase1
+#echo "$S0: Logging to $logfile1"
+
+OUTDIR=`pwd`/pylint
+RCFILE=`pwd`/pylint.rc
+mkdir -p $OUTDIR
+rm -f $OUTDIR/*.log
+
+for FILE in `find "$CODEDIR" -iname '*.py'`
+do
+    D1=`dirname $FILE`
+    F1=`basename $FILE`
+
+    D2=`echo $D1 | sed 's#^\../##'g | sed 's#/#__#g'`
+
+    # D2 is an edited relative path
+    #echo "D1=$D1"
+
+    #echo "D2=$D2"
+    #echo "$S0: Running pylint on $FILE"
+
+    logfile2="${OUTDIR}/${D2}__${F1}.log"
+    #echo "Logging to $logfile2 from `pwd`"
+
+    pushd "$D1" > /dev/null
+    stdbuf -o 0 $PYLINT $PYLINT_FLAGS --rcfile $RCFILE $F1 > $logfile2
+    report_file $FILE $logfile2 $logfile1
+    popd > /dev/null
+done
+
+echo "$S0: Logged to $logfile1"
+#wc -l $logfile1

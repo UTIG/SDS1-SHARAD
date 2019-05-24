@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Usage: run_pylint [code directory]
+
+#  TODO: Make this work with python3 code
+
+CODEDIR=$1
+
+if $# -ne 1
+then
+    echo "Usage: run_pylint CODEDIR"
+    exit 1
+fi
+
+logbasename=`date "+pylint_%Y%m%d-%H%M_"`
+
+S0=`basename $0`
+
+PYLINT=pylint
+#PYLINT_FLAGS="superfluous-parens"
+PYLINT_FLAGS="--reports=n"
+
+# Run linter from the file's current working directory
+logbase1="${logbasename}_cwd.log"
+
+logfile1=`pwd`/$logbase1
+echo "$S0: Logging to $logfile1"
+for FILE in `find "$1" -iname '*.py'`
+do
+    D1=`dirname $FILE`
+    F1=`basename $FILE`
+    echo "$S0: Running pylint on $FILE" | tee -a $logfile1
+    pwd
+    pushd "$D1"
+    stdbuf -o 0 $PYLINT $PYLINT_FLAGS $F1 | tee -a $logfile1
+    popd
+done
+
+echo "$S0: Logged to $logfile1"
+wc -l $logfile1
