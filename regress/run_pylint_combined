@@ -4,13 +4,15 @@
 
 #  TODO: Make this work with python3 code
 
-CODEDIR=$1
-
 if [ $# -lt 1 ]
 then
     echo "Usage: run_pylint CODEDIR [logfile]"
     exit 1
 fi
+
+CODEDIR=$1
+
+
 
 if [ $# -ge 2 ]
 then
