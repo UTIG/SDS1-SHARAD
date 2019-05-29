@@ -16,7 +16,7 @@ CODEDIR=$1
 
 if [ $# -ge 2 ]
 then
-    logbase1=$1
+    logbase1=$2
 else
     logbasename=`date "+pylint_%Y%m%d-%H%M_"`
     logbase1="${logbasename}_cwd.log"
