@@ -6,7 +6,7 @@
 
 if [ $# -lt 1 ]
 then
-    echo "Usage: run_pylint CODEDIR [logfile]"
+    echo "Usage: run_pylint CODEDIR [abs_path_to_logfile]"
     exit 1
 fi
 
@@ -16,10 +16,13 @@ CODEDIR=$1
 
 if [ $# -ge 2 ]
 then
-    logbase1=$2
+    # Note that this logfile MUST be expressed as an absoute path
+    #logbase1=$2
+    logfile1=$2
 else
     logbasename=`date "+pylint_%Y%m%d-%H%M_"`
     logbase1="${logbasename}_cwd.log"
+    logfile1=`pwd`/$logbase1
 fi
 S0=`basename $0`
 
@@ -34,7 +37,6 @@ TEEA=" | tee -a"
 
 # Run linter from the file's current working directory
 
-logfile1=`pwd`/$logbase1
 echo "$S0: Logging to $logfile1"
 for FILE in `find "$1" -iname '*.py'`
 do
