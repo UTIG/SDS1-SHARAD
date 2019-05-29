@@ -27,7 +27,7 @@ function report_file
     # fatal
     local NFATAL=`grep -c '^F:' $FILEPATH`
 
-    #echo "${FILENAME}: $NWARN warnings, $NCONV convention, $NREFAC refactor, $NERR error, $NFATAL fatal" | tee -a $LOGFILE
+    # TODO: should we show the logfile or the actual file
     printf "%3d fatal, %3d error, %3d refactor, %3d convention, %3d warning: %s\n" \
         $NFATAL $NERR $NREFAC $NCONV $NWARN $FILENAME |  tee -a $LOGFILE
 }
@@ -68,8 +68,10 @@ do
     #echo "Logging to $logfile2 from `pwd`"
 
     pushd "$D1" > /dev/null
-    stdbuf -o 0 $PYLINT $PYLINT_FLAGS --rcfile $RCFILE $F1 > $logfile2
-    report_file $FILE $logfile2 $logfile1
+    echo "pylint report for $FILE" > $logfile2
+    echo "------------------------------------------" >> $logfile2
+    stdbuf -o 0 $PYLINT $PYLINT_FLAGS --rcfile $RCFILE $F1 >> $logfile2
+    report_file pylint/`basename $logfile2` $logfile2 $logfile1
     popd > /dev/null
 done
 
