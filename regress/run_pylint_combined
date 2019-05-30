@@ -28,7 +28,7 @@ S0=`basename $0`
 
 PYLINT=pylint
 #PYLINT_FLAGS="superfluous-parens"
-PYLINT_FLAGS="--reports=n"
+PYLINT_FLAGS="--reports=n --rcfile=/dev/null"
 
 # Tee append verbose
 TEEA=" | tee -a"
@@ -43,10 +43,9 @@ do
     D1=`dirname $FILE`
     F1=`basename $FILE`
     echo "$S0: Running pylint on $FILE" >> $logfile1
-    pwd
-    pushd "$D1"
+    pushd "$D1" > /dev/null
     stdbuf -o 0 $PYLINT $PYLINT_FLAGS $F1 >> $logfile1
-    popd
+    popd > /dev/null
 done
 
 echo "$S0: Logged to $logfile1"
