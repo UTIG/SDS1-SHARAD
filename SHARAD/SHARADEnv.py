@@ -260,7 +260,7 @@ class SHARADEnv:
         return out
 
 
-    def alt_data(self, orbit, typ='deriv', ext='npy'):
+    def alt_data(self, orbit, typ='beta5', ext='h5'):
         """Output data processed and archived by the altimetry processor
         """
 
