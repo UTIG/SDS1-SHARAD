@@ -72,13 +72,13 @@ if debug:
     plt.title('sharad groundtrack overlain on mola surface')
 
 # convert the radargram amplitudes to dB
-dB_data = 20 * np.log10(sar_data) 
+dB_data = 20 * np.log10(sar_data)
 if debug:
     plt.figure()
-    plt.subplot(2,1,1); plt.imshow(np.transpose(sar_data), aspect='auto')
+    plt.subplot(2, 1, 1); plt.imshow(np.transpose(sar_data), aspect='auto')
     plt.title('radargram in amplitude')
     plt.colorbar()
-    plt.subplot(2,1,2); plt.imshow(np.transpose(dB_data), aspect='auto')
+    plt.subplot(2, 1, 2); plt.imshow(np.transpose(dB_data), aspect='auto')
     plt.title('radargram in dB')
     plt.colorbar()
 
@@ -93,8 +93,8 @@ if True:
         plt.imshow(np.transpose(picks))
     plt.title('radargram with picked echoes of interest')
 
-clutter_latitude_idx=[]
-clutter_longitude_idx=[]
+clutter_latitude_idx = []
+clutter_longitude_idx = []
 pick_test = np.zeros((len(rx), 1), dtype=float)
 
 # compare echo ranges with one-way distances between the spacecraft and the
@@ -102,15 +102,15 @@ pick_test = np.zeros((len(rx), 1), dtype=float)
 #ii = 2500
 #if ii == 2500:
 #for ii in range(590, 600):
-for ii in range(len(latitude)):    
-    
+for ii in range(len(latitude)):
+
     # select out data related to an individual range line
     rl_scrad = scradius[ii, :]
     rl_lat = latitude[ii, :]
     rl_lon = longitude[ii, :]
     rl_idx = nadir_idx[ii, :]
     nadir_mola = fl.extract_mola(dtm, rl_lat, rl_lon, area)
-    
+
     # check to see if column is empty (i.e. no radar data)
     testA = np.max(dB_data[ii, :] - np.max(dB_data[ii, :]))
     # check to make sure there is a picked surface
@@ -118,7 +118,7 @@ for ii in range(len(latitude)):
         testB = False
     else:
         testB = True
-    
+
     # proceed if the range line passes the test
     if np.isnan(testA) == False and testB:
 
@@ -144,7 +144,7 @@ for ii in range(len(latitude)):
         pick_delay = wrap + pick_frac
         pick_delay = pick_delay * 3600 - 25
         echo = pick_delay * 0.0375E-6 * 299792458 / 2
-        
+
         # define a perpendicular vector
         perp_idx, perp_latitude, perp_longitude = fl.xtrack_vector(nadir_idx, rl_idx, len(dtm), np.size(dtm, axis=1), area)
         if debug:
@@ -154,7 +154,7 @@ for ii in range(len(latitude)):
             plt.scatter(nadir_idx[:, 1], nadir_idx[:, 0], s=0.5, c='k', marker='.')
             plt.scatter(perp_idx[:, 1], perp_idx[:, 0], s=0.5, c='r', marker='.')
             plt.title('groundtrack and cross-track vector on mola surface radius')
-        
+
         # extract topography along the perpendicular groundtrack
         perp_mola = np.zeros(len(perp_idx), dtype=float)
         for jj in range(len(perp_mola)):
@@ -165,7 +165,8 @@ for ii in range(len(latitude)):
             plt.title('cross-track mola radius [m]')
 
         # determine distance from the spacecraft to the perpendicular vector
-        R0 = fl.sc2xtrack_distance(perp_mola, perp_latitude, perp_longitude, rl_scrad, rl_lat, rl_lon)
+        R0 = fl.sc2xtrack_distance(perp_mola, perp_latitude, perp_longitude, 
+                                   rl_scrad, rl_lat, rl_lon)
         R0 = R0 - (rl_scrad - min_scradius)
         if debug:
             plt.figure()
@@ -173,13 +174,13 @@ for ii in range(len(latitude)):
             plt.plot(R0 / 1000)
             plt.title('distance from spacecraft to points on cross-track vector')
             plt.ylabel('km')
-            plt.subplot(1,2,2)
+            plt.subplot(1, 2, 2)
             plt.imshow(dtm, cmap='gray')
             plt.scatter(nadir_idx[:, 1], nadir_idx[:, 0], s=0.5, c='k', marker='.')
             plt.scatter(perp_idx[:, 1], perp_idx[:, 0], s=0.5, c=R0/1000, marker='.')
             plt.colorbar()
             plt.title('groundtrack and distance from spacecraft to cross-track vector [km]')
-            
+
         # identify the cross-track position whose distance to the spacecraft is
         # the most similar to the calculated echo distance
 #        pick_test[ii] = np.min(np.abs(R0 - echo))
@@ -193,8 +194,8 @@ for ii in range(len(latitude)):
             plt.figure()
             plt.imshow(dtm, cmap='gray')
             plt.scatter(clutter_longitude_idx, clutter_latitude_idx, s=0.2, c='r', marker='*')
-            
-# overlay effective echo points that may end up being clutter onto MOC surface 
+
+# overlay effective echo points that may end up being clutter onto MOC surface
 # imagery
 moc_nadir_idx = np.zeros((np.size(nadir_idx, axis=0), 2), dtype=int)
 moc = fl.moc_area('Arsia Mons', area)
