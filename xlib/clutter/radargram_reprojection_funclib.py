@@ -7,19 +7,23 @@ __history__ = {
          'info': 'function library for radargram reprojection'}}
 
 import glob
+import sys
+import math
+
 import numpy as np
 import pandas as pd
+from PIL import Image
 
 
-import sys
 sys.path.append('/usr/local/anaconda3/lib/python3.5/site-packages/')
 import pvl
 
+import interface_picker as ip
 
 def load_mola(pth):
     '''
     Python script for plotting MOLA .img data
-    
+
     Inputs:
     -------------
     pth: path to image file
@@ -29,24 +33,24 @@ def load_mola(pth):
     pst_trc: matrix of MOLA topographies
     '''
     #import matplotlib.pyplot as plt
-    
-    label = pvl.load(pth.replace('.img','.lbl'))
+
+    label = pvl.load(pth.replace('.img', '.lbl'))
     lon_samp = label['IMAGE']['LINE_SAMPLES']
     lat_samp = label['IMAGE']['LINES']
-    dtype=[]
-    for ii in range(lon_samp):
-        dtype.append(('Line_'+str(ii), '>i2'))
+    dtype = []
+    for i in range(lon_samp):
+        dtype.append(('Line_' + str(i), '>i2'))
     dtype = np.dtype(dtype)
     fil = glob.glob(pth)[0]
     arr = np.fromfile(fil, dtype=dtype)
     out = np.reshape(arr, [1, lat_samp])[0]
-    dfr = pd.DataFrame(arr)      
-    
+    dfr = pd.DataFrame(arr)
+
     topo = np.zeros((lat_samp, lon_samp))
-    for jj in range(lon_samp):
-        topo[:,jj] = dfr[0:lat_samp]['Line_'+str(jj)].as_matrix()
-    del dtype, arr, dfr, fil, out    
-        
+    for j in range(lon_samp):
+        topo[:, j] = dfr[0:lat_samp]['Line_' + str(j)].as_matrix()
+    del dtype, arr, dfr, fil, out
+
     return topo
 
 def mola_area(data, top_left, resolution, lim):
@@ -65,14 +69,12 @@ def mola_area(data, top_left, resolution, lim):
     -------------
          output is the mola array for the specified area
     '''
-    import numpy as np
 
     # set MOLA resolution
-    if resolution == 'c': ddeg = 4
-    elif resolution == 'e': ddeg = 16
-    elif resolution == 'f': ddeg = 32
-    elif resolution == 'g': ddeg = 64
-    elif resolution == 'h': ddeg = 128
+    mola_resolution_table = {
+        'c': 4, 'e': 16, 'f': 32, 'g': 64, 'h': 128
+    }
+    ddeg = mola_resolution_table[resolution]
 
     # set latitude and longitude bounds
     maxlat = top_left[0]
@@ -112,8 +114,6 @@ def extract_mola(data, lat, lon, bounds):
         topo: interpolated surface at the specified latitude and longitude
     '''
 
-    import numpy as np
-
     minlat = bounds[0]
     maxlat = bounds[1]
     minlon = bounds[2]
@@ -124,14 +124,23 @@ def extract_mola(data, lat, lon, bounds):
     x = np.linspace(minlon, maxlon, np.size(data, axis=1))
 
     # find lat/log positions surrounding the point of interest
+    # GNG: you can replace this code with the following:
+    # B = A + np.sgn(y[A] - lat)
+    # D = C + np.sgn(x[C] - lat)
     A = np.argmin(np.abs(y - lat))
-    if y[A] - lat > 0: B = A - 1
-    elif y[A] - lat < 0: B = A + 1
-    else: B = A
+    if y[A] - lat > 0:   # y[A] > lat
+        B = A - 1
+    elif y[A] - lat < 0: # y[A] < lat
+        B = A + 1
+    else:
+        B = A
     C = np.argmin(np.abs(x - lon))
-    if x[C] - lon > 0: D = C - 1
-    elif x[C] - lon < 0: D = C + 1
-    else: D = C
+    if x[C] - lon > 0:   # x[C] > lon
+        D = C - 1
+    elif x[C] - lon < 0: #  x[C] < lon
+        D = C + 1
+    else:
+        D = C
 
     # weight surrounding points for topography at the point of interest
     if A != B and D != C:
@@ -194,8 +203,6 @@ def extract_molaidx(dtm, area, point):
       idx: index of the latitude and longitude corrdinates within the mola grid
     '''
 
-    import numpy as np
-
     # define the latitude and longitude vector
     y = np.flipud(np.linspace(area[0], area[1], np.size(dtm, axis=0)))
     x = np.linspace(area[2], area[3], np.size(dtm, axis=1))
@@ -223,20 +230,19 @@ def latlong_distance(point1, point2, radius):
       output is the distance between the two points in meters
     '''
 
-    import numpy as np
-    import math
-
     # convert coordinates from degrees to radians
     lat1 = math.radians(point1[0])
     lat2 = math.radians(point2[0])
     dlat = math.radians(point2[0] - point1[0])
     dlon = math.radians(point2[1] - point1[1])
-    
+
+    # TODO: why are we mixing np and math here?  GNG
     # calculate the haversine
-    a = math.pow(math.sin(dlat / 2), 2) + math.cos(lat1) * math.cos(lat2) * math.pow(math.sin(dlon / 2), 2)
+    a = math.pow(math.sin(dlat / 2), 2)\
+        + math.cos(lat1) * math.cos(lat2) * math.pow(math.sin(dlon / 2), 2)
     c = 2 * math.atan2(np.sqrt(a), np.sqrt(1 - a))
     d = radius * c
-    
+
     return d
 
 def moc_area(region, lim):
@@ -253,9 +259,6 @@ def moc_area(region, lim):
     -------------
          output is the moc image array for the specified area
     '''
-    import numpy as np
-    from PIL import Image
-
     # details of the area
     if 'Arsia Mons' in region:
         img1 = Image.open('./Test Data/MOC/moc_256_N-30_210.png')
@@ -304,18 +307,17 @@ def xtrack_vector(nadir_idx, rl_idx, m, n, area):
        perp_longitude: longitude coordinates for points on the perpendicular
                        line
     '''
-    import numpy as np
-    
-    
+
+
     # define a vector perpendicular to the groundtrack at that location
-    r = np.array(((0, -1),(1, 0)))
+    r = np.array(((0, -1), (1, 0)))
     temp_idx = np.zeros((len(nadir_idx), 2), dtype=int)
     temp_idx[:, 0] = nadir_idx[:, 0] - rl_idx[0]
     temp_idx[:, 1] = nadir_idx[:, 1] - rl_idx[1]
     perp_idx = np.matmul(temp_idx, r)
     perp_idx[:, 0] = perp_idx[:, 0] + rl_idx[0]
     perp_idx[:, 1] = perp_idx[:, 1] + rl_idx[1]
-    
+
     # shift the perpendicular vector such that it's midpoint is located at
     # the range line of interest
     perp_idx_mid = perp_idx[int(np.round(len(perp_idx) / 2)), :]
@@ -323,7 +325,7 @@ def xtrack_vector(nadir_idx, rl_idx, m, n, area):
     didx1 = perp_idx_mid[1] - rl_idx[1]
     perp_idx[:, 0] = perp_idx[:, 0] - didx0
     perp_idx[:, 1] = perp_idx[:, 1] - didx1
-    
+
     # restrict to the area covered by the DTM
     if nadir_idx[len(nadir_idx) - 1, 1] < nadir_idx[0, 1]:
         indA = np.min(np.argwhere(perp_idx[:, 1] <= 0))
@@ -340,17 +342,17 @@ def xtrack_vector(nadir_idx, rl_idx, m, n, area):
     indC = np.min([indA, indB])
     indD = np.max([indA, indB])
     perp_idx = perp_idx[indC + 1:indD, :]
-    
+
     # for each point on the perpendicular groundtrack, extract a latitude
     # and longitude coordinate
     y = np.flipud(np.linspace(area[0], area[1], m))
     x = np.linspace(area[2], area[3], n)
     perp_latitude = np.zeros(len(perp_idx), dtype=float)
     perp_longitude = np.zeros(len(perp_idx), dtype=float)
-    for jj in range(len(perp_latitude)):
-        perp_latitude[jj] = y[perp_idx[jj, 0]]
-        perp_longitude[jj] = x[perp_idx[jj, 1]]
-        
+    for j in range(len(perp_latitude)):
+        perp_latitude[j] = y[perp_idx[j, 0]]
+        perp_longitude[j] = x[perp_idx[j, 1]]
+
     return perp_idx, perp_latitude, perp_longitude
 
 def echo_select(dB_data, echo_mode, dB_threshold):
@@ -376,34 +378,32 @@ def echo_select(dB_data, echo_mode, dB_threshold):
               indices where echoes of interest have been selected and nan
               everywhere else
     '''
-    import numpy as np
-    import interface_picker as ip
 
     if echo_mode == 'maximum':
         picks = np.zeros((len(dB_data), 1), dtype=float)
         # extract index with the maximum amplitude along each range line
-        for ii in range(len(dB_data)):
-            test = np.max(dB_data[ii, :] - np.max(dB_data[ii, :]))
+        for i in range(len(dB_data)):
+            test = np.max(dB_data[i, :] - np.max(dB_data[i, :]))
             if np.isnan(test) == False:
-                rl_data = dB_data[ii, :] - np.max(dB_data[ii, :])
-                picks[ii] = np.argwhere(rl_data == 0)
+                rl_data = dB_data[i, :] - np.max(dB_data[i, :])
+                picks[i] = np.argwhere(rl_data == 0)
             else:
-                picks[ii] = np.nan
+                picks[i] = np.nan
     elif echo_mode == 'threshold':
         picks = np.zeros((len(dB_data), np.size(dB_data, axis=1)), dtype=float)
         # extract index with amplitude above defined threshold along each line
-        for ii in range(len(dB_data)):
-            test = np.max(dB_data[ii, :] - np.max(dB_data[ii, :]))
+        for i in range(len(dB_data)):
+            test = np.max(dB_data[i, :] - np.max(dB_data[i, :]))
             if np.isnan(test) == False:
-                rl_data = dB_data[ii, :] - np.max(dB_data[ii, :])
-                for jj in range(len(rl_data)):
-                    if rl_data[jj] >= dB_threshold:
-                        picks[ii, jj] = 1
+                rl_data = dB_data[i, :] - np.max(dB_data[i, :])
+                for j in range(len(rl_data)):
+                    if rl_data[j] >= dB_threshold:
+                        picks[i, j] = 1
                     else:
-                        picks[ii, jj] = np.nan
+                        picks[i, j] = np.nan
     elif echo_mode == 'manual':
         picks = ip.picker(dB_data)
-    
+
     return picks
 
 def iau2000_ellipsoid_radius(lat):
@@ -420,24 +420,23 @@ def iau2000_ellipsoid_radius(lat):
     -------------
       output is the radius of the martian ellipsoid [m]
     '''
-    import numpy as np
 
     # set the radii for Mars
     a = 3396.19E3        # equatorial martian radius [m]
     if lat >= 0:
         b = 3373.19E3    # polar radius in the northern hemisphere [m]
-    elif lat < 0:
+    else:
         b = 3379.21E3    # polar radius in the southern hemisphere [m]
         lat = np.abs(lat)
-
+        
     # define latitude in both degrees and radians
     lat_rad = np.flipud(np.linspace(0, np.pi / 2, 90 * 1000))
     lat_deg = np.flipud(np.linspace(0, 90, 90 * 1000))
 
     # define the radius as a function of latitude (absolute value)
-    tempA = np.square(b) * np.square(np.cos(lat_rad))
-    tempB = np.square(a) * np.square(np.sin(lat_rad))
-    rad = (a * b) / np.sqrt(tempA + tempB)
+    temp_a = np.square(b) * np.square(np.cos(lat_rad))
+    temp_b = np.square(a) * np.square(np.sin(lat_rad))
+    rad = (a * b) / np.sqrt(temp_a + temp_b)
 
     # find the index closest to the desired latitude
     ind = np.argwhere(np.abs(lat_deg - lat) == np.min(np.abs(lat_deg - lat)))
@@ -460,19 +459,18 @@ def mola2iautopo(dtm, lat_bounds):
     -------------
       output is a topographic dtm normalized to the IAU2000 martian ellipsoid
     '''
-    import numpy as np
 
     # define the latitude coordinates of the DTM grid
     lat = np.linspace(lat_bounds[0], lat_bounds[1], np.size(dtm, axis=0))
 
     # extract an IAU2000 ellipsoid radii for each latitude
     iau_rad = np.zeros((len(lat), 1), dtype=float)
-    for ii in range(len(iau_rad)):
-        iau_rad[ii, 0] = iau2000_ellipsoid_radius(lat[ii])
+    for i in range(len(iau_rad)):
+        iau_rad[i, 0] = iau2000_ellipsoid_radius(lat[i])
 
     # produce an ellipsoid map
     iau_map = np.tile(np.flipud(iau_rad), (1, np.size(dtm, axis=1)))
-    
+
     # produce a difference map between the reference spheroid and the ellipsoid
     diff_map = 3396E3 - iau_map
 
@@ -501,7 +499,6 @@ def sc2xtrack_distance(perp_mola, perp_lat, perp_lon, rl_scrad, rl_lat, rl_lon):
       output is a vector of distances between the spacecraft and points on the
       cross-track vector
     '''
-    import numpy as np
 
     # define the surface along the perpendicular track in spherical
     # coordinates
@@ -519,13 +516,14 @@ def sc2xtrack_distance(perp_mola, perp_lat, perp_lon, rl_scrad, rl_lat, rl_lon):
     # for each point on the perpendicular, calculate the distance to the
     # spacecraft
     R0 = np.zeros(len(perp_sph), dtype=float)
-    for jj in range(len(R0)):
-        tempA = np.square(perp_sph[jj, 0])
+    for j in range(len(R0)):
+        tempA = np.square(perp_sph[j, 0])
         tempB = np.square(sc_sph[0, 0])
-        tempC = 2 * perp_sph[jj, 0] * sc_sph[0, 0]
-        tempD = np.sin(perp_sph[jj, 1]) * np.sin(sc_sph[0, 1]) * np.cos(perp_sph[jj, 2] - sc_sph[0, 2])
-        tempE = np.cos(perp_sph[jj, 1]) * np.cos(sc_sph[0, 1])
-        R0[jj] = np.sqrt(tempA + tempB - tempC * (tempD + tempE))
+        tempC = 2 * perp_sph[j, 0] * sc_sph[0, 0]
+        tempD = np.sin(perp_sph[j, 1]) * np.sin(sc_sph[0, 1])\
+              * np.cos(perp_sph[j, 2] - sc_sph[0, 2])
+        tempE = np.cos(perp_sph[j, 1]) * np.cos(sc_sph[0, 1])
+        R0[j] = np.sqrt(tempA + tempB - tempC * (tempD + tempE))
 
     return R0
 
@@ -545,18 +543,18 @@ def distance_to_radargram(pri, rx, scradius):
       output is a vector of one-way distances between the spacecraft and the
       start of the radargram
     '''
-    import numpy as np
+
+    # Code mapping PRI codes to actual pulse repetition intervals
+    pri_table = {
+        1: 1428E-6, 2: 1429E-6,
+        3: 1290E-6, 4: 2856E-6,
+        5: 2984E-6, 6: 2580E-6
+    }
 
     # calculate distances
-    for ii in range(len(rx)):
-        if pri[ii] == 1: val = 1428E-6
-        elif pri[ii] == 2: val = 1429E-6
-        elif pri[ii] == 3: val = 1290E-6
-        elif pri[ii] == 4: val = 2856E-6
-        elif pri[ii] == 5: val = 2984E-6
-        elif pri[ii] == 6: val = 2580E-6
-        else: val = 0
-        rx[ii] = rx[ii] * 0.0375E-6 + val - 11.98E-6
+    for i in range(len(rx)):
+        val = pri_table.get(pri[i], 0)
+        rx[i] = rx[i] * 0.0375E-6 + val - 11.98E-6
 
     # convert to one-way distances
     out = (rx * 299792458 / 2) - (scradius - np.min(scradius))
