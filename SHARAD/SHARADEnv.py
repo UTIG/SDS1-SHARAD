@@ -278,7 +278,7 @@ class SHARADEnv:
             return None # no file found
         # TODO: assert glob only has one result
         if ext is 'h5':
-            data = h5.File(files[0], 'r')[typ][orbit]
+            data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
             out = {'et':data['block0_values'][:, 0]}
             for i, val in enumerate(data['block0_items'][:]):
                 key = str(val).replace('b', '').replace('\'', '')
