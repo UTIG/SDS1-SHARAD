@@ -321,15 +321,32 @@ class SHARADEnv:
         """Output data processed and archived by the altimetry processor
           (surface) """
 
-        orbit_full = orbit if orbit.find('_') is 1 \
-                     else self.orbit_to_full(orbit)
-        k = orbit_full.index(orbit_full)
+        orbit_info = self.get_orbit_info(orbit, True)
+
+        if 'relpath' not in orbit_info: # orbit not found
+                         return None
+
+        path1 = os.path.join(self.out['srf_path'], orbit_info['relpath'],
+                             typ, '*.txt')
+        files = glob.glob(path1)
+        # TODO: assert glob only has one result
+        if not files:
+            return None # no file found
+
+        # TODO: assert glob only has one result
+        out = np.genfromtxt(files[0], delimiter=',', names=True)
+
+        #orbit_full = orbit if orbit.find('_') is 1 \
+        #             else self.orbit_to_full(orbit)
+        #k = orbit_full.index(orbit_full)
         # TODO: srf_path and orbit_path aren't defined.
         # Figure out where it is from the old code.
-        globpat = os.path.join(self.srf_path, self.orbit_path[k], typ, '*')
-        fil = glob.glob(globpat)[0]
+        #globpat = os.path.join(self.srf_path, self.orbit_path[k], typ, '*')
+        #globpat = os.path.join(self.out['srf_path'],
+        #                       orbit_info['relpath'], typ, '*.txt')
+        #fil = glob.glob(globpat)[0]
         # TODO: assert only one file found
-        return np.load(fil)
+        return out
 
 
     def my(self, orbit):
