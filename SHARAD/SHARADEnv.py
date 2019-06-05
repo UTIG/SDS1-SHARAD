@@ -166,6 +166,14 @@ class SHARADEnv:
 
             self.orbitinfo[orbit].append(orbitinfo)
 
+        # List files of avaialble for all data products
+        for orbit in self.orbitinfo:
+            for typ in self.out:
+                path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
+                files = glob.glob(path)
+                self.orbitinfo[orbit][0][typ.replace('_','')] = files
+
+
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
         # This isn't ever used.
@@ -175,6 +183,7 @@ class SHARADEnv:
     def get_edr_path(self):
         """ Return the absolute absolute path of EDR data """
         return os.path.join(self.orig_path, 'EDR')
+
 
     def orbit_to_full(self, orbit):
         """
@@ -335,17 +344,6 @@ class SHARADEnv:
 
         # TODO: assert glob only has one result
         out = np.genfromtxt(files[0], delimiter=',', names=True)
-
-        #orbit_full = orbit if orbit.find('_') is 1 \
-        #             else self.orbit_to_full(orbit)
-        #k = orbit_full.index(orbit_full)
-        # TODO: srf_path and orbit_path aren't defined.
-        # Figure out where it is from the old code.
-        #globpat = os.path.join(self.srf_path, self.orbit_path[k], typ, '*')
-        #globpat = os.path.join(self.out['srf_path'],
-        #                       orbit_info['relpath'], typ, '*.txt')
-        #fil = glob.glob(globpat)[0]
-        # TODO: assert only one file found
         return out
 
 
