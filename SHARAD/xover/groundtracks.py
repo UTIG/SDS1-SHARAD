@@ -15,60 +15,65 @@ __history__ = {
 
 """
 This is a short script to extract the ground tracks in lat/lon from
-each record within the SHARAD data set. The area is limited to the HRSC MC11E DTM.
+each record within the SHARAD data set.
+
+The area is limited to the HRSC MC11E DTM.
 """
 
-import sys
+#import sys
 import os
-import glob
+#import glob
 
 import numpy as np
 import pandas as pd
-import pvl
+#import pvl
 
 import get_et
 
 def main():
 
-    # get a list of all files in sharad data folder
-    # identify data records and corresponding label files
-    # GNG TODO: this root path seems wrong now (path not found)
-    raw='/disk/kea/SDS/orig/supl/SHARAD/raw/'
-    records=[]
-    lbls=[]
-    for path, subdirs, files in os.walk(raw):
+    """ get a list of all files in sharad data folder
+    identify data records and corresponding label files """
+    # TODO: GNG this root path seems wrong now (path not found)
+    raw = '/disk/kea/SDS/orig/supl/SHARAD/raw/'
+    records = []
+    lbls = []
+    for path, _, files in os.walk(raw):
         for name in files:
-            f = os.path.join(path, name)
-            if f.endswith('_a_a.dat'):
-                records.append(f)
-                lbls.append(f.replace('_a_a.dat','_a.lbl'))
+            filename = os.path.join(path, name)
+            if filename.endswith('_a_a.dat'):
+                records.append(filename)
+                lbls.append(filename.replace('_a_a.dat', '_a.lbl'))
 
     # path to science auxillary label file
-    lbl_file=os.path.join(raw,'mrosh_0001/label/auxiliary.fmt')
+    lbl_file = os.path.join(raw, 'mrosh_0001/label/auxiliary.fmt')
 
     #p=prog.Prog(int(len(records)),step=0.1)
     print("Found {:d} record files in {:s}".format(len(records), raw))
 
-    save_path='mc11e_full.h5'
-    data_columns = ['idx_start','idx_end']
-    for i,record in enumerate(records):
+    save_path = 'mc11e_full.h5'
+    data_columns = ['idx_start', 'idx_end']
+    for i, record in enumerate(records):
         #p.print_Prog(int(i))
-        rec = get_et.read_science_np(lbl_file,record)[0]
-        et = np.empty(len(rec), dtype = np.double)
-        lat = np.empty(len(rec), dtype = np.double)
-        lon = np.empty(len(rec), dtype = np.double)
-        onb = np.empty(len(rec), dtype = np.int)
-        # TODO: could use list comprehensions here
+        rec = get_et.read_science_np(lbl_file, record)[0]
+        et = np.empty(len(rec), dtype=np.double)
+        lat = np.empty(len(rec), dtype=np.double)
+        lon = np.empty(len(rec), dtype=np.double)
+        onb = np.empty(len(rec), dtype=np.int)
+        # NOTE: could use list comprehensions here
+        # et = np.array([ row[2] for row in rec ])
         for j in range(len(rec)):
-            et[j]=rec[j][2]
-            onb[j]=rec[j][5]
-            lat[j]=rec[j][11]
-            lon[j]=rec[j][10]
-        indx = np.where((lat>0) & (lat<30) & (lon>337.5) & (lon<359.9))[0]
-        if len(indx)>2:  
-            print("record[{:3d}]: Saving to {:s}".format(i,save_path))
+            et[j] = rec[j][2]
+            onb[j] = rec[j][5]
+            lat[j] = rec[j][11]
+            lon[j] = rec[j][10]
+        indx = np.where((lat > 0) & (lat < 30) &
+                        (lon > 337.5) & (lon < 359.9))[0]
+        if len(indx) > 2:
+            print("record[{:3d}]: Saving to {:s}".format(i, save_path))
             df = pd.DataFrame({'idx_start': indx[0], 'idx_end': indx[-1]})
-            df.to_hdf(save_path,records[i],format='table',data_columns=data_columns)
+            df.to_hdf(save_path, records[i], format='table',
+                      data_columns=data_columns)
     print('tracks done')
 
 if __name__ == "__main__":

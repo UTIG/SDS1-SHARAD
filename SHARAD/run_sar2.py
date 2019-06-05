@@ -84,7 +84,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
       taskinfo  : dict of inputs required for SAR processing, with the following keys
                   - name: (required) name for this task, unique among all tasks being processed
                   - input: (required) path to EDR
-                  - output: (required) path to output file (set to None to omit saving)
+                  - output: (required) path to output file (or None to omit saving)
                   - idx_start: (optional)
                   - idx_end: (optional)
       focuser   : Flag for which SAR focuser to use.
@@ -93,11 +93,11 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                   *** delay_doppler_v1 ***
                   - ddv1_posting_distance: distance [m] along track at which to place SAR columns
                   - ddv1_aperture_time   : length [s] of the synthetic aperture
-                  - ddv1_bandwidth       : Doppler badnwidth [Hz] for multilooking
+                  - ddv1_bandwidth       : Doppler bandwidth [Hz] for multilooking
                   *** matched_filter ***
                   - mf_posting_distance  : distance [m] along track at which to place SAR columns
                   - mf_aperture_time     : length [s] of the synthetic aperture
-                  - mf_bandwidth         : Doppler badnwidth [Hz] for multilooking
+                  - mf_bandwidth         : Doppler bandwidth [Hz] for multilooking
                   - mf_recalc_int        : interval [samples] at which to recalculate the matched filter
                   - mf_Er                : relative dielectric permittivity of the subsurface
                   *** delay_doppler_v2 ***
@@ -143,7 +143,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             logging.debug("{:s}: SAR aperture length [s]: {:f}".format(taskname, procparam['mf_aperture_time [s]']))
             logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, procparam['mf_bandwidth [Hz]']))
             logging.debug('{:s}: SAR number of looks: {:d}'.format(taskname, int(number_of_looks)))
-            logging.debug('{:s}: SAR matched filter recalc interval: {:d}'.format(taskname,  procparam['mf_recalc_int [samples]']))
+            logging.debug('{:s}: SAR matched filter recalc interval: {:d}'.format(taskname, procparam['mf_recalc_int [samples]']))
             logging.debug('{:s}: SAR subsurface permittivity: {:d}'.format(taskname, procparam['mf_Er']))
             del number_of_looks
         elif focuser == 'Delay Doppler v2':
@@ -160,11 +160,11 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         path_file = os.path.relpath(path, inputroot)
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
-        h5_file = data_file.replace('_a.dat','_s.h5')
+        h5_file = data_file.replace('_a.dat', '_s.h5')
         cmp_path = os.path.join(path_root, path_file, 'ion', h5_file)
         label_path = SDS + '/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path   = SDS + '/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-        science_path = path.replace('_a.dat','_s.dat')
+        science_path = path.replace('_a.dat', '_s.dat')
 
         logging.debug("{:s}: Loading cmp data from {:s}".format(taskname, cmp_path))
 
@@ -197,7 +197,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         pri_code = data['PULSE_REPETITION_INTERVAL'].values
         rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values
         if focuser != 'Delay Doppler v2':
-            for j,code  in enumerate(pri_code):
+            for j, code in enumerate(pri_code):
                 pri = PRI_TABLE.get(code, 0.0)
                 rxwot[j] *= 0.0375E-6 + pri - 11.98E-6
         et = aux['EPHEMERIS_TIME'].values
@@ -206,7 +206,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         if focuser == 'Delay Doppler v1':
             tpgpy = data['TOPOGRAPHY'].values
             vel = np.hypot(data['TANGENTIAL_VELOCITY_INTERPOLATE'].values,
-                         data['RADIAL_VELOCITY_INTERPOLATE'].values)
+                           data['RADIAL_VELOCITY_INTERPOLATE'].values)
         elif focuser == 'Delay Doppler v2':
             tpgpy = data['TOPOGRAPHY'].values
             lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values
@@ -275,7 +275,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                     dfcol.to_hdf(outputfile, key='columns',
                                  complib='blosc:lz4', complevel=6)
                     dfet.to_hdf(outputfile, key='interpolated ephemeris',
-                                 complib='blosc:lz4', complevel=6)
+                                complib='blosc:lz4', complevel=6)
             elif saving == "npy":
                 outputdir = os.path.dirname(outputfile)
                 if focuser != 'Delay Doppler v2':
@@ -293,34 +293,34 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         logging.error('{:s}: Error processing {:s}'.format(taskname, path))
         for line in traceback.format_exc().split("\n"):
-            logging.error('{:s}: {:s}'.format(taskname, line) )
+            logging.error('{:s}: {:s}'.format(taskname, line))
 
         return 1
 
-    logging.debug('{:s}: Successfully processed file: {:s}'.format(taskname,path))
+    logging.debug('{:s}: Successfully processed file: {:s}'.format(taskname, path))
 
     return 0
 
 
 
 def main():
-    SDS = os.getenv('SDS','/disk/kea/SDS')
-    output_default = os.path.join(SDS,'targ/xtra/SHARAD/foc/')
+    SDS = os.getenv('SDS', '/disk/kea/SDS')
+    output_default = os.path.join(SDS, 'targ/xtra/SHARAD/foc/')
 
     parser = argparse.ArgumentParser(description='Run SAR processing')
-    parser.add_argument('-o','--output', default=output_default,
+    parser.add_argument('-o', '--output', default=output_default,
                         help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5',
                         choices=('hdf5', 'npy', 'none'),
                         help="Output data format")
-    parser.add_argument('-j','--jobs', type=int, default=3,
+    parser.add_argument('-j', '--jobs', type=int, default=3,
                         help="Number of jobs (cores) to use for processing")
-    parser.add_argument('-v','--verbose', action="store_true",
+    parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
-    parser.add_argument('-n','--dryrun', action="store_true",
+    parser.add_argument('-n', '--dryrun', action="store_true",
                         help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
-        help="List of tracks to process")
+                        help="List of tracks to process")
     parser.add_argument('--maxtracks', default=None, type=int,
                         help="Max number of tracks to process")
 
@@ -332,7 +332,7 @@ def main():
                         format="run_sar2: [%(levelname)-7s] %(message)s")
 
     # Set number of cores
-    nb_cores = args.jobs
+    ncores = args.jobs
     # Set output base directory
     outputroot = args.output
 
@@ -360,7 +360,7 @@ def main():
     lookup = np.genfromtxt(args.tracklist, dtype='str')
     # Build list of processes
     process_list = []
-    logging.info("Building task list from {:s}".format(args.tracklist))
+    logging.info("Making task list from {:s}".format(args.tracklist))
 
     inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
     for i, path in enumerate(lookup):
@@ -369,7 +369,7 @@ def main():
     #    path = lookup[gob]
     #    idx_start = h5file[orbit]['idx_start'][0]
     #    idx_end = h5file[orbit]['idx_end'][0]
-        logging.debug("[{:03d} of {:03d}] Building task for {:s}".format(i+1, len(lookup), path))
+        logging.debug("[{:03d} of {:03d}] Making task for {:s}".format(i+1, len(lookup), path))
 
         # check if file has already been processed
         path_file = os.path.relpath(path, inputroot)
@@ -431,11 +431,11 @@ def main():
         # Get the orbit index from the dict, or just use None
         orbit_index = orbit_indexes.get(orbit_name, [None, None])
         task = {
-        'name': 'Task{:03d}-{:s}'.format(i, orbit_name),
-        'input': path,
-        'output': outputfile,
-        'idx_start': orbit_index[0],
-        'idx_end':   orbit_index[1],
+            'name': 'Task{:03d}-{:s}'.format(i, orbit_name),
+            'input': path,
+            'output': outputfile,
+            'idx_start': orbit_index[0],
+            'idx_end': orbit_index[1],
         }
         process_list.append(task)
         logging.debug("{:s} input:  {:s}".format(task['name'], task['input']))
@@ -457,28 +457,30 @@ def main():
 
 #    params_pos = (posting,aperture,bandwidth,focuser,recalc,Er)
     params_named = {'saving':args.ofmt,'debug':args.verbose}
-    if nb_cores <= 1:
+    if ncores <= 1:
         for job in process_list:
             sar_processor(job, processing_parameters, focuser, args.ofmt, args.verbose)
             #params2 = (t,) + processing_parameters + focuser
             #sar_processor( *params2, **params_named )
     else:
-        run_mp(nb_cores, processing_parameters, focuser, params_named, process_list)
-    logging.info("Done in {:0.1f} seconds".format( time.time() - start_time ))
+        run_mp(ncores, processing_parameters, focuser, params_named, process_list)
+    logging.info("Done in {:0.1f} seconds".format(time.time() - start_time))
 
-def run_mp(nb_cores, processing_parameters, focuser, params_named, process_list):
-    pool = multiprocessing.Pool(nb_cores)
+def run_mp(ncores, processing_parameters, focuser, params_named, process_list):
+    pool = multiprocessing.Pool(ncores)
     results = [pool.apply_async(sar_processor,
                                 (t, processing_parameters, focuser,
                                  params_named['saving'], params_named['debug']))
                for t in process_list]
 
     for i, result in enumerate(results):
-        dummy = result.get()
-        if dummy == 1:
-            logging.error("Task {:d} of {:d} had a problem.".format(i+1, len(process_list)))
+        if result.get() == 1:
+            lvl, fmtstr = logging.ERROR, "Task {:d} of {:d} had a problem."
         else:
-            logging.info("Task {:d} of {:d} successful.".format(i+1, len(process_list)))
+            lvl, fmtstr = logging.INFO, "Task {:d} of {:d} successful."
+        logging.log(lvl, fmtstr.format(i+1, len(process_list)))
+
+
 
 if __name__ == "__main__":
     # execute only if run as a script
