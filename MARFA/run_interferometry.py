@@ -30,8 +30,10 @@ gain = 'low'
 fresnel_stack = 15
 fc = 60E6
 B = 19
+fs = 50E6
 roll_shift = 0
 FOI_selection_method = 'maximum'
+interferogram_correction_mode = 'Roll'
 roll_correction = True
 
 path = '/disk/kea/WAIS/targ/xtra/' + project + '/FOC/Best_Versions/'
@@ -39,7 +41,7 @@ if project == 'SRH1':
     rawpath = '/disk/kea/WAIS/orig/xlob/' + line + 'RADnh5/'
 else:
     rawpath = '/disk/kea/WAIS/orig/xlob/' + line + 'RADnh3/'
-normpath = '/disk/kea/WAIS/targ/norm/'
+tregpath = '/disk/kea/WAIS/targ/treg/' + line + 'TRJ_JKB0/'
 chirppath = path + 'S4_FOC/'
 
 
@@ -56,6 +58,11 @@ elif line == 'DEV2/JKB2t/Y81a/':
     trim = [0, 1000, 0, 24000]
     chirpwin = [0, 200]
 
+if project == 'GOG3':
+    mb_offset = 155.6
+elif project == 'SRH1':
+    mb_offset = 127.5
+
 
 # FEATURE OF INTEREST SELECTION ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -63,9 +70,9 @@ elif line == 'DEV2/JKB2t/Y81a/':
 print(' ')
 print('FEATURE OF INTEREST SELECTION')
 
-# Step 1 - load the combined and focused 1m MARFA data product and stack to the 
-#          desired trace spacing in preparation for feature detection and selection
-print('1) load combined and focused radar product')
+# Load the combined and focused 1m MARFA data product and stack to the 
+# desired trace spacing in preparation for feature detection and selection
+print('-- load combined and focused radar product')
 if gain == 'low':
     pwr_image = fl.load_power_image(line, '1', trim, fresnel_stack, 'averaged', pth=path + 'S4_FOC/')
 elif gain == 'high':
@@ -77,8 +84,8 @@ if debug:
     plt.clim([0, 20])
     plt.show()
 
-# Step 2 - Feature selection from the stacked power image
-print('2) select feature of interest')
+# Feature selection from the stacked power image
+print('-- select feature of interest')
 Nf = 0
 ind = 0
 while Nf < 5:
@@ -88,8 +95,10 @@ while Nf < 5:
     #FOI = np.transpose(np.load('ZY1b_testpicksSTART_15Stack.npy'))
     #FOI = np.transpose(np.load('ZY1b_testpicksEND_15Stack.npy'))
     #FOI = np.transpose(np.load('BWN01b_testpicks_15Stack.npy'))
-    #FOI = np.transpose(np.load('Y81a_testpicks_15Stack.npy'))
+    #FOI = np.transpose(np.load('SRH_Y81a_testpicks_15Stack.npy'))
+    #FOI = np.transpose(np.load('SRH_Y81a_lakepicks_15Stack.npy'))
     FOI = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
+    #np.save('SRH_Y81a_lakepicks_15Stack.npy', FOI)
     FOI = np.transpose(FOI)
     if debug:
         plt.figure()
@@ -106,6 +115,18 @@ while Nf < 5:
     Nf = temp; del temp, ii
     ind += 1
 
+# Feature surface above the picked FOI from the stacked power image
+print('-- select surface above feature of interest')
+SRF = fl.surface_pick(pwr_image, FOI)
+if debug:
+    plt.figure()
+    plt.imshow(pwr_image, aspect='auto', cmap='gray')
+    plt.title('power image with picked FOI and associated SURFACE')
+    plt.imshow(FOI, aspect='auto')
+    plt.imshow(SRF, aspect='auto')
+    plt.colorbar()
+    plt.show()
+
 print('FEATURE OF INTEREST SELECTION -- complete')
 print(' ')
 
@@ -121,8 +142,8 @@ print(' ')
 
 print('CHIRP STABILITY ASSESSMENT')
 
-# Step 1 - load and range compress the interpolated 1m data products
-print('1) load and range compress raw radar data')
+# Load and range compress the interpolated 1m data products
+print('-- load and range compress raw radar data')
 #dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trim, rawpath, path + 'S2_FIL/' + line, chirppath + line, do_cinterp=False)
 if debug:
     plt.figure()
@@ -130,8 +151,8 @@ if debug:
     plt.subplot(212); plt.imshow(20 * np.log10(np.abs(dechirpB[0:1000, :])), aspect='auto', cmap='gray'); plt.title('Antenna B')
     plt.show()
 
-# Step 2 - extract the loop-back chirp
-print('2) extract the loop-back chirp')
+# Extract the loop-back chirp
+print('-- extract the loop-back chirp')
 #loopbackA = dechirpA[chirpwin[0]:chirpwin[1], :]
 #loopbackB = dechirpB[chirpwin[0]:chirpwin[1], :]
 if debug:
@@ -153,8 +174,8 @@ if debug:
     plt.ylabel('magnitude [dB]')
     plt.show()
 
-# Step 3 - assess the phase stability of the loop-back chirp for each antenna
-print('3) characterize chirp stability')
+# Assess the phase stability of the loop-back chirp for each antenna
+print('-- characterize chirp stability')
 #stabilityA = fl.chirp_phase_stability(loopbackA[:, 0], loopbackA, method='xcorr', rollval=20)
 #stabilityB = fl.chirp_phase_stability(loopbackB[:, 0], loopbackB, method='xcorr', rollval=20)
 stabilityA = np.zeros((trim[3]), dtype=int)
@@ -183,8 +204,8 @@ print(' ')
 
 print('INTERFEROMETRY')
 
-# Step 1 - load the focused SLC 1m port and starboard radargrams
-print('1) load port and starboard single-look products')
+# Load the focused SLC 1m port and starboard radargrams
+print('-- load port and starboard single-look products')
 if gain == 'low':
     magA, phsA = fl.load_marfa(line, '5', pth=path + 'S4_FOC/')
     magB, phsB = fl.load_marfa(line, '7', pth=path + 'S4_FOC/')
@@ -218,9 +239,9 @@ if debug:
     plt.show()
     del magA, phsA, magB, phsB
 
-# Step 2 - apply shifts calculated from chirp stability analysis to align 
-#          range lines
-print('2) chirp stability adjustment')
+# Apply shifts calculated from chirp stability analysis to align 
+# range lines
+print('-- chirp stability adjustment')
 cmpA2 = fl.phase_stability_adjustment(cmpA, stabilityA)
 cmpB2 = fl.phase_stability_adjustment(cmpB, stabilityB)
 if debug:
@@ -234,8 +255,8 @@ if debug:
     plt.show()
     del magA, phsA, magB, phsB
 
-# Step 3 - sub-pixel co-registration of the port and starboard range lines
-print('3) co-registration of port and starboard radargrams')
+# Sub-pixel co-registration of the port and starboard range lines
+print('-- co-registration of port and starboard radargrams')
 temp = np.load('Y81a_0to24000_AfterCoregistration.npz')
 cmpA3 = temp['cmpA3']
 cmpB3 = temp['cmpB3']
@@ -253,66 +274,118 @@ if debug:
     plt.subplot(414); plt.imshow(np.rad2deg(phsB), aspect='auto', cmap='seismic'); plt.title('co-registered antenna B phase'); plt.clim([-180, 180]); plt.colorbar()
     plt.show()
 
-# Step 4 - determine the number of azimuth samples between independent looks
-print('4) detemine azimuth samples between independent range lines')
+# Determine the number of azimuth samples between independent looks
+print('-- detemine azimuth samples between independent range lines')
 az_step = fl.independent_azimuth_samples(cmpA3, cmpB3, FOI)
 az_step = int(az_step)
+#az_step = 8
 print('   > azimuth samples between independent range lines:', str(az_step))
 
-# Step 5 - roll correction 
-print('5) derive roll correction')
-roll_phase, roll_ang = fl.roll_correction(np.divide(299792458, fc), B, trim, normpath + line + 'AVN_JKBa/', path + 'S1_POS/' + line, roll_shift=roll_shift)
-if debug:
-    plt.figure()
-    plt.plot(np.rad2deg(roll_phase))
-    plt.title('roll correction interferometric phase angle [deg]')
-    plt.show()
+if interferogram_correction_mode == 'Roll':
+   
+    # Roll correction 
+    print('-- derive roll correction')
+    roll_phase, roll_ang = fl.roll_correction(np.divide(299792458, fc), B, trim, tregpath, path + 'S1_POS/' + line, roll_shift=roll_shift)
+    if debug:
+        plt.figure()
+        plt.subplot(211)
+        plt.plot(np.linspace(0, 1, len(roll_ang)), np.rad2deg(roll_ang))
+        plt.title('roll angle [deg]'); plt.xlim([0, 1])
+        plt.subplot(212)
+        plt.plot(np.linspace(0, 1, len(roll_ang)), np.rad2deg(roll_phase))
+        plt.title('roll correction interferometric phase angle [deg]'); plt.xlim([0, 1])
+        plt.show()
 
-# Step 6 - interferogram
-print('6) producing interferogram')
-int_image = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, roll_phase, roll_correction, az_step=az_step)
-if debug:
-    int_image_noroll = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, roll_phase, False, az_step=az_step)
-    plt.figure()
-    plt.subplot(313); plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='seismic')
-    plt.title('interferogram with defined roll correction [deg]'); plt.clim([-180, 180]); plt.imshow(FOI, aspect='auto')
-    plt.subplot(311); plt.imshow(np.rad2deg(int_image_noroll), aspect='auto', cmap='seismic')
-    plt.title('interferogram no roll [deg]'); plt.clim([-180, 180]); plt.imshow(FOI, aspect='auto')
-    plt.subplot(312)
-    plt.plot(np.linspace(0, 1, len(roll_ang)), roll_ang - roll_shift, label='actual')
-    plt.plot(np.linspace(0, 1, len(roll_ang)), roll_ang, label='applied')
-    plt.title('roll angle [deg]'); plt.xlim([0, 1]); plt.legend()
-    plt.show()
+    # Interferogram
+    print('-- producing interferogram')
+    int_image = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, roll_phase, roll_correction, az_step=az_step)
+    if debug:
+        int_image_noroll = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, roll_phase, False, az_step=az_step)
+        plt.figure()
+        plt.subplot(313); plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='hsv'); plt.colorbar()
+        plt.title('interferogram with defined roll correction [deg]'); plt.clim([-180, 180]); plt.imshow(FOI, aspect='auto')
+        plt.subplot(311); plt.imshow(np.rad2deg(int_image_noroll), aspect='auto', cmap='hsv'); plt.colorbar()
+        plt.title('interferogram no roll [deg]'); plt.clim([-180, 180]); plt.imshow(FOI, aspect='auto')
+        plt.subplot(312)
+        plt.plot(np.linspace(0, 1, len(roll_ang)), roll_ang - roll_shift, label='actual')
+        plt.plot(np.linspace(0, 1, len(roll_ang)), roll_ang, label='applied')
+        plt.title('roll angle [deg]'); plt.xlim([0, 1]); plt.legend()
+        plt.show()
 
-# Step 7 - correlation map
-print('7) producing correlation map')
+elif interferogram_correction_mode == 'Reference':
+
+    roll_ang = np.zeros((np.size(cmpA3, axis=1)), dtype=float)
+
+    # Pick reference surface from the combined power image
+    print('-- pick reference surface')
+    #reference = np.transpose(np.load('SRH_Y81a_referencepicks_15Stack.npy'))
+    reference = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
+    #np.save('SRH_Y81a_referencepicks_15Stack.npy', reference)
+    reference = np.transpose(reference)
+    if debug:
+        plt.figure()
+        plt.imshow(pwr_image, aspect='auto', cmap='gray')
+        plt.title('power image with picked reference surface')
+        plt.imshow(reference, aspect='auto')
+        plt.colorbar()
+        plt.show()
+
+    # Create uncorrected interferogram
+    print('-- producing interferogram')
+    uncorr_interferogram = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, np.zeros((np.size(cmpA3, axis=1)), dtype=float), False, az_step=az_step)
+    if debug:
+        plt.figure()
+        plt.imshow(np.rad2deg(uncorr_interferogram), aspect='auto', cmap='hsv')
+        plt.title('uncorrected interferogram [deg]'); plt.clim([-180, 180]); plt.colorbar()
+        plt.imshow(FOI, aspect='auto')
+        plt.imshow(reference, aspect='auto')
+        plt.show()
+
+    # Normalize uncorrected interferogram
+    print('-- normalizing interferogram')
+    int_image, reference_phase, reference = fl.interferogram_normalization(uncorr_interferogram, reference)
+    if debug:
+        plt.figure()
+        plt.subplot(311); plt.imshow(np.rad2deg(uncorr_interferogram), aspect='auto', cmap='hsv')
+        plt.title('uncorrected interferogram [deg]'); plt.clim([-180, 180]); plt.colorbar()
+        plt.imshow(FOI, aspect='auto'); plt.imshow(reference, aspect='auto')
+        plt.subplot(312)
+        plt.plot(np.arange(0, len(reference_phase)), np.rad2deg(reference_phase))
+        plt.title('reference interferometric phase [deg]')
+        plt.xlim([0, len(reference_phase)])
+        plt.subplot(313); plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='hsv')
+        plt.title('corrected interferogram [deg]'); plt.clim([-180, 180]); plt.colorbar()
+        plt.imshow(FOI, aspect='auto'); plt.imshow(reference, aspect='auto')
+        plt.show()
+
+# Correlation map
+print('-- producing correlation map')
 corrmap = fl.stacked_correlation_map(cmpA3, cmpB3, fresnel_stack, az_step=az_step)
-if debug:
+if True:
+    RGB = np.zeros((len(corrmap), np.size(corrmap, axis=1), 3), dtype=float)
+    RGB[:, :, 2] = np.divide(np.abs(corrmap), np.max(np.max(np.abs(corrmap))))
+    RGB[:, :, 1] = 1
+    RGB[:, :, 0] = np.divide(np.rad2deg(int_image) + 180, 360)
     plt.figure()
-    plt.subplot(212)
-    plt.imshow(corrmap, aspect='auto', cmap='nipy_spectral')
-    plt.title('magnitude of correlation map at Fresnel trace spacing')
-    plt.colorbar()
-    plt.clim([0, 1])
-    plt.imshow(FOI, aspect='auto')
-    plt.subplot(211)
-    plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='seismic')
-    plt.title('interferogram [deg]'); plt.clim([-180, 180]); plt.colorbar(); plt.imshow(FOI, aspect='auto')
-    #RGB = np.zeros((len(corrmap), np.size(corrmap, axis=1), 3), dtype=float)
-    #RGB[:, :, 0] = np.divide(np.abs(corrmap), np.max(np.max(np.abs(corrmap))))
-    #RGB[:, :, 1] = RGB[:, :, 1] + 0.5
-    #RGB[:, :, 2] = np.divide(int_image + 180, 360)
-    #plt.figure()
-    #plt.subplot(311); plt.imshow(int_image, aspect='auto', cmap='seismic'); plt.title('interferogram')
-    #plt.subplot(312); plt.imshow(np.abs(corrmap), aspect='auto', cmap='nipy_spectral'); plt.title('correlation map')
-    #plt.subplot(313); plt.imshow(col.hsv_to_rgb(RGB), aspect='auto')
-    #plt.title('HSV image with correlation map in Hue and interferogram in Values\n Saturation set to 0.5')
-    plt.show()
+    plt.subplot(311)
+    plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='hsv'); plt.title('interferogram'); plt.colorbar()
+    plt.imshow(FOI, aspect='auto'); plt.imshow(SRF, aspect='auto')
+    plt.subplot(312)
+    plt.imshow(np.abs(corrmap), aspect='auto', cmap='nipy_spectral'); plt.title('correlation map'); plt.colorbar()
+    plt.imshow(FOI, aspect='auto'); plt.imshow(SRF, aspect='auto')
+    plt.subplot(313)
+    plt.imshow(col.hsv_to_rgb(RGB), aspect='auto', cmap='hsv'); plt.colorbar()
+    plt.imshow(FOI, aspect='auto'); plt.imshow(SRF, aspect='auto')
+    plt.title('HSV image with interferogram in Hue and correlation in Values\n Saturation set to 1')
+    #plt.show()
 
-# Step 8 - extract feature of interest phase and correlation
-print('8) extract information along FOI')
+# Extract feature-of-interest interferometric phase and correlation 
+# as well as the mean interferometric phase of the feature-of-interest
+# as if it were off-nadir clutter
+print('-- extract information')
 FOI_phs = fl.FOI_extraction(int_image, FOI)
 FOI_cor = fl.FOI_extraction(np.abs(corrmap), FOI)
+SRF_phs = fl.offnadir_clutter(FOI, SRF, roll_ang, fresnel_stack, B, mb_offset, np.divide(299792458, fc), np.divide(1, fs))
 if debug:
     plt.figure()
     plt.subplot(211); plt.hist(np.rad2deg(FOI_phs), bins=20)
@@ -322,20 +395,27 @@ if debug:
     plt.title('distribution of interferometric correlation')
     plt.show()
 mean_phi = np.rad2deg(np.mean(FOI_phs))
+mean_srf = np.rad2deg(np.mean(SRF_phs))
+if mean_srf < 0:
+    mean_srf = np.multiply(360, (mean_srf / 360) + np.floor(np.abs(mean_srf / 360)))
+else:
+    mean_srf = np.multiply(360, (mean_srf / 360) - np.floor(np.abs(mean_srf / 360)))
 gamma = np.mean(FOI_cor)
-#mean_phi = np.rad2deg(np.median(FOI_phs))
-#gamma = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-N = int(np.floor(np.divide(fresnel_stack, az_step)) + 1)
+N = int(np.floor(np.divide(fresnel_stack, az_step)))
+if N != 1:
+    N = N + 1
 Nf = int(np.round(np.divide(Nf, az_step)) + 1)
-print('   > mean interferometric phase:', str(mean_phi))
-print('   > mean interferometric correlation:', str(gamma))
+print('   > unwrapped cross-track surface clutter mean interferometric phase:', str(np.round(mean_srf, 3)))
+print('   > FOI mean interferometric phase:', str(np.round(mean_phi, 3)))
+print('   > FOI mean interferometric correlation:', str(np.round(gamma, 3)))
 print('   > number of independent looks:', str(N))
 print('   > number of independent multi-looked pixels used to define the FOI:', str(Nf))
 
-# Step 9 - calculate nadir empirical interferometric phase PDF and empirical PDF
-#          corresponding to the observed mean phase
-print('9) calculate observed and nadir empirical interferometric phase PDFs')
+# Calculate nadir, FOI and off-nadir surface clutter empirical interferometric
+# phase PDFs
+print('-- calculate empirical interferometric phase PDFs')
 _, nadir_emp_pdf = fl.empirical_pdf(fc, B, N, gamma)
+_, srf_emp_pdf = fl.empirical_pdf(fc, B, N, gamma, phi_m=mean_srf)
 iphi, obs_emp_pdf = fl.empirical_pdf(fc, B, N, gamma, phi_m=mean_phi)
 if True:
     fig, ax1 = plt.subplots()
@@ -346,21 +426,23 @@ if True:
     ax2 = ax1.twinx()
     ax2.set_ylabel('pds [$\phi$]', color='r')
     ax2.plot(np.rad2deg(iphi), nadir_emp_pdf, '--r', label='nadir empirical pdf')
-    ax2.plot(np.rad2deg(iphi), obs_emp_pdf, '-r', label='observed empirical pdf')
+    ax2.plot(np.rad2deg(iphi), srf_emp_pdf, ':r', label='off-nadir clutter empirical pdf')
+    ax2.plot(np.rad2deg(iphi), obs_emp_pdf, '-g', label='observed empirical pdf', linewidth=3)
     ax2.tick_params(axis='y', labelcolor='r')
     plt.ylim([0, np.max([1.1 * np.max(nadir_emp_pdf), 1.1 * np.max(obs_emp_pdf)])])
     fig.tight_layout()
     plt.xlim([-180, 180])
-    plt.legend()
-    plt.show()
+    plt.legend(loc=1)
+    #plt.show()
   
-# Step 10 - determine the uncertainty in the empirical sample mean from the
-#          empirical distributions
-print('10) determine uncertainties in empirical sample mean of each PDF')
+# Determine the uncertainty in the nadir empirical sample mean
+print('-- determine uncertainty in the nadir empirical sample mean')
 nadir_sigma_m = fl.empirical_sample_mean(N, Nf, iphi, gamma)
-obs_sigma_m = fl.empirical_sample_mean(N, Nf, iphi, gamma, phi_m=mean_phi)
-print('   > uncertainty in nadir empirical sample mean:', str(nadir_sigma_m))
-print('   > uncertainty in observed empirical sample mean:', str(obs_sigma_m))
+#obs_sigma_m = fl.empirical_sample_mean(N, Nf, iphi, gamma, phi_m=mean_phi)
+#srf_sigma_m = fl.empirical_sample_mean(N, Nf, iphi, gamma, phi_m=mean_srf)
+print('   > uncertainty in nadir empirical sample mean:', str(np.round(nadir_sigma_m, 3)))
+#print('   > uncertainty in cross-track surface clutter empirical sample mean:', str(np.round(srf_sigma_m, 3)))
+#print('   > uncertainty in observed empirical sample mean:', str(np.round(obs_sigma_m, 3)))
     
 print('INTERFEROMETRY -- complete')
 print(' ')
@@ -368,141 +450,28 @@ print(' ')
 # -------------------------------------------------------------------------
 # -------------------------------------------------------------------------
 
-# compare the empirical sample mean with the mean of the FOI interferometric
-# phase angles to determine whether the FOI is at nadir or not
-if obs_sigma_m < np.abs(0.5 * mean_phi):
+# Compare the uncertainty in the nadir distirbution to the mean FOI interferometric
+# phase angle to determine whether the FOI is at nadir or not
+if nadir_sigma_m < np.abs(0.5 * mean_phi):
     print('>> FOI can be distinguished from an identical feature at nadir')
     print('   > mean interferometric phase angle:', np.round(mean_phi, 3), 'degrees')
 else:
-    print('>> FOI cannot be distinguished from a nadir reflection')  
+    print('>> FOI cannot be distinguished from a nadir feature')  
 print(' ')
 
+## Compare the uncertainty in the nadir distribution to the mean surface interferometric
+## phase angle to determine whether the FOI is at off-nadir or not
+#if mean_srf <= -180:
+#    test_phi = np.abs(-360 - mean_srf)
+#elif mean_srf >= 180:
+#    test_phi = -1 * (360 - mean_srf)
+#else:
+#    test_phi = mean_srf
+#if nadir_sigma_m + test_phi < np.abs(0.5 * mean_phi):
+#    print('>> FOI can be distinguished from an identical off-nadir clutter feature')
+#    print('   > mean interferometric phase angle:', np.round(mean_phi, 3), 'degrees')
+#else:
+#    print('>> FOI cannot be distinguished from an off-nadir clutter feature')
+#print(' ')
 
-#stack_val = 15
-#
-## load
-#pwr_image = fl.load_power_image(line, '1', trim, 1, 'averaged', pth=path + 'S4_FOC/')
-#temp = np.load('ZY1b_0to12000_AfterCoregistration.npz')
-#cmpA = temp['cmpA3']
-#cmpB = temp['cmpB3']
-#magA, _ = fl.convert_to_magphs(cmpA)
-#magB, _ = fl.convert_to_magphs(cmpB)
-#
-## stack
-#pwr_image_stack = np.divide(fl.stack(pwr_image, stack_val), stack_val)
-#magA_stack = np.divide(fl.stack(magA, stack_val), stack_val)
-#magB_stack = np.divide(fl.stack(magB, stack_val), stack_val)
-#
-## RGB 
-#RGB = np.zeros((len(pwr_image), np.size(pwr_image, axis=1), 3), dtype=float)
-#RGB[:, :, 0] = np.divide(pwr_image, np.max(np.max(pwr_image)))
-#RGB[:, :, 1] = np.divide(magA, np.max(np.max(pwr_image)))
-#RGB[:, :, 2] = np.divide(magB, np.max(np.max(pwr_image)))
-#
-## RBG stack
-#RGB_stack = np.zeros((len(pwr_image_stack), np.size(pwr_image_stack, axis=1), 3), dtype=float)
-#RGB_stack[:, :, 0] = np.divide(pwr_image_stack, np.max(np.max(pwr_image_stack)))
-#RGB_stack[:, :, 1] = np.divide(magA_stack, np.max(np.max(pwr_image_stack)))
-#RGB_stack[:, :, 2] = np.divide(magB_stack, np.max(np.max(pwr_image_stack)))
-#
-## pre-stacked radargrams
-#plt.figure()
-#plt.subplot(311); plt.imshow(pwr_image, aspect='auto', cmap='gray'); plt.colorbar(); plt.clim([0, 12])
-#plt.subplot(312); plt.imshow(magA, aspect='auto', cmap='gray'); plt.colorbar(); plt.clim([0, 12])
-#plt.subplot(313); plt.imshow(magB, aspect='auto', cmap='gray'); plt.colorbar(); plt.clim([0, 12])
-## stacked radargrams
-#plt.figure()
-#plt.subplot(311); plt.imshow(pwr_image_stack, aspect='auto', cmap='gray'); plt.colorbar(); plt.clim([0, 12])
-#plt.subplot(312); plt.imshow(magA_stack, aspect='auto', cmap='gray'); plt.colorbar(); plt.clim([0, 12])
-#plt.subplot(313); plt.imshow(magB_stack, aspect='auto', cmap='gray'); plt.colorbar(); plt.clim([0, 12])
-## RBG
-#plt.figure()
-#plt.imshow(RGB, aspect='auto'); plt.colorbar()
-#plt.title('RGB: combined in R, A in G, B in B - normalized to maximum of combined')
-## stacked RBG
-#plt.figure()
-#plt.imshow(RGB_stack, aspect='auto'); plt.colorbar()
-#plt.title('stacked RGB: combined in R, A in G, B in B - normalized to maximum of combined')
-#plt.show()
- 
-
-
-
-
-
-
-
-
-
-
-
-# combination debug plot showing the picked interface on all power images
-if debug:
-    plt.figure()
-    # power image
-    plt.subplot(321)
-    plt.imshow(pwr_image, aspect='auto', cmap='gray')
-    plt.imshow(FOI, aspect='auto', cmap='jet')
-    plt.title('power image')
-    if fresnel_stack == 1:
-        plt.xlim([3200, 4400])
-        plt.ylim([580, 520])
-    elif fresnel_stack == 15:
-        plt.xlim([75, 300])
-        plt.ylim([600, 480])
-    # antenna A
-    plt.subplot(323)
-    plt.title('antenna A image')
-    if fresnel_stack == 1:
-        plt.imshow(magA, aspect='auto', cmap='gray')
-        plt.xlim([3200, 4400])
-        plt.ylim([580, 520])
-    else:
-        plt.imshow(np.divide(fl.stack(magA, fresnel_stack), fresnel_stack), aspect='auto', cmap='gray')
-        if fresnel_stack == 15:
-            plt.xlim([75, 300])
-            plt.ylim([600, 480])
-    plt.imshow(FOI, aspect='auto', cmap='jet')
-    # antenna B
-    plt.subplot(325)
-    plt.title('antenna B image')
-    if fresnel_stack == 1:
-        plt.imshow(magB, aspect='auto', cmap='gray')
-        plt.xlim([3200, 4400])
-        plt.ylim([580, 520])
-    else:
-        plt.imshow(np.divide(fl.stack(magB, fresnel_stack), fresnel_stack), aspect='auto', cmap='gray')
-        if frensel_stack == 15:
-            plt.xlim([75, 300])
-            plt.ylim([600, 480])
-    plt.imshow(FOI, aspect='auto', cmap='gray')
-    # interferogram without roll
-    plt.subplot(322)
-    plt.title('interferogram without roll')
-    plt.imshow(np.rad2deg(int_image_noroll), aspect='auto', cmap='seismic'); plt.clim([-180, 180])
-    plt.imshow(FOI, aspect='auto', cmap='jet')
-    if fresnel_stack == 1:
-        plt.xlim([3200, 4400])
-        plt.ylim([580, 520])
-    elif fresnel_stack == 15:
-        plt.xlim([75, 300])
-        plt.ylim([600, 480])
-    # roll angles
-    plt.subplot(324)
-    plt.plot(roll_ang - roll_shift, label='actual')
-    plt.plot(roll_ang, label='applied')
-    plt.legend()
-    plt.title('roll angle [deg]')
-    plt.xlim([3200, 4400])
-    # interferogram with roll
-    plt.subplot(326)
-    plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='seismic'); plt.clim([-180, 180])
-    plt.imshow(FOI, aspect='auto', cmap='jet')
-    plt.title('interferogram with roll')
-    if fresnel_stack == 1:
-        plt.xlim([3200, 4400])
-        plt.ylim([580, 520])
-    elif fresnel_stack == 15:
-        plt.xlim([75, 300])
-        plt.ylim([600, 480])
-    plt.show()
+plt.show()

@@ -18,6 +18,8 @@ from scipy import integrate
 from scipy import signal
 from scipy.signal import detrend
 import scipy.special
+
+import interface_picker as ip
 import unfoc as unfoc
 from parse_channels import parse_channels
 
@@ -388,7 +390,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
         output = np.angle(np.multiply(cmpA, np.conj(cmpB)))
         if roll:
             for ii in range(np.size(output, axis=1)):
-                output[:, ii] = output[:, ii] - rollphase[ii]
+                output[:, ii] = output[:, ii] + rollphase[ii]
     else:
         # setup bounds for each multilook window (output range line in middle)
         indices = np.arange(np.floor(fresnel / 2) + 1, np.size(cmpA, axis=1), fresnel) - 1
@@ -417,7 +419,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
                 output[jj, ii] = np.angle(temp)
             if roll:
                 #output[:, ii] = output[:, ii] - np.mean(rollphase[start_ind:end_ind])
-                output[:, ii] = output[:, ii] - np.mean(rollphase[val.astype(int)])
+                output[:, ii] = output[:, ii] + np.mean(rollphase[val.astype(int)])
         #inter = np.zeros((len(cmpA), np.size(cmpA, axis=1)), dtype=float)
         #for ii in range(np.size(cmpA, axis=1)):    
         #    #if ii % 500 == 0:
@@ -677,16 +679,46 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
 
     return coregA, coregB
 
-def load_roll(norm_path, s1_path):
+def read_ztim(filename, field_names=None):
+    '''
+    Function to read a binary ztim file.
+
+    Inputs:
+    -------------
+          filename: path to the ztim file
+       field_names: names of the data columns in the ztim file
+
+    Output:
+    ------------
+        data frame of the ztim 
+    '''
+
+    ztim_format = 'S1, i2, i2, i4'
+    ztim_names = ['PLUS', 'YEAR', 'DAY', 'itim']
+    field_format = ', f8'
+
+    with open(filename, 'rb') as zfile:
+        zformat = zfile.readline()
+        num_fields = len(zformat.lstrip(b'zfil1z').rstrip())
+        zformat = ztim_format + num_fields * field_format
+
+        if field_names is None:
+            field_names = ['d' + str(elem) for elem in range(num_fields)]
+
+        data = np.core.records.fromfile(zfile, formats=zformat, names=ztim_names + field_names,
+                            aligned=True, byteorder='>')
+
+    return pd.DataFrame(data) 
+
+def load_roll(treg_path, s1_path):
     '''
     Function to extract and interpolate aircraft roll information such that it can
     be compared to the MARFA 1m focused data product.
 
     Inputs:
     -------------
-       norm_path: path to the 'norm' folder containing the relavant 'roll_ang'
-                  and 'syn_ztim' ascii files for the specific line being
-                  investigated
+       treg_path: path to the 'treg' folder containing the relavant ztim binary
+                  file from which the roll data will be loaded
          s1_path: path to the 'S1_POS' folder containing the relevant 'ztim_xyhd'
                   ascii file for the specific line being investigated.
 
@@ -695,15 +727,22 @@ def load_roll(norm_path, s1_path):
        interpolated roll vector at 1m trace intervals
     '''
 
-    # load the roll data
-    norm_roll = np.genfromtxt(norm_path + 'roll_ang')
+    ## load the roll data
+    #norm_roll = np.genfromtxt(norm_path + 'roll_ang')
+    #
+    ## extract the ztim vector from norm
+    #temp = pd.read_csv(norm_path + 'syn_ztim', header=None)
+    #norm_ztim = np.zeros((len(temp), ), dtype=float)
+    #for ii in range(len(norm_ztim)):
+    #    norm_ztim[ii] = float(temp[2][ii].replace(')', ''))
+    #del temp
 
-    # extract the ztim vector from norm
-    temp = pd.read_csv(norm_path + 'syn_ztim', header=None)
-    norm_ztim = np.zeros((len(temp), ), dtype=float)
-    for ii in range(len(norm_ztim)):
-        norm_ztim[ii] = float(temp[2][ii].replace(')', ''))
-    del temp
+    # load base roll and timing data
+    fn = treg_path + 'ztim_llzrphsaaa.bin'
+    fieldnames = ['lat', 'long', 'z', 'roll', 'pitch', 'heading', 'sigma', 'EW_acc', 'NS_acc', 'z_acc']
+    test = read_ztim(fn, fieldnames)
+    norm_ztim = test['itim']
+    norm_roll = test['roll']
 
     # load the timing and alongtrack position associated with each range line
     # from the S1_POS folder
@@ -743,17 +782,19 @@ def roll_correction(l, B, trim, norm_path, s1_path, roll_shift=0):
 
     Outputs:
     -------------
-        roll_phase: phase relating to roll
+        roll_phase: phase relating to roll [rad]
+          roll_ang: recorded roll angle [rad]
     '''
 
     # load the roll data
     roll_dist, roll_ang = load_roll(norm_path, s1_path)
     roll_dist = roll_dist[trim[2]:trim[3]]
     roll_ang = roll_ang[trim[2]:trim[3]] + roll_shift
+    roll_ang = np.deg2rad(roll_ang)
 
     # convert roll angle to a phase shift as if the roll angle represents
     # a change in the radar look angle
-    roll_phase = np.multiply(np.divide(2 * np.pi * B, l), np.sin(np.deg2rad(roll_ang)))
+    roll_phase = np.multiply(np.divide(2 * np.pi * B, l), np.sin(-1 * roll_ang))
 
     return roll_phase, roll_ang
 
@@ -1456,3 +1497,158 @@ def independent_azimuth_samples(cmpA, cmpB, FOI, roll_range=100, ft_step=1):
 
     return az_step
 
+def interferogram_normalization(interferogram, surface):
+    '''
+    Function to normalize interferogram using the interferometric phases defined along
+    a defined surface. The function has an internal step to make sure the 'surface'
+    input covers the entire breadth of the interferogram. The function interpolates the
+    picked surface into spaces where the surface isn't defined.
+    
+    Inputs:
+    ----------------
+      interferogram: stacked interferogram
+            surface: picked surface for interferogram normalization
+
+    Outputs:
+    ----------------
+      output is the normalized interferogram
+    '''
+
+    # ensure the picked surface covers the breadth of the interferogram
+    test = np.nansum(surface, axis=0)
+    x = np.argwhere(test == 1)[:, 0]
+    y = np.zeros((len(x)), dtype = int)
+    for ii in range(len(x)):
+        y[ii] = np.argwhere(surface[:, x[ii]] == 1)
+    xall = np.arange(0, np.size(surface, axis=1))
+    yall = np.interp(xall, x, y)
+    surface2 = np.zeros((len(surface), np.size(surface, axis=1)), dtype=float)
+    surface2[:, :] = np.nan
+    for ii in range(len(xall)):
+        surface2[int(yall[ii]), ii] = 1
+
+    # extract interferometric phase along the surface
+    #surface_phase = FOI_extraction(interferogram, surface2)
+    surface_phase = np.zeros((len(xall)), dtype=float)
+    for ii in range(len(xall)):
+        surface_phase[ii] = interferogram[int(yall[ii]), int(xall[ii])]
+
+    # normalize interferogram
+    #output = np.zeros((len(interferogram), len(xall)), dtype=float)
+    #for ii in range(len(surface_phase)):
+    #    output[:, ii] = interferogram[:, ii] - surface_phase[ii]
+    corr = np.ones((len(interferogram), len(xall)), dtype=float)
+    for ii in range(len(xall)):
+        corr[:, ii] = np.multiply(corr[:, ii], surface_phase[ii])
+    output = interferogram - corr
+
+    return output, surface_phase, surface2
+
+def surface_pick(image, FOI, pick_method='maximum'):
+    '''
+    Function to pick the surface echo overlying an already defined subsurface
+    feature-of-interest
+    
+    Inputs:
+    ----------------
+           image: power image
+             FOI: array of the same size as the power image with ones where
+                  a feature-of-interest has been defined
+     pick_method: string indentifying how individual pixels corresponding
+                  to the surface are picked during surface definition
+
+    Outputs:
+    ----------------
+      out is an array of the same size as the poower image with ones
+          where the surface overlying the feature-of-interst has been
+          defined
+    '''
+
+    # extract the along-track sample bounds in the picked FOI
+    inds = np.argwhere(FOI == 1)[:, 1]
+    indA = min(inds)
+    indB = max(inds)
+    image2 = image[:, indA:indB]
+
+    # pick the surface within the area covered by the FOI
+    SRF = ip.picker(np.transpose(image2), snap_to=pick_method)
+    SRF = np.transpose(SRF)
+    
+    # ensure the picked surface covers the breadth of the trimmed power image
+    test = np.nansum(SRF, axis=0)
+    x = np.argwhere(test == 1)[:, 0]
+    y = np.zeros((len(x)), dtype = int)
+    for ii in range(len(x)):
+        y[ii] = np.argwhere(SRF[:, x[ii]] == 1)
+    xall = np.arange(0, np.size(SRF, axis=1))
+    yall = np.interp(xall, x, y)
+    SRF2 = np.zeros((len(SRF), np.size(SRF, axis=1)), dtype=float)
+    SRF2[:, :] = np.nan
+    for ii in range(len(xall)):
+        SRF2[int(yall[ii]), ii] = 1
+
+    # position the picked surface within the full breadth of the power image
+    tempA = np.nan * np.ones((len(FOI), indA))
+    tempB = np.nan * np.ones((len(FOI), np.size(FOI, axis=1) - indB))
+    out = np.concatenate((tempA, SRF, tempB), axis=1)
+
+    return out
+
+def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
+    '''
+    Function to estimate the mean phase as if the user defined FOI were
+    off-nadir surface clutter. This is done by first estimating the
+    cross-track look angle assuming all propagation is at the speed
+    of light and look angle can be estimated using the time delay to the
+    surface as well as the time delay to the picked FOI. 
+
+    Inputs:
+    ----------------
+           FOI: array of the same size as the radargram with ones where
+                a feature-of-interest has been defined
+           SRF: array of the same size as the radargram with ones where
+                the surface above the feaure-of-interest has been defined
+       rollang: vector of roll angles [rad]
+             N: along-track stacking interval [samples]
+             B: interferometric baseline [m]
+     mb_offset: delay (in fast-time samples) between the start of the
+                radargram and signal transmission [samples]
+             l: radar wavelength in free space [m]
+            dt: fast-time sample interval [s]
+
+    Outputs:
+    ----------------
+      output is an estimate of the mean interferometric phase of the FOI as
+             if it were off-nadir surface clutter
+    '''
+    out = []
+    # find indices where surface and feature-of-interest are defined
+    indFOI = np.argwhere(FOI == 1)
+    indSRF = np.argwhere(SRF == 1)
+    indx = np.intersect1d(indFOI[:, 1], indSRF[:, 1])
+
+    # extract the sample to the surface and FOI for each common range line
+    # and subtract the main-band offset
+    sampl = np.zeros((2, len(indx)), dtype=float)
+    for ii in range(len(indx)):
+        sampl[0, ii] = np.argwhere(SRF[:, indx[ii]] == 1) - mb_offset
+        sampl[1, ii] = np.argwhere(FOI[:, indx[ii]] == 1) - mb_offset
+
+    # convert sample numbers to one-way times
+    times = np.divide(np.multiply(sampl, dt), 2)
+    
+    # convert one-way times to look angles
+    rollang = rollang[(np.arange(np.floor(N / 2) + 1, len(rollang), N) - 1).astype(int)]
+    rollang = rollang[indx]
+    thetal = np.arccos(np.divide(times[0, :], times[1, :]))
+
+    # calculate interferometric phase
+    iphase = -1 * np.multiply(np.divide((2 * np.pi * B), l), np.sin(thetal - rollang))
+    #iphase = -1 * np.multiply(np.divide((4 * np.pi * B), l), np.sin(thetal))
+
+    #plt.figure()
+    #plt.subplot(211); plt.plot(np.rad2deg(thetal)); plt.title('look angle')
+    #plt.subplot(212); plt.plot(np.rad2deg(iphase)); plt.title('interferometric phase')
+    #plt.show()
+
+    return iphase
