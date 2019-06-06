@@ -41,8 +41,9 @@ warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
+
 def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
-                  chrp_filt=True, verbose=False, saving='hdf5'):
+                  chrp_filt=True, verbose=False, saving=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -70,136 +71,115 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
         aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
         # Load data
-        science_path = infile.replace('_a.dat', '_s.dat')
+        science_path=infile.replace('_a.dat','_s.dat')
         data = pds3.read_science(science_path, label_path, science=True)
         aux  = pds3.read_science(infile      , aux_path,   science=False)
 
-        stamp1=time.time() - time_start
+        stamp1=time.time()-time_start
         logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
 
         # Array of indices to be processed
         if idx_start is None or idx_end is None:
             idx_start = 0
             idx_end = len(data)
-        idx = np.arange(idx_start, idx_end)
-
-        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
+        idx = np.arange(idx_start,idx_end)
+                
+        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)) )
 
         # Chop raw data
-        raw_data = chop_raw_data(data, idx, idx_start)
-
-        # Tracking presumming table. Converts TPS field into presumming count
-        tps_table = (1,2,3,4,8,16,32,64)
+        raw_data=np.zeros((len(idx),3600),dtype=np.complex)
+        for j in range(0,3600):
+            raw_data[idx-idx_start,j]=data['sample'+str(j)][idx].values
 
         if data['COMPRESSION_SELECTION'][idx_start] == 0: compression = 'static'
         else: compression = 'dynamic'
         tps = data['TRACKING_PRE_SUMMING'][idx_start]
         assert(tps >= 0 and tps <= 7)
-        presum = tps_table[tps]
+        if tps == 0: presum = 1
+        elif tps == 1: presum = 2
+        elif tps == 2: presum = 3
+        elif tps == 3: presum = 4
+        elif tps == 4: presum = 8
+        elif tps == 5: presum = 16
+        elif tps == 6: presum = 32
+        elif tps == 7: presum = 64
         SDI = data['SDI_BIT_FIELD'][idx_start]
-        bps = 8
+        bps = 8    
 
         # Decompress the data
-        decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI)
-        # TODO: E_track can just be a list of tuples
-        E_track = np.empty((idx_end-idx_start, 2))
+        decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI) 
+        E_track = np.empty((idx_end-idx_start,2))
         # Get groundtrack distance and define 30 km chunks
         tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
         tlp0 = tlp[0]
-        chunks = []
-        i0 = 0
+        chunks=[]
+        i0=0
         for i in range(len(tlp)):
-            if tlp[i] > tlp0+30: 
-                chunks.append([i0,i]) 
-                i0 = i
-                tlp0 = tlp[i]
+            if tlp[i]>tlp0+30: 
+                 chunks.append([i0,i]) 
+                 i0=i
+                 tlp0=tlp[i]
+        if len(chunks)==0: chunks.append([0,idx_end-idx_start])
+        if (tlp[-1]-tlp[i0])>=15: chunks.append([i0, idx_end-idx_start])
+        else: chunks[-1][1]=idx_end-idx_start
+        #chunks = np.array(chunks)
 
-        if len(chunks) == 0:
-            chunks.append([0, idx_end-idx_start])
-
-        if (tlp[-1] - tlp[i0]) >= 15:
-            chunks.append([i0, idx_end-idx_start])
-        else: 
-            chunks[-1][1] = idx_end - idx_start
-
-        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks) ))
+        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)) )
         # Compress the data chunkwise and reconstruct
-
-
-        list_cmp_track=[]
         for i, chunk in enumerate(chunks):
             start,end = chunks[i]
 
             #check if ionospheric correction is needed
-            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end] < 100)[0]
+            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
             b_iono = len(iono_check) != 0
             minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f} ' 
-                          ' Ionospheric Correction: {!r}'.format(
+            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:0.3f}  Ionospheric Correction: {!r}'.format(
                 taskname, i, len(chunks), minsza, b_iono) )
 
-            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(
-                decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
-            list_cmp_track.append(cmp_data)
+            # GNG: These concats seem relatively expensive.
+            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
+            if i == 0:
+                cmp_track = cmp_data
+            else:
+                cmp_track = np.vstack((cmp_track, cmp_data))
             E_track[start:end,0] = E
             E_track[start:end,1] = sigma        
 
-        cmp_track = np.vstack(list_cmp_track)
-        list_cmp_track = None  # free memory
-
-
-        stamp3 = time.time() - time_start - stamp1
+        stamp3=time.time()-time_start-stamp1
         logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
 
-        if saving and outdir != "":
+        if saving:
             #path_outroot = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
             #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
             #data_file = path_file.split('/')[-1]
             #path_file = path_file.replace(data_file,'')
             #new_path = path_outroot+path_file+'ion/'
             data_file   = os.path.basename(infile)
-            outfilebase = data_file.replace('.dat', '.h5')
+            outfilebase = data_file.replace('.dat','.h5')
             outfile     = os.path.join(outdir, outfilebase)
 
-            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname, outdir) )
+            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,outdir) )
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
-
 
             # restructure of data save
             real = np.array(np.round(cmp_track.real), dtype=np.int16)
             imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
-            cmp_track = None # free memory
-            if saving == 'hdf5':
-                #dfreal = pd.DataFrame(real)
-                #dfimag = pd.DataFrame(imag)
-                pd.DataFrame(real).to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
-                pd.DataFrame(imag).to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
-                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
-            elif saving == 'npy':
-                # Round it just like in an hdf5 and save as side-by-side arrays
-                cmp_track = np.vstack([real, imag])
-
-                outfile = os.path.join(outdir, data_file.replace('.dat','.npy') )
-                np.save(outfile,cmp_track)
-                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
-            elif saving == 'none':
-                pass
-            else:
-                logging.error("{:s}: Unrecognized output format '{:s}'".format(taskname, saving))
-
+            dfreal = pd.DataFrame(real)
+            dfimag = pd.DataFrame(imag)
+            dfreal.to_hdf(outfile, key='real', complib = 'blosc:lz4', complevel=6)
+            dfimag.to_hdf(outfile, key='imag', complib = 'blosc:lz4', complevel=6)
+            #np.save(new_path+data_file.replace('.dat','.npy'),cmp_track)
             outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
             np.savetxt(outfile_TECU,E_track)
-            logging.info("{:s}: Wrote {:s}".format(taskname, outfile_TECU))
-
 
         if radargram:
             # Plot a radargram
             rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx]
             tx0=data['RECEIVE_WINDOW_OPENING_TIME'][0]
             tx=np.empty(len(data))
-            # TODO GNG: this seems likely to be wrong. Should be:
-            # data[rec]['RECEIVE_WINDOW_OPENING_TIME'] - tx0
+            # GNG: this seems likely to be wrong. Should be:
+            #for rec in range(len(data['RECEIVE_WINDOW_OPENING_TIME'])):
             for rec in range(len(data)):
                 tx[rec]=data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
             cmp.plotting.plot_radargram(cmp_track,tx,samples=3600)
@@ -213,22 +193,11 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
     logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
     return 0
 
-def chop_raw_data(data, idx, idx_start):
-    raw_data=np.zeros((len(idx),3600),dtype=np.complex)
-    for j in range(3600):
-        k = 'sample' + str(j)
-        raw_data[:,j]=data[k][idx].values
-    return raw_data
-
-
-
 def main():
     # TODO: improve description
     parser = argparse.ArgumentParser(description='Run SAR processing')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/cmp',
                         help="Output base directory")
-    parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','npy','none'),
-                        help="Output file format")
 
     parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
@@ -290,7 +259,7 @@ def main():
 
     start_time = time.time()
 
-    named_params = {'saving':args.ofmt,'chrp_filt':True,'verbose':args.verbose,'radargram':False}
+    named_params = {'saving':True,'chrp_filt':True,'verbose':args.verbose,'radargram':False}
 
     if nb_cores <= 1:
         # Single processing (for profiling)

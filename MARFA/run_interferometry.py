@@ -20,11 +20,11 @@ from tkinter import *
 import interferometry_funclib as fl
 import interface_picker as ip
 
-#project = 'GOG3'
-#line = 'NAQLK/JKB2j/ZY1b/'
+project = 'GOG3'
+line = 'NAQLK/JKB2j/ZY1b/'
 #line = 'GOG3/JKB2j/BWN01a/'
-project = 'SRH1'
-line = 'DEV2/JKB2t/Y81a/'
+#project = 'SRH1'
+#line = 'DEV2/JKB2t/Y81a/'
 debug = False
 gain = 'low'
 fresnel_stack = 15
@@ -257,7 +257,7 @@ if debug:
 
 # Sub-pixel co-registration of the port and starboard range lines
 print('-- co-registration of port and starboard radargrams')
-temp = np.load('Y81a_0to24000_AfterCoregistration.npz')
+temp = np.load('ZY1b_0to12000_AfterCoregistration.npz')
 cmpA3 = temp['cmpA3']
 cmpB3 = temp['cmpB3']
 #cmpA3, cmpB3 = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)

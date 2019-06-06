@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Usage: run_pylint [code directory]
+
+#  TODO: Make this work with python3 code
+
+if [ $# -lt 1 ]
+then
+    echo "Usage: run_pylint CODEDIR [abs_path_to_logfile]"
+    exit 1
+fi
+
+CODEDIR=$1
+
+
+
+if [ $# -ge 2 ]
+then
+    # Note that this logfile MUST be expressed as an absoute path
+    #logbase1=$2
+    logfile1=$2
+else
+    logbasename=`date "+pylint_%Y%m%d-%H%M_"`
+    logbase1="${logbasename}_cwd.log"
+    logfile1=`pwd`/$logbase1
+fi
+S0=`basename $0`
+
+PYLINT=pylint
+#PYLINT_FLAGS="superfluous-parens"
+PYLINT_FLAGS="--reports=n --rcfile=/dev/null"
+
+# Tee append verbose
+TEEA=" | tee -a"
+# Tee append quiet
+#TEEA = " >> "
+
+# Run linter from the file's current working directory
+
+echo "$S0: Logging to $logfile1"
+for FILE in `find "$1" -iname '*.py'`
+do
+    D1=`dirname $FILE`
+    F1=`basename $FILE`
+    echo "$S0: Running pylint on $FILE" >> $logfile1
+    pushd "$D1" > /dev/null
+    stdbuf -o 0 $PYLINT $PYLINT_FLAGS $F1 >> $logfile1
+    popd > /dev/null
+done
+
+echo "$S0: Logged to $logfile1"
+wc -l $logfile1

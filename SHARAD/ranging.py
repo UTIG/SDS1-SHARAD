@@ -10,7 +10,7 @@ import cmp.pds3lbl as pds3
  
 def is_outlier(points, thresh=1):
     if len(points.shape) == 1:
-        points = points[:,None]
+        points = points[:, None]
     median = np.nanmedian(points, axis=0)
     diff = np.sum((points - median)**2, axis=-1)
     diff = np.sqrt(diff)
@@ -53,10 +53,10 @@ for x in xover:
     param22 = aux2['SC_YAW_ANGLE'][idx2]
     r1 = track1['spot_radius'].as_matrix()
     r2 = track2['spot_radius'].as_matrix()
-    truth1 = np.load('cor_truth/'+x[0]+'.npy')[:,3]
-    truth2 = np.load('cor_truth/'+x[1]+'.npy')[:,3]
-    idx_start1 = max(0,idx1-500)
-    idx_end1 = min(len(r1),idx1+500)
+    truth1 = np.load('cor_truth/' + x[0] + '.npy')[:,3]
+    truth2 = np.load('cor_truth/' + x[1] + '.npy')[:,3]
+    idx_start1 = max(0, idx1 - 500)
+    idx_end1 = min(len(r1), idx1 + 500)
     idx_start2 = max(0,idx2-500)
     idx_end2 = min(len(r2),idx2+500)
     alt1 = r1[idx_start1:idx_end1]
@@ -67,25 +67,26 @@ for x in xover:
     alt2[np.where(is_outlier(r2[idx_start2:idx_end2]) == True)]=np.nan
     alt1 = alt1-3389E+3
     alt2 = alt2-3389E+3
-    print(np.nanmean(alt1),np.nanmean(alt2),np.nanmean(alt1)-np.nanmean(alt2))
+    print(np.nanmean(alt1), np.nanmean(alt2), np.nanmean(alt1) - np.nanmean(alt2))
     #if abs(np.nanmean(alt1)-np.nanmean(alt2))>20000:
     #    plt.scatter(np.arange(len(alt1)),alt1,s=0.1)
     #    plt.scatter(np.arange(len(alt2)),alt2,s=0.1)
     #    plt.show()
-    res.append(np.nanmean(alt1)-np.nanmean(alt2))
-    test.append([param11,param21,diff1])
-    test.append([param12,param22,diff2])
-    count+=1
-    if count>500: break
+    res.append(np.nanmean(alt1) - np.nanmean(alt2))
+    test.append([param11, param21, diff1])
+    test.append([param12, param22, diff2])
+    count += 1
+    if count>500:
+        break
 res = np.array(res)
 test = np.array(test)
-plt.scatter(test[:,0],test[:,2],s=0.3)
+plt.scatter(test[:,0], test[:,2], s=0.3)
 plt.show()
-plt.scatter(test[:,1],test[:,2],s=0.3)
+plt.scatter(test[:,1], test[:,2], s=0.3)
 plt.show()
-plt.scatter(np.arange(len(res)),res,s=0.3)
+plt.scatter(np.arange(len(res)), res, s=0.3)
 plt.show()
 
 res[np.where(is_outlier(res) == True)]=np.nan
-print(np.nanmean(res),np.nanstd(res))
+print(np.nanmean(res), np.nanstd(res))
 

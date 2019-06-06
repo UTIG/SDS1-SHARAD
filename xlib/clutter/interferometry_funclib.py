@@ -7,8 +7,8 @@ __history__ = {
          'info': 'library of functions required for interferometry'}}
 
 import sys
-import pyfftw
 import math
+import pyfftw
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -58,7 +58,7 @@ def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
 def load_S2_bxds(pth, channel, nsamp=3200):
     '''
     function for loading data from S2_FIL. these data are interpolated to
-    a 1m trace spacing with some azimuthal filtering but are not range 
+    a 1m trace spacing with some azimuthal filtering but are not range
     compressed or SAR focused.
 
     Inputs:
@@ -76,7 +76,7 @@ def load_S2_bxds(pth, channel, nsamp=3200):
     arr = np.fromfile(fn, dtype='<i2')
     ncol = int(len(arr) / nsamp)
     bxds = np.transpose(np.reshape(arr, (ncol, nsamp)))
- 
+
     return bxds
 
 def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
@@ -89,7 +89,7 @@ def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
        channel: string specifying MARFA channel
            pth: path to line of interest
          nsamp: number of fast-time samples
-            IQ: in-phase or quadrature 
+            IQ: in-phase or quadrature
 
     Outputs:
     ------------
@@ -146,7 +146,7 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
         output = mag
 
     return output
-    
+
 def convert_to_complex(magnitude, phase, mag_dB=True, pwr_flag=True):
     '''
     converting MARFA datasets back to complex valued voltages
@@ -155,7 +155,7 @@ def convert_to_complex(magnitude, phase, mag_dB=True, pwr_flag=True):
     ------------
       magnitude: array of magnitudes
           phase: array of phases
-         mag_dB: flag for indicating whether the input magnitudes as in dB 
+         mag_dB: flag for indicating whether the input magnitudes as in dB
        pwr_flag: flag for indicating whether the input magnitudes are in power
 
     Outputs:
@@ -182,7 +182,7 @@ def convert_to_magphs(cmp, mag_dB=True, pwr_flag=True):
     Inputs:
     ------------
       magnitude: array of complex values
-         mag_dB: flag for indicating whether the input magnitudes as in dB 
+         mag_dB: flag for indicating whether the input magnitudes as in dB
        pwr_flag: flag for indicating whether the input magnitudes are in power
 
     Outputs:
@@ -225,7 +225,7 @@ def stack(data, fresnel, datatype='float'):
         col = len(indices) - 1
     else:
         col = len(indices)
-    
+
     # pre-define the output
     if datatype == 'complex':
         output = np.zeros((np.size(data, axis=0), col), dtype=complex)
@@ -255,8 +255,8 @@ def stacked_power_image(magA, phsA, magB, phsB, fresnel, mode):
                -- must be given in integers of the trace spacing for the input
                   radargrams
          mode: how amplitudes in the power image are represented
-               -- 'averaged': average amplitude of the stack         
-               -- 'summed': sum of the stack 
+               -- 'averaged': average amplitude of the stack
+               -- 'summed': sum of the stack
 
     Output:
     ------------
@@ -352,7 +352,7 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
         bottomB = np.square(np.abs(cmpB))
         bottom = np.sqrt(np.multiply(bottomA, bottomB))
         corrmap = np.abs(np.divide(top, bottom))
-  
+
     return corrmap
 
 def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_step=1):
@@ -384,7 +384,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
     # make sure the new trace spacing passed is odd
     if fresnel % 2 != 1:
         fresnel = fresnel - 1
-   
+
     # calculate interferogram
     if fresnel <= 1:
         output = np.angle(np.multiply(cmpA, np.conj(cmpB)))
@@ -421,7 +421,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
                 #output[:, ii] = output[:, ii] - np.mean(rollphase[start_ind:end_ind])
                 output[:, ii] = output[:, ii] + np.mean(rollphase[val.astype(int)])
         #inter = np.zeros((len(cmpA), np.size(cmpA, axis=1)), dtype=float)
-        #for ii in range(np.size(cmpA, axis=1)):    
+        #for ii in range(np.size(cmpA, axis=1)):
         #    #if ii % 500 == 0:
         #    #    print(str(ii), 'of', str(np.size(cmpA, axis=1)))
         #    xwindow = np.arange(ii - (fresnel - 1) / 2, ii + 1 +(fresnel - 1) / 2, 1)
@@ -431,10 +431,10 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
         #    if np.size(cmpA, axis=1) - ii < fresnel:
         #        viable = np.argwhere(xwindow < np.size(cmpA, axis=1) - 1)
         #        xwindow = np.transpose(xwindow[viable])
-        #    for jj in range(len(cmpA)):   
+        #    for jj in range(len(cmpA)):
         #        ywindow = np.arange(jj, jj + n, 1)
         #        viable = np.argwhere(ywindow <= len(cmpA) - 1)
-        #        ywindow = ywindow[viable] 
+        #        ywindow = ywindow[viable]
         #        temp = np.mean(np.multiply(cmpA[ywindow.astype(int), xwindow.astype(int)], np.conj(cmpB[ywindow.astype(int), xwindow.astype(int)])))
         #        inter[jj, ii] = np.angle(temp)
         #    if roll:
@@ -444,7 +444,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
     #    output = np.divide(stack(inter, fresnel), fresnel)
     #else:
     #    output = inter
-  
+
     return output
 
 def FOI_extraction(image, FOI):
@@ -468,7 +468,7 @@ def FOI_extraction(image, FOI):
 
     # extract information related to these indices
     output = image[indices[:, 0], indices[:, 1]]
-    
+
     return output
 
 def ipdf(N, gamma, iphi, phi0):
@@ -487,14 +487,15 @@ def ipdf(N, gamma, iphi, phi0):
     ------------
         interferometric phase pdf
     '''
- 
+
     beta = gamma * np.cos(iphi - phi0)
     ghf = scipy.special.hyp2f1(1, N, 1/2, beta**2)
     G1 = scipy.special.gamma(N + 1/2)
     G2 = scipy.special.gamma(1/2)
     G3 = scipy.special.gamma(N)
-    f = (((1 - gamma**2)**N) / (2 * np.pi)) * ghf 
-    f = f + ((G1 * ((1 - gamma**2)**N) * beta) / (2 * G2 * G3 * (1 - beta**2)**(N + 1/2)))
+    f = (((1 - gamma**2)**N) / (2 * np.pi)) * ghf
+    f = f + ((G1 * ((1 - gamma**2)**N) * beta) / \
+       (2 * G2 * G3 * (1 - beta**2)**(N + 1/2)))
 
     return f
 
@@ -511,7 +512,7 @@ def empirical_pdf(fc, B, fresnel, gamma, phi_m=0):
                -- must be given in integers of the trace spacing for the input
                   radargrams
         gamma: interferometric correlation
-        phi_m: mean interferometric phase angle of the FOI          
+        phi_m: mean interferometric phase angle of the FOI
 
     Output:
     ------------
@@ -596,7 +597,7 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
     # perform the interpolation
     sincM = np.tile(new_t, (len(orig_t), 1)) - np.tile(orig_t[:, np.newaxis], (1, len(new_t)))
     output = np.dot(data, np.sinc(sincM / orig_sample_interval))
-    
+
     return output
 
 def frequency_interpolate(data, subsample_factor):
@@ -652,7 +653,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
         subsampB = sinc_interpolate(cmpB[:, ii], orig_sample_interval, subsample_factor)
         #subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
         #subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
-        
+
         #if ii == 0:
         #    plt.figure()
         #    plt.plot(np.linspace(0, 1, len(cmpA)), np.abs(cmpA[:, ii]), label='original A')
@@ -674,7 +675,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
         to_shift = shifts[np.argwhere(rho == np.max(rho))][0][0]
         subsampB = np.roll(subsampB, to_shift)
         # remove subsampling
-        coregA[:, ii] = subsampA[np.arange(0, len(subsampA), subsample_factor)] 
+        coregA[:, ii] = subsampA[np.arange(0, len(subsampA), subsample_factor)]
         coregB[:, ii] = subsampB[np.arange(0, len(subsampB), subsample_factor)]
 
     return coregA, coregB
@@ -830,8 +831,8 @@ def get_ref_chirp(path, bandpass=True, nsamp=3200):
     ------------
                  I_path: path to array of the integer component of the chirp
                  Q_path: path to array of the quadrature component of the chirp
-               bandpass: bandpass sampling, False for legacy HiCARS. disables cinterp
-                         and flips the chirp
+               bandpass: bandpass sampling, False for legacy HiCARS.
+                         disables cinterp and flips the chirp
      trunc_sweep_length: number of samples
 
     Outputs:
@@ -871,7 +872,8 @@ def hamming(trunc_sweep_length):
 
     return filt
 
-def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path, output_samples=3200, do_cinterp=True):
+def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
+                        output_samples=3200, do_cinterp=True):
     '''
     Denoise and dechirp HiCARS/MARFA data
 
@@ -979,7 +981,7 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
 
     Inputs:
     ----------------
-       reference: complex-valued range-compressed loopback chirp used 
+       reference: complex-valued range-compressed loopback chirp used
                   as a reference
                   -- typically set to be the first one in the array
             data: complex-valued loopback chirp data we want to compare
@@ -1006,7 +1008,9 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
         ii = 1
         if ii == 1:
         #for ii in range(np.size(data, axis=1)):
-            Cxy, f = signal.coherence(np.angle(reference), np.angle(data[:, ii]), fs, nperseg=len(reference))
+            Cxy, f = signal.coherence(np.angle(reference),
+                                      np.angle(data[:, ii]), fs,
+                                      nperseg=len(reference))
     elif method == 'xcorr':
         C = np.zeros((np.size(data, axis=1))) + -99999
         for ii in range(np.size(data, axis=1)):
@@ -1040,7 +1044,7 @@ def phase_stability_adjustment(data, stability):
 
     return out
 
-def quad3(X,X1,X2,X3,P1,P2,P3):
+def quad3(X, X1, X2, X3, P1, P2, P3):
     '''
     function required in MARFA raw data load algorithm
     '''
@@ -1088,25 +1092,25 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
     Nc = np.fromfile(GeoPath + "Nc", dtype=int, sep=" ")
     Xo = np.fromfile(GeoPath + "Xo", sep=" ")
     NRt = np.fromfile(GeoPath + "NRt", dtype=int, sep=" ")
-    
+
     # define number of tears
     NumTears = len(NRt)
-    
+
     # Make certain that NRr is an even number.
-    if (NRr % 2 == 1):
+    if NRr % 2 == 1:
         NRr = NRr + 1
-    
+
     # Check for single block case and force variables accordingly.
-    if ((NumTears == 1) and (NR > NRt[1-1])):
+    if (NumTears == 1) and (NR > NRt[1-1]):
         NR = NRt[1-1]
         NRr = 0
-        
+
     # NRb = Number of records included in each along-track filtering block
     NRb = NR + NRr
-    
-    IFD = -1
+
+    ifd = None
 #    OFD = open(OutName, "wb")
-    
+
     # Define Range Filtering.
     # Tr = Range sampling time (0.02 microseconds; 50 MHz sampling)
     Tr = 0.02
@@ -1136,104 +1140,104 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
     FilterA[NRb + 2 - N2 - 1:NRb + 2 - N1] = 1.0 - Hanning
     FilterA[0:N1 - 1] = 1.0
     FilterA[NRb + 3 - N1 - 1:NRb] = 1.0
-    
+
     # Combine into 2D Filter
     Filter = FilterR * FilterA.conj().transpose()
-    
-    if (channel in [5,6,7,8]):
+
+    if channel in (5, 6, 7, 8):
         channel_specs = parse_channels('[1,%d,1,0,0]' % (int(channel)-4))
     else:
-        sys.exit("filterRA: illegal channel number requested")
+        raise Exception('filterRA: illegal channel number requested')
     tracegen = unfoc.read_RADnhx_gen(RadName, channel_specs)
     stackgen = unfoc.stacks_gen(tracegen, channel_specs, 1)
-    
+
     NumRead = []
-    
+
     # start processing
-    
+
     for NT in range(1, NumTears + 1):
-    
+
         # NRs = Number of records to process up to the next data tear
-        if (NT == 1):
+        if NT == 1:
             NRs = NRt[1 - 1]
         else:
             NRs = NRt[NT - 1] - NRt[NT - 1 - 1]
-    
+
         # NumNBlocks = Number of along-track blocks
         NumNBlocks = max(1, int(math.floor((NRs + NR - 1 - NRr / 2) / NR)))
-      
+
     #    NB = 1
     #    if NB == 1:
     #    for NB in range(1, 3):
         for NB in range(1, NumNBlocks + 1):
-          
-            if (NB > 1):
-              NRp = NumRead
-    
+
+            if NB > 1:
+                NRp = NumRead
+
             # NumRead = Number of new records to read
             NumRead = NR
-            if (NB == 1):
+            if NB == 1:
                 NumRead = int(NR + (NRr/2))
-            if (NB == NumNBlocks):
+            if NB == NumNBlocks:
                 NumRead = int(NRs - ((NB-1)*NR) - (NRr/2))
-            if (NB == 1) and (NB == NumNBlocks): 
+            if (NB == 1) and (NB == NumNBlocks):
                 NumRead = int(NRs)
-              
+
             # NGPri = Number of initial (start) record being processed this block
             # NGPrf = Number of  final  (stop)  record being processed this block
-            # NOTE: NGPri and NGPrf are in the global index system, where "global" refers
-            #       to the full set of records.
+            # NOTE: NGPri and NGPrf are in the global index system, where
+            #       "global" refers to the full set of records.
             # These variables are not used anywhere else in this code,
             # but they are output here for progress reporting.
-            if (NT == 1):
+            if NT == 1:
                 NGPri = ((NB - 1) * NR) - (NRr / 2) + 1
                 NGPrf = (NB * NR) + (NRr / 2)
-                if (NB == 1):
+                if NB == 1:
                     NGPri = 1
-                if (NB == NumNBlocks):
-                    NGPrf = NRs    
+                if NB == NumNBlocks:
+                    NGPrf = NRs
             else:
                 NGPri = NRt[NT - 1 - 1] + ((NB - 1) * NR) - (NRr / 2) + 1
                 NGPrf = NRt[NT - 1 - 1] + (NB * NR) + (NRr / 2)
-                if (NB == 1):
+                if NB == 1:
                     NGPri = NRt[NT - 1 - 1] + 1
-                if (NB == NumNBlocks):
+                if NB == NumNBlocks:
                     NGPrf = NRt[NT - 1 - 1] + NRs
-              
-            # NGWri = Number of initial (start) record for controlling ouput on this processed block
-            # NGWrf = Number of  final  (stop)  record for controlling ouput on this processed block
-            # NOTE: NGWri and NGWrf are in the global index system, where "global" refers
-            #       to the full set of records.
+
+            # NGWri = Number of initial (start) record for controlling output on this processed block
+            # NGWrf = Number of  final  (stop)  record for controlling output on this processed block
+            # NOTE: NGWri and NGWrf are in the global index system, where
+            #       "global" refers to the full set of records.
             # These variables are output for progress reporting.
-            if (NT == 1):
+            if NT == 1:
                 NGWri = ((NB - 1) * NR) + 1
                 NGWrf = (NB * NR)
-                if (NB == NumNBlocks):
+                if NB == NumNBlocks:
                     NGWrf = NRs
             else:
                 NGWri = NRt[NT - 1 - 1] + ((NB - 1) * NR) + 1
                 NGWrf = NRt[NT - 1 - 1] + (NB * NR)
                 if (NB == NumNBlocks):
                     NGWrf = NRt[NT - 1 - 1] + NRs
-                  
+
             # Read Data and define signal.
             # Pad (NRr/2) overlap region with first/last records on first/last blocks.
-            if (NB == 1):
+            if NB == 1:
                 S = np.empty((MS, NumRead))
-                if (IFD == -1):
-                    for i in range(1,NumRead + 1):
+                if ifd is None:
+                    for i in range(1, NumRead + 1):
                         try:
                             trace = next(stackgen)
                         except StopIteration:
-                            sys.exit("Short read (stackgen failed at NB {} {})\n".format(NB,i))
+                            sys.exit("Short read (stackgen failed at NB {} {})\n".format(NB, i))
                         S[:, i-1] = trace.data[0:MS]
                 else:
-                    for i in range(1,NumRead + 1):
-                        data = np.fromfile(IFD, "<i2", MS)
-                        if (S.size < MS):
-                            sys.exit("Short read (%d of %d)\n" % [S.size, MS])
+                    for i in range(1, NumRead + 1):
+                        data = np.fromfile(ifd, "<i2", MS)
+                        if S.size < MS:
+                            sys.exit("Short read (%d of %d)\n" % (S.size, MS))
                         S[:, i-1] = data
-    
+
                 signal = np.empty((MS, int(NRr / 2 + NumRead)))
                 for N in range(1, int(NRr / 2 + 1)):
                     signal[:, N - 1] = S[:, 1 - 1]
@@ -1241,7 +1245,7 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
             else:
                 signal = np.empty((MS, int(NRr + NumRead)))
                 signal[:, 1 - 1:NRr] = S[:, int(NRp - NRr + 1 - 1):NRp]
-                if (IFD == -1):
+                if ifd is None:
                     S = np.empty((MS, NumRead))
                     for i in range(1, NumRead+1):
                         #print('Working:', NB, i)
@@ -1254,37 +1258,37 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
                 else:
                     S = np.empty((MS, NumRead))
                     for i in range(1, NumRead + 1):
-                        data = np.fromfile(IFD, "<i2", MS)
-                        if (S.size < MS):
-                            sys.exit("Short read (%d of %d)\n" % [S.size, MS])
+                        data = np.fromfile(ifd, "<i2", MS)
+                        if S.size < MS:
+                            sys.exit("Short read (%d of %d)\n" % (S.size, MS))
                         S[:, i - 1] = data
                 signal[:, NRr + 1 - 1:NRr + NumRead] = S
-    
-            if ((NB > 1) and (NB == NumNBlocks)):
+
+            if (NB > 1) and (NB == NumNBlocks):
                 signal.resize((MS, NRb))
                 for N in range(NRr + NumRead + 1, NRb + 1):
                     signal[:, N - 1] = S[:, NumRead - 1]
-    
+
             F = pyfftw.interfaces.numpy_fft.fft2(detrend(signal, 0), [MS, NRb])
-            
+
             ### Clear top samples
-            #if (IFD == -1):
+            #if (ifd == -1):
             #    # HiCARS2
             #    signal[0:250,:] = 0
-            
-            if (undersamp == 0):
+
+            if undersamp == 0:
                 Fs = pyfftw.interfaces.numpy_fft.fft2(signal[MS - 800 - 1:MS - 1], [800 - 1, NRb])
                 F[2561-1, :] = F[2561-1, :] - 4 * Fs[641 - 1, :]
-        
+
             F = Filter * F
             signal = pyfftw.interfaces.numpy_fft.ifft2(F, [MS, NRb])
-            
-            if (NB == 1):
+
+            if NB == 1:
                 Nii = int(math.floor((Xo[NGWri - 1] / DX) + 0.99999)) + 1
             else:
                 Nii = Nif + 1
             Nif = int(math.floor(Xo[NGWrf - 1] / DX)) + 1
-            
+
             # Interpolate filtered signal to resampling points
             signali = np.empty((MS, Nif - Nii + 1), complex)
             for Ni in range(Nii, Nif + 1):
@@ -1299,31 +1303,34 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
                 P2 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) - 1)]
                 P3 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) + 1 - 1)]
                 signali[:, Ni - Nii + 1 - 1] = quad3(X, X1, X2, X3, P1, P2, P3)
-        
+
             # Part 1: Generate missing data at start of data tear.
-            if ((NT > 1) and (NB == 1)):
+            if (NT > 1) and (NB == 1):
                 D1 = Xo[NRt[NT - 1 - 1] - 1]
                 D2 = Xo[NRt[NT - 1 - 1] + 1 - 1]
                 N1 = int(math.floor(D1 / DX)) + 1
                 N2 = int(math.floor(D2 / DX)) + 1
-                for Ni in range(N1 + int(math.floor((N2 - N1 + 2) / 2)),N1 + int(math.floor((N2 - N1 + 2) / 2)) + max(0, int(math.floor((N2 - N1 - 19) / 2))) - 1 + 1):
+                for Ni in range(N1 + int(math.floor((N2 - N1 + 2) / 2)),
+                                N1 + int(math.floor((N2 - N1 + 2) / 2))
+                                   + max(0, int(math.floor((N2 - N1 - 19) / 2))) - 1 + 1):
                     signalim[1 - 1:MS - 1] = 0.0
-                    out = out + 1        
-                for Ni in range(N1 + int(math.floor((N2 - N1 + 2) / 2)) + max(0, int(math.floor((N2 - N1 - 19) / 2))), N2 + 1):
+                    out = out + 1
+                for Ni in range(N1 + int(math.floor((N2 - N1 + 2) / 2))
+                                   + max(0, int(math.floor((N2 - N1 - 19) / 2))), N2 + 1):
                     Wt = 0.5 - 0.5 * math.cos((math.pi / 10.0) * (Ni - (N2 - 9)))
                     signalim = Wt * signali[:, 1 - 1]
                     out = out + 1
                 signalout = signalim
-                    
+
             # Part 2: Output good resampled points.
-            if ((NT <= 1) and (NB == 1)):
+            if (NT <= 1) and (NB == 1):
                 signalout = signali
             else:
                 signalout = np.concatenate((signalout, signali), axis=1)
             out = out + signali.shape[1]
 
             # Part 3: Generate missing data at end of data tear.
-            if ((NT < NumTears) and (NB == NumNBlocks)):
+            if (NT < NumTears) and (NB == NumNBlocks):
                 D1 = Xo[NRt[NT - 1] - 1]
                 D2 = Xo[NRt[NT - 1] + 1 - 1]
                 N1 = int(math.floor(D1 / DX)) + 1
@@ -1332,13 +1339,15 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
                     Wt = 0.5 + 0.5 * math.cos((math.pi / 10.0) * (Ni - N1))
                     signalim = Wt * signali[:, Nif - Nii + 1 - 1]
                     out = out + 1
-                for Ni in range(N1 + min(10, int(math.floor((N2 - N1 + 2) / 2))), N1 + min(10, int(math.floor((N2 - N1 + 2) / 2))) + max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1):
+                for Ni in range(N1 + min(10, int(math.floor((N2 - N1 + 2) / 2))),
+                                N1 + min(10, int(math.floor((N2 - N1 + 2) / 2)))
+                                   + max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1):
                     signalim[1 - 1:MS - 1] = 0.0
                     out = out + 1
                 signalout = np.concatenate((signalout, signalim), axis=1)
-        
-    if (IFD != -1):
-        IFD.close()
+
+    if ifd is not None:
+        ifd.close()
 
     if trim[3] != 0:
         signalout = signalout[:, trim[2]:trim[3]]
