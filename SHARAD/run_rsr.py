@@ -58,6 +58,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
         print('PROCESSING: Surface echo extraction for ' + orbit_full)
 
     alt = senv.alt_data(orbit, typ='beta5', ext='h5')
+    if alt is None:
+        sys.exit("No Altimetry Data")
     rdg = senv.cmp_data(orbit)
     aux = senv.aux_data(orbit)
 
@@ -253,12 +255,49 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
     return b
 
 
+def todo(delete=False):
+    """List the orbits that are not already RSR-processed to be processed but for
+    which an altimetry file exists
+
+    Inputs
+    ------
+
+    orbit: string
+        orbit (accepts regex expressions, e.g., 25*)
+    delete: binary
+        Whether the already RSR-processed products should be reprocessed
+
+    Output
+    ------
+
+    array of orbits
+    """
+
+    senv = SHARADEnv.SHARADEnv()
+
+    alt_orbits = []
+    for i in senv.orbitinfo:
+        if any('.h5' in s for s in senv.orbitinfo[i][0]['altpath']):
+            alt_orbits.append(i)
+
+    rsr_orbits = []
+    for i in senv.orbitinfo:
+        if any('.txt' in s for s in senv.orbitinfo[i][0]['altpath']):
+            rsr_orbits.append(i)
+
+    if delete is True:
+        out = alt_orbits
+    else:
+        out = list(set(alt_orbits) - set(rsr_orbits))
+
+    return out
+
 
 def main():
     parser = argparse.ArgumentParser(description='RSR processing routines')
     #parser.add_argument('-o','--output', default='', help="Output directory")
     #parser.add_argument(     '--ofmt',   default='npy',choices=('hdf5','npy','none'), help="Output data format")
-    parser.add_argument('orbit', help='Orbit number (including leading zeroes)')
+    parser.add_argument('orbit', help='Orbit number (including leading zeroes). If [all], processes all the orbits')
     parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     #parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
@@ -270,6 +309,7 @@ def main():
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100], help='2 numbers defining the fast-time relative boundaries around the altimetry surface return where the surface will be looked for')
     parser.add_argument('-b', '--bins', type=str, default='fd', help='Method to compute the bin width (inherited from numpy.histogram)')
     parser.add_argument('-f', '--fit_model', type=str, default='hk', help='Name of the function (in pdf module) to use for the fit')
+    parser.add_argument('-d', '--delete', action='store_true', help='Reprocess files already processed only if [orbit] is [all]')
 
     args = parser.parse_args()
 
@@ -277,7 +317,15 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-    b = rsr_processor(args.orbit, winsize=args.winsize, sampling=args.sampling, nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth, bins=args.bins, fit_model=args.fit_model, sav=True)
+    if args.orbit == 'all':
+        orbit = todo(delete=args.delete)
+    else:
+        orbit = [args.orbit]
+
+    for i in orbit:
+        b = rsr_processor(orbit[0], winsize=args.winsize, sampling=args.sampling,
+                nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
+                bins=args.bins, fit_model=args.fit_model, sav=True)
 
     #if args.output != "":
         # TODO: improve naming
