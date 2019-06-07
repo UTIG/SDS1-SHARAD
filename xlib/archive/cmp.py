@@ -268,7 +268,7 @@ def ref_chirp(cf, bw, pw, r_window_size, f_sample, hfilter=True, cutoff=None):
     from scipy import signal 
  
     window = (np.arange(r_window_size)*1/f_sample)[0:int(pw*f_sample)] 
-    chirp = signal.chirp(window, cf-bw/2, pw, cf+bw/2) \ 
+    chirp = signal.chirp(window, cf-bw/2, pw, cf+bw/2) \
            +1j*signal.chirp(window, cf-bw/2, pw, cf+bw/2, phi=90) 
  
  
