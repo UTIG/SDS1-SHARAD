@@ -99,11 +99,16 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
             y[i] = maxind
             amp[i] = maxvec
 
+    # Geomtric-loss-corrected power
+    lc = 10*np.log10(sr.utils.geo_loss(2*rng*1e3))
+    pdb = 20*np.log10(amp) + gain - lc
+
+
     #--------
     # Archive
     #--------
 
-    out = {'et':et, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp}
+    out = {'et':et, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp, 'pdb':pdb}
     out = pd.DataFrame(data=out)
     #out = out.reindex(columns=['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp'])
     #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
@@ -199,7 +204,7 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
     # Get surface amplitude
     #----------------------
 
-    surf = surface_amp(senv, orbit, **kwargs)
+    surf = surface_amp(senv, orbit, gain=gain,**kwargs)
     amp = surf['amp'].values
 
     #-------------------------------
