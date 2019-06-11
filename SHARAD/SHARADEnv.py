@@ -17,11 +17,6 @@ __history__ = {
 }
 
 """
-SHARADEnv
-SharadData
-SHARADData
-
-
 sharadenv = SHARADEnv()
 
 sharadenv.orbit_data(orbitname)
@@ -133,6 +128,7 @@ class SHARADEnv:
 
         self.out = {}
         # GNG TODO: make this use SDS environment variable
+        # TODO: glob, too?
 
         #self.out['data_product'] = os.listdir(self.data_path)
         for sname in os.listdir(self.data_path):
@@ -190,7 +186,7 @@ class SHARADEnv:
         Output the full orbit name(s) available for a given orbit
         input "orbit" may either be the short orbit name (such as 0704902)
         or the full orbit name (such as e_0704902_001_ss05_700_a)
-        If the short orbit name, return a list of all orbits matching that orbit
+        If the short orbit name, return a list of all full orbit names matching that orbit
 
         """
         return self.get_orbit_info(orbit, True).get('name', None)
@@ -239,7 +235,7 @@ class SHARADEnv:
                     return self.orbitinfo[orbit]
                 return self.orbitinfo[orbit]
         except KeyError:
-            return [{}]
+            return {} if b_single else [{}]
 
 
     #def check(path, verbose=True):
@@ -286,14 +282,19 @@ class SHARADEnv:
         if not files:
             return None # no file found
         # TODO: assert glob only has one result
-        if ext is 'h5':
-            data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
+        if ext == 'h5':
+            try:
+                data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
+            except (OSError, KeyError) as e:
+                logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
+                raise(e)
+
             out = {'et':data['block0_values'][:, 0]}
             for i, val in enumerate(data['block0_items'][:]):
                 key = str(val).replace('b', '').replace('\'', '')
                 vec = data['block0_values'][:, i]
                 out[key] = vec
-        elif ext is 'npy':
+        elif ext == 'npy':
             out = np.load(files[0])
         return out
 
@@ -306,8 +307,10 @@ class SHARADEnv:
         """
         orbit_info = self.get_orbit_info(orbit, True)
 
-        fil = glob.glob('/'.join(self.out['cmp_path'],
-                                 orbit_info['relpath'], typ, '*TECU.txt'))[0]
+        tecpat = os.path.join(self.out['cmp_path'], 
+                 orbit_info['relpath'], typ, '*TECU.txt')
+
+        fil = glob.glob('/'.join(tecpat)[0])
         #foo = check(fil)
         out = np.loadtxt(fil)
         return out
@@ -333,7 +336,7 @@ class SHARADEnv:
         orbit_info = self.get_orbit_info(orbit, True)
 
         if 'relpath' not in orbit_info: # orbit not found
-                         return None
+            return None
 
         path1 = os.path.join(self.out['srf_path'], orbit_info['relpath'],
                              typ, '*.txt')
@@ -391,7 +394,7 @@ def test_my(senv):
         for i, orbit in enumerate(orbitnames):
             try:
                 myear = senv.my(orbit)
-            except ValueError:
+            except ValueError: # pragma: no cover
                 logging.info("orbit {:s}: error running my".format(orbit))
                 myear = "ERROR"
                 raise # traceback.print_exc(file=sys.stdout)
@@ -423,7 +426,14 @@ def test_alt(senv):
         nsucceeded, nfailed = 0, 0
 
         for i, orbit in enumerate(orbitnames):
-            altdata = senv.alt_data(orbit)
+            try:
+                altdata = senv.alt_data(orbit)
+            except (OSError,KeyError) as e:
+                #KeyError: "Unable to open object (object 'beta5' doesn't exist)"
+                #OSError: Unable to open file (file signature not found)
+                logging.error("Can't open h5 for {:s}: {:s}".format(orbit, str(e)))
+                return None
+
             if altdata is None:
                 nfailed += 1
             else:
@@ -435,6 +445,23 @@ def test_alt(senv):
                      "{:d} succeeded, {:d} failed".format(nsucceeded, nfailed))
     return 0
 
+
+def test_orbit_info(senv):
+    try:
+        # Test what happens when you look for an orbit that doesn't exist
+        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
+        assert len(oinfo) == 1
+        assert len(oinfo[0]) == 0 # should be a list with a dict
+        assert isinstance(oinfo[0],dict) # should be just a dict
+        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', False)
+        assert len(oinfo) == 1
+        assert len(oinfo[0]) == 0 # should be a list with a dict
+        assert isinstance(oinfo[0],dict) # should be just a dict
+        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', True)
+        assert isinstance(oinfo,dict) # should be just a dict
+        assert len(oinfo) == 0 
+    except AssertionError as e:
+        raise e
 
 
 def main():
@@ -449,9 +476,7 @@ def main():
     # Exercise functions
     senv = SHARADEnv()
 
-    # Test what happens when you look for an orbit that doesn't exist
-    oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
-    assert len(oinfo) == 1 and len(oinfo[0]) == 0 # should be a list with a dict
+    test_orbit_info(senv)
 
     test_my(senv)
     test_alt(senv)

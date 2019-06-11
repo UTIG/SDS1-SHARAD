@@ -4,7 +4,7 @@ import collections
 try:
     import typing
     from typing import List, Union
-except:
+except: # pragma: no cover
     # Not installed on melt ...
     pass
 
@@ -57,7 +57,7 @@ def main():
     # This should fail
     try:
         parse_channels("1.2")
-        exit(1)
+        exit(1) # pragma: no cover
     except ValueError as e:
         pass
 

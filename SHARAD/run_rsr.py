@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 
+"""
+Example command:
+
+To process a single orbit (0887601) and archive to the default location:
+
+./run_rsr.py 0887601
+
+To process a single orbit (0887601), not archive to the default location (--ofmt none),
+and output a numpy file into a debug directory:
+
+./run_rsr.py 0887601 --ofmt none --output ./rsr_data
+
+"""
+
 __authors__ = ['Cyril Grima, cyril.grima@gmail.com']
 __version__ = '1.0'
 __history__ = {
@@ -54,8 +68,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
 
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
-    if verbose is True:
-        print('PROCESSING: Surface echo extraction for ' + orbit_full)
+    logging.debug('PROCESSING: Surface echo extraction for ' + orbit_full)
 
     alt = senv.alt_data(orbit, typ='beta5', ext='h5')
     if alt is None:
@@ -106,6 +119,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
 
     #--------
     # Archive
+    # TODO: def archive_surface_amp(senv, orbit, srf_data)
     #--------
 
     out = {'et':et, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp, 'pdb':pdb}
@@ -115,14 +129,14 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
 
     if sav is True:
         #k = p['orbit_full'].index(orbit_full)
+        # TODO: what is the correct response if there is more than one result?  GNG
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
-
 
         if typ is 'cmp':
             archive_path = os.path.join(senv.out['srf_path'], orbit_info['relpath'], typ)
         else:
-            assert(False)
+            assert False
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
@@ -132,7 +146,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwargs):
+def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, 
+    senv=None, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique applied along
     a SHARAD orbit
@@ -147,9 +162,12 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
         the type of radar data used to get the amplitude from
     gain: float
         Any gain to be added to the signal (power in dB)
-        For SHARAD, it includes the instrumental gain and theabsolute calibration value
+        For SHARAD, it includes the instrumental gain and the absolute calibration value
     save: boolean
         Whether to save the results in a txt file into the hierarchy
+
+    senv: SHARADEnv
+        A SHARADEnv environment object
 
     Any keywords from rsr.utils.inline_estim, especially:
 
@@ -189,8 +207,8 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
     #----------
     # Load data
     #----------
-
-    senv = SHARADEnv.SHARADEnv()
+    
+    # This should be done in aux_data?
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
     aux = senv.aux_data(orbit_full)
@@ -211,8 +229,10 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
     # Get surface coefficients (RSR)
     #-------------------------------
 
-    if verbose is True:
-        print('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
+    logging.debug('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
+
+    if senv is None:
+        senv = SHARAD.SHARADEnv()
 
     pdb = 20*np.log10(amp) + gain
     amp2 = 10**(pdb/20)
@@ -241,6 +261,8 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
 
     #--------
     # Archive
+    # TODO: make this a separate function (should it be a member of SHARADEnv?)
+    # archive_rsr(senv, orbit, rsr_data)
     #--------
 
     if sav is True:
@@ -254,13 +276,12 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, **kwar
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
         b.to_csv(fil, index=None, sep=',')
-        if verbose is True:
-            print("CREATED: " + fil )
+        logging.debug("CREATED: " + fil )
 
     return b
 
 
-def todo(delete=False):
+def todo(delete=False, senv=None):
     """List the orbits that are not already RSR-processed to be processed but for
     which an altimetry file exists
 
@@ -278,7 +299,8 @@ def todo(delete=False):
     array of orbits
     """
 
-    senv = SHARADEnv.SHARADEnv()
+    if senv is None:
+        senv = SHARADEnv.SHARADEnv()
 
     alt_orbits = []
     for i in senv.orbitinfo:
@@ -300,21 +322,30 @@ def todo(delete=False):
 
 def main():
     parser = argparse.ArgumentParser(description='RSR processing routines')
-    #parser.add_argument('-o','--output', default='', help="Output directory")
-    #parser.add_argument(     '--ofmt',   default='npy',choices=('hdf5','npy','none'), help="Output data format")
-    parser.add_argument('orbit', help='Orbit number (including leading zeroes). If [all], processes all the orbits')
+    
+    # Job control options
+
+    #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
+
+    parser.add_argument('-o','--output', default=None, help="Debugging output data directory")
+    parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'), help="Output data format")
+    parser.add_argument('orbits', metavar='orbit', nargs='+', 
+                        help='Orbit IDs to process (including leading zeroes). If "all", processes all orbits')
     parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
-    #parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     #parser.add_argument('--tracklist', default="elysium.txt",
     #    help="List of tracks to process")
     #parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
+
+    # Algorithm options
+
     parser.add_argument('-w', '--winsize', type=int, default=1000, help='Number of consecutive echoes within a window where statistics are determined')
     parser.add_argument('-s', '--sampling', type=int, default=100, help='Step at which a window is repeated')
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100], help='2 numbers defining the fast-time relative boundaries around the altimetry surface return where the surface will be looked for')
     parser.add_argument('-b', '--bins', type=str, default='fd', help='Method to compute the bin width (inherited from numpy.histogram)')
     parser.add_argument('-f', '--fit_model', type=str, default='hk', help='Name of the function (in pdf module) to use for the fit')
-    parser.add_argument('-d', '--delete', action='store_true', help='Reprocess files already processed only if [orbit] is [all]')
+    parser.add_argument('-d', '--delete', action='store_true', help='Delete and reprocess files already processed, only if [orbit] is [all]')
 
     args = parser.parse_args()
 
@@ -322,21 +353,29 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-    if args.orbit == 'all':
-        orbit = todo(delete=args.delete)
-    else:
-        orbit = [args.orbit]
+    senv = SHARADEnv.SHARADEnv()
 
-    for i in orbit:
-        b = rsr_processor(orbit[0], winsize=args.winsize, sampling=args.sampling,
+    if 'all' in args.orbits:
+        assert len(args.orbits) == 1
+        args.orbits = todo(delete=args.delete, senv=senv)
+
+    if args.dryrun:
+        logging.info("Process orbits: " + ' '.join(args.orbits))
+        sys.exit(0)
+
+    for orbit in args.orbits:
+        b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
-                bins=args.bins, fit_model=args.fit_model, sav=True)
+                bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'), 
+                senv=senv)
 
-    #if args.output != "":
-        # TODO: improve naming
-    #    outfile = os.path.join(args.output, "rsr.npy")
-    #    logging.debug("Saving to " + outfile)
-    #    np.save(outfile, b)
+        if args.output is not None:
+            # Debugging output
+            outfile = os.path.join(args.output, "rsr_{:s}.npy".format(orbit))
+            logging.debug("Saving to " + outfile)
+            np.save(outfile, b)
+
+
 
 if __name__ == "__main__":
     # execute only if run as a script

@@ -362,8 +362,7 @@ def test_cmp_gold(datafile, labelfile, goldfile):
     with gzip.open(goldfile, "rb") as  fin:
         pdsdata2 = json.load(fin)
 
-    result = cmp(pdsdata1, pdsdata2)
-    assert(result)
+    assert cmp(pdsdata1, pdsdata2)
 
 
 def test1():
