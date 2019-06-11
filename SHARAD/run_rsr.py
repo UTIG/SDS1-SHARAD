@@ -36,6 +36,8 @@ sys.path.append('../xlib/')
 import rsr
 import subradar as sr
 
+class DataMissingException(Exception):
+    pass
 
 def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, verbose=True, **kwargs):
     """
@@ -71,10 +73,14 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     logging.debug('PROCESSING: Surface echo extraction for ' + orbit_full)
 
     alt = senv.alt_data(orbit, typ='beta5', ext='h5')
-    if alt is None:
-        sys.exit("No Altimetry Data")
+    if alt is None: # pragma: no cover
+        raise DataMissingException("No Altimetry Data for orbit " + orbit)
     rdg = senv.cmp_data(orbit)
+    if rdg is None: # pragma: no cover
+        raise DataMissingException("No CMP data for orbit " + orbit)
     aux = senv.aux_data(orbit)
+    if aux is None: # pragma: no cover
+        raise("No Auxiliary Data for orbit " + orbit)
 
     et = aux['EPHEMERIS_TIME']
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
@@ -90,7 +96,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     y = alty * 0
     amp = alty * 0
     for i, val in enumerate(alty):
-        if (np.isfinite(val) == False) or (val == 0):
+        if (not np.isfinite(val)) or (val == 0):
             y[i] = np.nan
             amp[i] = np.nan
         else:
@@ -135,7 +141,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
 
         if typ is 'cmp':
             archive_path = os.path.join(senv.out['srf_path'], orbit_info['relpath'], typ)
-        else:
+        else: # pragma: no cover
             assert False
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
@@ -359,7 +365,7 @@ def main():
         assert len(args.orbits) == 1
         args.orbits = todo(delete=args.delete, senv=senv)
 
-    if args.dryrun:
+    if args.dryrun: # pragma: no cover
         logging.info("Process orbits: " + ' '.join(args.orbits))
         sys.exit(0)
 
@@ -373,6 +379,8 @@ def main():
             # Debugging output
             outfile = os.path.join(args.output, "rsr_{:s}.npy".format(orbit))
             logging.debug("Saving to " + outfile)
+            if not os.path.exists(args.output):
+                os.makedirs(args.output)
             np.save(outfile, b)
 
 

@@ -38,12 +38,13 @@ $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1 --ofmt hdf5
 
 rm -rf $RNGDATA
 echo "$S0: run_rsr"
-# run_rsr takes too long
-# $COV run $FLAGS -a ../SHARAD/run_rsr.py --ofmt none 1974302
+RSRDATA=./rsr_data/
+rm -rf $RSRDATA
+$COV run $FLAGS -a ../SHARAD/run_rsr.py -n all
+$COV run $FLAGS -a ../SHARAD/run_rsr.py -n --delete all
+nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --ofmt none --output $RSRDATA 1920301
+rm -rf $RSRDATA
 
-# Run specific commands with specific options
 
 
 $COV report -m
-
-#COV run ./SHARADEnv.py
