@@ -137,11 +137,12 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
                                     use_spice=False, ft_avg=10, max_slope=25,
                                     noise_scale=20, fix_pri=1, fine=True)
 
-        if save_format == '':
+        if save_format == '' or save_format == 'none':
             return 0
 
         logging.info("Writing to " + outfile)
         outputdir = os.path.dirname(outfile)
+
         if not os.path.exists(outputdir):
             os.makedirs(outputdir)
 
@@ -152,19 +153,13 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
         elif save_format == 'csv':
             #fname1 = fname.replace('_a.dat', '.csv.gz')
             #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)
-            logging.info("Writing to " + outfile)
-
-            if not os.path.exists(outputdir):
-                os.makedirs(outputdir)
 
             df.to_csv(outfile)
-        elif save_format == 'none':
-            pass
         else:
             logging.warning("Unknown output format '{:s}'".format(save_format))
             return 1
         return 0
-    except Exception:
+    except Exception: # pragma: no cover
         taskname = "error"
         for line in traceback.format_exc().split("\n"):
             print('{:s}: {:s}'.format(taskname, line))

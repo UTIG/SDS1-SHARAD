@@ -36,6 +36,9 @@ def test_write(outputdir="."):
     outputfile = os.path.join(outputdir, "test_write1.h5")
     test_data = {'dict1': make_pandas_data()}
 
+    if not os.path.exists(outputdir):
+        os.makedirs(outputdir)
+
     # demonstrate in a standard context open/close syntax
     hdf5 = hdf.hdf(outputfile, mode='w')
     hdf5.save_dict('dict1', test_data)
@@ -66,6 +69,7 @@ def make_pandas_data():
 def main():
     """ Demonstrate opening of an HDF5 file """
     parser = argparse.ArgumentParser(description='Test hdf5 class')
+    parser.add_argument('-o', '--output', default='.', help="Output directory")
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
 
@@ -79,7 +83,7 @@ def main():
 
     logging.info("Starting HDF testing")
     test_read()
-    test_write()
+    test_write(args.output)
 
 
 if __name__ == "__main__":
