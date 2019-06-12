@@ -107,7 +107,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         bps = 8    
 
         # Decompress the data
-        decompressed = cmp.rng_cmp.decompressSciData(raw_data, compression, presum, bps, SDI) 
+        decompressed = cmp.rng_cmp.decompress_sci_data(raw_data, compression, presum, bps, SDI) 
         E_track = np.empty((idx_end-idx_start,2))
         # Get groundtrack distance and define 30 km chunks
         tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
@@ -218,14 +218,14 @@ def main():
 
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
-    #keys = h5file.keys() 
-    #lookup = np.genfromtxt('lookup.txt',dtype='str')
-    lookup = np.genfromtxt(args.tracklist, dtype = 'str')
-    #lookup = np.genfromtxt('EDR_Cyril_SouthPole_Path.txt', dtype = 'str')
+    #keys = h5file.keys()
+    with open(args.tracklist, 'r') as fin:
+        lookup = [line.strip() for line in fin if line.strip() != '']
+    logging.debug(lookup)
 
     # Build list of processes
     logging.info("Building task list")
-    process_list=[]
+    process_list = []
     path_outroot = args.output
 
     logging.debug("Base output directory: " + path_outroot)
@@ -249,9 +249,9 @@ def main():
             logging.debug('File already processed. Skipping ' + infile)
 
     #h5file.close()
-    if args.maxtracks > 0:
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         process_list = process_list[0:args.maxtracks]
-    #process_list.append(['/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0188801/e_0188801_001_ss05_700_a_a.dat',None,None])
+
     if args.dryrun:
         sys.exit(0)
 
