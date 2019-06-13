@@ -89,7 +89,7 @@ def main():
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
-        sys.exit(1)
+        sys.exit(0)
 
     logging.info("Start processing {:d} tracks".format(len(process_list)))
 

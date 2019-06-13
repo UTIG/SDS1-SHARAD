@@ -53,8 +53,7 @@ $COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser m
 
 # This one still takes too long with default params
 #echo $S0: run_sar2 ddv1
-#$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv1
-
+$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv1
 
 
 echo $S0: run_rng_cmp
@@ -64,16 +63,13 @@ echo $S0: run_altimetry
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt -n
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt
 
-rm -rf $RNGDATA
 echo "$S0: run_rsr"
-RSRDATA=./covdata/rsr_data/
-rm -rf $RSRDATA
 # show all files
 $COV run $FLAGS -a ../SHARAD/run_rsr.py -n all
 # show all files that would be deleted
 $COV run $FLAGS -a ../SHARAD/run_rsr.py -n --delete all
 # Run an orbit
-nice $COV run $FLAGS -a ../SHARAD/run_rsr.py $DRYRUN --ofmt none --output $RSRDATA -s 2000 1920301
+nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --ofmt none --output ./covdata/rsr_data/ -s 2000 1920301
 
 
 
