@@ -139,6 +139,7 @@ class SHARADEnv:
 
         globpat = os.path.join(self.get_edr_path(), '*/data/*/*/*.lbl')
         label_files = glob.glob(globpat)
+        label_files.sort()
 
         logging.debug("Found {:d} label files".format(len(label_files)))
 
@@ -379,7 +380,7 @@ def test_my(senv):
     for orbit in orbitnames1:
         for rec in senv.orbitinfo[orbit]:
             orbitnames2.append(rec['name'])
-    orbitnames1.sort()
+    orbitnames2.sort()
 
 
     # what happens when you run my on something that doesn't exist
@@ -462,6 +463,18 @@ def test_orbit_info(senv):
         assert len(oinfo) == 0 
     except AssertionError as e:
         raise e
+
+    # Show which orbits contain more than one value
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug("Orbits with multiple items: ")
+        orbitnames1 = sorted(senv.orbitinfo.keys())
+        for orbit in orbitnames1:
+            norbits = len(senv.orbitinfo[orbit])
+            if norbits > 1:
+                logging.debug("Orbit {:s} contains {:d} items:".format(orbit, norbits))
+            for i, rec in enumerate(senv.orbitinfo[orbit]):
+                logging.debug("{:2d}: {:s}".format(i, str(rec)))
+
 
 
 def main():
