@@ -296,8 +296,9 @@ def todo(delete=False, senv=None):
 
     orbit: string
         orbit (accepts regex expressions, e.g., 25*)
-    delete: binary
-        Whether the already RSR-processed products should be reprocessed
+    delete: boolean
+        If True, delete existing RSR products and re-process.
+        If False, only generate RSR products that do not exist.
 
     Output
     ------
