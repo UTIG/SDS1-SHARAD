@@ -93,8 +93,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     #----------------------
 
     alty = alt['idx_fine']
-    y = alty * 0
-    amp = alty * 0
+    y = np.empty(alty.shape) #alty * 0
+    amp = np.empty(alty.shape) #alty * 0
     for i, val in enumerate(alty):
         if (not np.isfinite(val)) or (val == 0):
             y[i] = np.nan
@@ -118,7 +118,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
             y[i] = maxind
             amp[i] = maxvec
 
-    # Geomtric-loss-corrected power
+    # Geometric-loss-corrected power
     lc = 10*np.log10(sr.utils.geo_loss(2*rng*1e3))
     pdb = 20*np.log10(amp) + gain - lc
 
@@ -210,6 +210,9 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     rn: Surface scattering coefficient [dB power]
     """
 
+    if senv is None:
+        senv = SHARAD.SHARADEnv()
+
     #----------
     # Load data
     #----------
@@ -228,7 +231,7 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     # Get surface amplitude
     #----------------------
 
-    surf = surface_amp(senv, orbit, gain=gain,**kwargs)
+    surf = surface_amp(senv, orbit, gain=gain, **kwargs)
     amp = surf['amp'].values
 
     #-------------------------------
@@ -236,9 +239,6 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     #-------------------------------
 
     logging.debug('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
-
-    if senv is None:
-        senv = SHARAD.SHARADEnv()
 
     pdb = 20*np.log10(amp) + gain
     amp2 = 10**(pdb/20)
@@ -272,12 +272,14 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     #--------
 
     if sav is True:
+        # TODO: change this to use b_single
+        # orbit_info = senv.get_orbit_info(orbit_full, True)
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
         if typ is 'cmp':
             archive_path = os.path.join(senv.out['rsr_path'], orbit_info['relpath'], typ)
-        else:
-            assert(False)
+        else: # pragma: no cover
+            assert False
         if not os.path.exists(archive_path):
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
@@ -310,20 +312,18 @@ def todo(delete=False, senv=None):
         senv = SHARADEnv.SHARADEnv()
 
     alt_orbits = []
-    for i in senv.orbitinfo:
-        if any('.h5' in s for s in senv.orbitinfo[i][0]['altpath']):
-            alt_orbits.append(i)
-
     rsr_orbits = []
-    for i in senv.orbitinfo:
-        if any('.txt' in s for s in senv.orbitinfo[i][0]['altpath']):
-            rsr_orbits.append(i)
+    for orbit in senv.orbitinfo:
+        if any(s.endswith('.h5') for s in senv.orbitinfo[orbit][0]['altpath']):
+            alt_orbits.append(orbit)
+        if any(s.endswith('.txt') for s in senv.orbitinfo[orbit][0]['altpath']):
+            rsr_orbits.append(orbit)
 
     if delete is True:
         out = alt_orbits
     else:
         out = list(set(alt_orbits) - set(rsr_orbits))
-
+    out.sort()
     return out
 
 
@@ -338,7 +338,7 @@ def main():
     parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'), help="Output data format")
     parser.add_argument('orbits', metavar='orbit', nargs='+', 
                         help='Orbit IDs to process (including leading zeroes). If "all", processes all orbits')
-    parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing")
+    parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing. -1 to disable multiprocessing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     #parser.add_argument('--tracklist', default="elysium.txt",
