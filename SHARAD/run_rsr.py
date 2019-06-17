@@ -107,17 +107,24 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=(-100,100), gain=0, outpath=No
             y[i] = np.nan
             amp[i] = np.nan
         else:
+            # TODO: could we only calculate the gradient/abs in a neighborhood around the window?
+            val = int(val)
+            i0 = max(0,  val+ywinwidth[0])
+            i1 = min(rdg.shape[1], val+ywinwidth[1])
+            j0 = max(0, val+ywinwidth[0]*2)
+            j1 = min(rdg.shape[1], val+ywinwidth[1]*2)
+
             # Pulse amplitude
-            pls = np.abs(rdg[i, :])
+            pls = np.abs(rdg[i, j0:j1])
             # Product of the pulse with its derivative
             prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
             # interval within which to retrieve the surface
-            val = int(val)
-            itv = prd[val+ywinwidth[0]:val+ywinwidth[1]]
+            itv = prd[i0-j0:i1-j0]
             if len(itv):
                 maxprd = np.max(itv)
-                maxind = val + ywinwidth[0] + np.argmax(itv) # The value of the surface echo
-                maxvec = pls[maxind] # The y coordinate of the surface echo
+                # TODO: could simplify these a bit
+                maxind = i0 + np.argmax(itv) # The value of the surface echo
+                maxvec = pls[maxind-j0] # The y coordinate of the surface echo
             else:
                 maxprd = 0
                 maxind = 0
@@ -129,6 +136,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=(-100,100), gain=0, outpath=No
     # Geometric-loss-corrected power
     lc = 10*np.log10(sr.utils.geo_loss(2*rng*1e3))
     pdb = 20*np.log10(amp) + gain - lc
+    logging.debug('PROCESSING: surf_amp geometric loss calculation done')
 
 
     #--------
@@ -150,6 +158,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=(-100,100), gain=0, outpath=No
     #out = out.reindex(columns=['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp'])
     #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
 
+    logging.debug('PROCESSING: surf_amp dataframe create done')
     if sav is True:
         #k = p['orbit_full'].index(orbit_full)
         # TODO: what is the correct response if there is more than one result?  GNG
