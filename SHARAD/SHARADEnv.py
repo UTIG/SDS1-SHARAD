@@ -124,11 +124,15 @@ class SHARADEnv:
 
     def index_files(self):
         """ Index files under the specified root directories """
-        logging.debug("Indexing files in {:s}".format(self.get_edr_path()))
+
+        # Return the absolute absolute path of EDR data
+        root = os.path.join(self.orig_path, 'EDR')
+        logging.debug("Indexing files in {:s}".format(root))
 
         self.out = {}
         # GNG TODO: make this use SDS environment variable
         # TODO: glob, too?
+
 
         #self.out['data_product'] = os.listdir(self.data_path)
         for sname in os.listdir(self.data_path):
@@ -137,7 +141,7 @@ class SHARADEnv:
         for sname in os.listdir(self.orig_path):
             self.out[sname + '_path'] = os.path.join(self.orig_path, sname)
 
-        globpat = os.path.join(self.get_edr_path(), '*/data/*/*/*.lbl')
+        globpat = os.path.join(root, '*/data/*/*/*.lbl')
         label_files = glob.glob(globpat)
         label_files.sort()
 
@@ -162,24 +166,28 @@ class SHARADEnv:
                 self.orbitinfo[orbit] = []
 
             self.orbitinfo[orbit].append(orbitinfo)
+        logging.debug("Index basic info")
+        # don't calculate this until it's used.  See get_orbit_info
+        # List files of available for all data products
+        #for orbit in self.orbitinfo:
+        #    self.index_typ_files(orbit)
 
-        # List files of avaialble for all data products
-        for orbit in self.orbitinfo:
-            for typ in self.out:
-                path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
-                files = glob.glob(path)
-                self.orbitinfo[orbit][0][typ.replace('_','')] = files
+    def index_typ_files(self, orbit):
+        for typ in self.out:
+            t1 = typ.replace('_','')
+            # Don't index if we've already indexed it.
+            if t1 in self.orbitinfo[orbit][0]:
+                continue
+            path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
+            files = glob.glob(path)
+            self.orbitinfo[orbit][0][t1] = files
+            logging.debug("self.orbitinfo[{:s}][0][{:s}] = {:s}".format(orbit, t1, str(files)))
 
 
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
         # This isn't ever used.
         #self.mrosh = [i.split('/')[0] for i in out['orbit_path']]
-
-
-    def get_edr_path(self):
-        """ Return the absolute absolute path of EDR data """
-        return os.path.join(self.orig_path, 'EDR')
 
 
     def orbit_to_full(self, orbit):
@@ -203,14 +211,16 @@ class SHARADEnv:
         """
 
         if '_' in orbit:
-            # This is a full  name
+            # This is a full name
             orbit_fullname = orbit
             orbit = orbit_fullname.split('_')[1]
         else:
             # This is a short name
             orbit_fullname = ''
 
+        # Don't index until we use it.
         try:
+            self.index_typ_files(orbit)
             if orbit_fullname != '':
                 # TODO: replace with filter()
                 list_ret = []
@@ -248,27 +258,37 @@ class SHARADEnv:
     #        print('MISSING: ' + path)
     #    return path_exists
 
-
-    def aux_data(self, orbit, count=-1):
-        """Output content of the auxiliary file for a given orbit
+    def aux_filename(self, orbit):
+        """Output filename of auxiliary file for a given orbit
         count is an optional variable that, if provided, limits the number
         of records read from the file.
         """
-        #logging.debug("getting info for orbit {:s}".format(orbit))
         orbit_info = self.get_orbit_info(orbit, True)
 
         if 'relpath' not in orbit_info: # orbit not found
             return None
-        fil = os.path.join(self.get_edr_path(), orbit_info['relpath'],
+
+        fil = os.path.join(self.orig_path, 'EDR', orbit_info['relpath'],
                            orbit_info['name'] + '_a.dat')
-        #logging.debug("aux(): opening {:s}".format(fil))
-        out = np.fromfile(fil, dtype=AUX_DTYPE, count=count)
-        return out
+        return fil
 
 
-    def alt_data(self, orbit, typ='beta5', ext='h5'):
-        """Output data processed and archived by the altimetry processor
+    def aux_data(self, orbit, count=-1):
+        filename = self.aux_filename(orbit)
+        return self.read_aux_data(filename, count=count)
+
+
+    def read_aux_data(self, aux_filename, count=-1):
+        """Output content of the auxiliary file for a given orbit
+        count is an optional variable that, if provided, limits the number
+        of records read from the file.
         """
+        if not aux_filename:
+            return None
+
+        return np.fromfile(aux_filename, dtype=AUX_DTYPE, count=count)
+
+    def alt_filename(self, orbit, typ='beta5', ext='h5'):
 
         orbit_info = self.get_orbit_info(orbit, True)
 
@@ -277,17 +297,31 @@ class SHARADEnv:
 
         #orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
         #k = p['orbit_full'].index(orbit_full)
-        path1 = os.path.join(self.out['alt_path'], orbit_info['relpath'],
+
+        path1 = os.path.join(self.data_path, 'alt', orbit_info['relpath'],
                              typ, '*.' + ext)
         files = glob.glob(path1)
         if not files:
             return None # no file found
         # TODO: assert glob only has one result
-        if ext == 'h5':
+
+        return files[0]
+
+    def alt_data(self, orbit, typ='beta5', ext='h5'):
+        filename = self.alt_filename(orbit, typ, ext)
+        return self.read_alt_data(filename, orbit, typ)
+
+    def read_alt_data(self, alt_filename, orbit, typ='beta5'):
+        """Output data processed and archived by the altimetry processor
+        """
+        if alt_filename is None:
+            return None
+        logging.debug("alt_data reading " + alt_filename)
+        if alt_filename.endswith('h5'):
             try:
-                data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
+                data = h5.File(alt_filename, 'r')[typ]['orbit'+orbit]
             except (OSError, KeyError) as e:
-                logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
+                logging.error("Can't read {:s}: {:s}".format(alt_filename, str(e)))
                 raise(e)
 
             out = {'et':data['block0_values'][:, 0]}
@@ -295,8 +329,8 @@ class SHARADEnv:
                 key = str(val).replace('b', '').replace('\'', '')
                 vec = data['block0_values'][:, i]
                 out[key] = vec
-        elif ext == 'npy':
-            out = np.load(files[0])
+        elif alt_filename.endswith('.npy'):
+            out = np.load(alt_filename)
         return out
 
 
@@ -317,37 +351,47 @@ class SHARADEnv:
         return out
 
 
-    def cmp_data(self, orbit, typ='ion'):
-        """Output data processed and archived by the CMP processor
-        """
+    def cmp_filename(self, orbit, typ='ion'):
         orbit_info = self.get_orbit_info(orbit, True)
 
-        globpat = os.path.join(self.out['cmp_path'],
+        globpat = os.path.join(self.data_path, 'cmp',
                                orbit_info['relpath'], typ, '*.h5')
         fil = sorted(glob.glob(globpat))[0]
-        redata = pd.read_hdf(fil, key='real').values
-        imdata = pd.read_hdf(fil, key='imag').values
-        return redata + 1j*imdata
+        # TODO: warn if more than one file is found
+        return fil
 
+    def cmp_data(self, orbit, typ='ion'):
+        filename = self.cmp_filename(orbit, typ)
+        return read_cmp_data(filename)
 
-    def srf_data(self, orbit, typ='cmp'):
-        """Output data processed and archived by the altimetry processor
-          (surface) """
+    def read_cmp_data(self, fil):
+        """Output data processed and archived by the CMP processor
+        """
+        logging.debug("cmp_data reading " + fil)
+        data = 1j*pd.read_hdf(fil, key='imag').values
+        data += pd.read_hdf(fil, key='real').values
+        return data
 
+    def srf_filename(self, orbit, typ='cmp'):
         orbit_info = self.get_orbit_info(orbit, True)
 
         if 'relpath' not in orbit_info: # orbit not found
             return None
 
-        path1 = os.path.join(self.out['srf_path'], orbit_info['relpath'],
+        path1 = os.path.join(self.data_path, 'srf', orbit_info['relpath'],
                              typ, '*.txt')
         files = glob.glob(path1)
         # TODO: assert glob only has one result
         if not files:
             return None # no file found
 
-        # TODO: assert glob only has one result
-        out = np.genfromtxt(files[0], delimiter=',', names=True)
+        return files[0]
+
+    def srf_data(self, srf_filename):
+        """Output data processed and archived by the altimetry processor
+          (surface) """
+
+        out = np.genfromtxt(srf_filename, delimiter=',', names=True)
         return out
 
 
@@ -355,7 +399,8 @@ class SHARADEnv:
         """Output martian year for a given orbit
         (gives the MY at the beginning of the orbit)
         """
-        auxdata = self.aux_data(orbit, count=1)
+        filename = self.aux_filename(orbit)
+        auxdata = self.aux_data(filename, count=1)
         if auxdata is None:
             logging.debug("No data found for orbit '{:s}'".format(orbit))
             return None

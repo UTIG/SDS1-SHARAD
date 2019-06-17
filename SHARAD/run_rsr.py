@@ -39,7 +39,7 @@ import subradar as sr
 class DataMissingException(Exception):
     pass
 
-def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, verbose=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', ywinwidth=(-100,100), gain=0, outpath=None, sav=True, verbose=True, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
 
@@ -64,6 +64,10 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
 
     """
 
+    if outpath is None:
+        outpath = senv.out['srf_path']
+
+
     #----------
     # Load data
     #----------
@@ -80,17 +84,20 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
         raise DataMissingException("No CMP data for orbit " + orbit)
     aux = senv.aux_data(orbit)
     if aux is None: # pragma: no cover
-        raise("No Auxiliary Data for orbit " + orbit)
+        raise DataMissingException("No Auxiliary data for orbit " + orbit)
 
-    et = aux['EPHEMERIS_TIME']
-    lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
-    lon = aux['SUB_SC_EAST_LONGITUDE']
+    #et = aux['EPHEMERIS_TIME']
+    #lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+    #lon = aux['SUB_SC_EAST_LONGITUDE']
     rng = aux['SPACECRAFT_ALTITUDE']
-    roll = aux['SC_ROLL_ANGLE']
+    #roll = aux['SC_ROLL_ANGLE']
 
     #----------------------
     # Get surface amplitude
     #----------------------
+
+    logging.debug('PROCESSING: surf_amp read data done. alt={:s}'.format(str(alt['idx_fine'].shape)))
+    logging.debug('PROCESSING: surf_amp read data done. rdg={:s}'.format(str(rdg.shape)))
 
     alty = alt['idx_fine']
     y = np.empty(alty.shape) #alty * 0
@@ -118,6 +125,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
             y[i] = maxind
             amp[i] = maxvec
 
+    logging.debug('PROCESSING: surf_amp pulse processing done')
     # Geometric-loss-corrected power
     lc = 10*np.log10(sr.utils.geo_loss(2*rng*1e3))
     pdb = 20*np.log10(amp) + gain - lc
@@ -128,7 +136,16 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     # TODO: def archive_surface_amp(senv, orbit, srf_data)
     #--------
 
-    out = {'et':et, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp, 'pdb':pdb}
+    out = {
+        'et': aux['EPHEMERIS_TIME'], 
+        'lat': aux['SUB_SC_PLANETOCENTRIC_LATITUDE'], 
+        'lon': aux['SUB_SC_EAST_LONGITUDE'], 
+        'rng': rng, # aux['SPACECRAFT_ALTITUDE'],
+        'roll': aux['SC_ROLL_ANGLE'], 
+        'y': y, 
+        'amp': amp,
+        'pdb': pdb
+    }
     out = pd.DataFrame(data=out)
     #out = out.reindex(columns=['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp'])
     #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
@@ -136,11 +153,10 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     if sav is True:
         #k = p['orbit_full'].index(orbit_full)
         # TODO: what is the correct response if there is more than one result?  GNG
-        list_orbit_info = senv.get_orbit_info(orbit_full)
-        orbit_info = list_orbit_info[0]
+        orbit_info = senv.get_orbit_info(orbit_full, True)
 
         if typ is 'cmp':
-            archive_path = os.path.join(senv.out['srf_path'], orbit_info['relpath'], typ)
+            archive_path = os.path.join(outpath, orbit_info['relpath'], typ)
         else: # pragma: no cover
             assert False
         if not os.path.exists(archive_path):
@@ -149,13 +165,14 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
         out.to_csv(fil, index=None, sep=',')
         #print("CREATED: " + fil )
 
+    logging.debug('PROCESSING: surf_amp saving done')
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, 
+def process_rsr(orbit, typ='cmp', gain=-211.32, outpath=None, sav=True, verbose=True, 
     senv=None, **kwargs):
     """
-    Output the results from the Radar Statistical Reconnaissance Technique applied along
+    Output the results from the Radar Statistical Reconnaissance technique applied along
     a SHARAD orbit
 
     Inputs
@@ -163,12 +180,14 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
 
     orbit: string
         the orbit number or the full name of the orbit file (w/o extension)
-        if te orbit is trunl=ked in several file
+        if the orbit is chunked in several files
     typ: string
         the type of radar data used to get the amplitude from
     gain: float
         Any gain to be added to the signal (power in dB)
         For SHARAD, it includes the instrumental gain and the absolute calibration value
+    outpath: string
+        Base path for output data.  If None, uses 'rsr_path' from senv
     save: boolean
         Whether to save the results in a txt file into the hierarchy
 
@@ -212,6 +231,10 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
 
     if senv is None:
         senv = SHARAD.SHARADEnv()
+
+    if outpath is None:
+        outpath = senv.out['rsr_path']
+        # outpath = os.path.join(senv.data_path, 'rsr')
 
     #----------
     # Load data
@@ -277,7 +300,7 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
         if typ is 'cmp':
-            archive_path = os.path.join(senv.out['rsr_path'], orbit_info['relpath'], typ)
+            archive_path = os.path.join(outpath, orbit_info['relpath'], typ)
         else: # pragma: no cover
             assert False
         if not os.path.exists(archive_path):
@@ -358,7 +381,7 @@ def main():
 
     loglevel=logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
-        format="run_rsr: [%(levelname)-7s] %(message)s")
+        format="run_rsr: [%(relativeCreated)5d %(levelname)-7s] %(message)s")
 
     senv = SHARADEnv.SHARADEnv()
 
@@ -371,10 +394,10 @@ def main():
         sys.exit(0)
 
     for orbit in args.orbits:
-        b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
-                nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
+        b = process_rsr(orbit, winsize=args.winsize, sampling=args.sampling,
+                nbcores=args.jobs, verbose=args.verbose, winwidth=args.ywinwidth,
                 bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'), 
-                senv=senv)
+                senv=senv, outpath=args.output)
 
         if args.output is not None:
             # Debugging output
