@@ -234,7 +234,7 @@ class SHARADEnv:
                     return self.orbitinfo[orbit][0]
                 else:
                     return self.orbitinfo[orbit]
-                return self.orbitinfo[orbit]
+
         except KeyError:
             return {} if b_single else [{}]
 
@@ -283,6 +283,7 @@ class SHARADEnv:
         if not files:
             return None # no file found
         # TODO: assert glob only has one result
+        out = None
         if ext == 'h5':
             try:
                 data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
@@ -313,8 +314,8 @@ class SHARADEnv:
 
         fil = glob.glob('/'.join(tecpat)[0])
         #foo = check(fil)
-        out = np.loadtxt(fil)
-        return out
+        return np.loadtxt(fil)
+
 
 
     def cmp_data(self, orbit, typ='ion'):
@@ -449,19 +450,20 @@ def test_alt(senv):
 
 def test_orbit_info(senv):
     try:
-        # Test what happens when you look for an orbit that doesn't exist
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
-        assert len(oinfo) == 1
-        assert len(oinfo[0]) == 0 # should be a list with a dict
-        assert isinstance(oinfo[0],dict) # should be just a dict
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', False)
-        assert len(oinfo) == 1
-        assert len(oinfo[0]) == 0 # should be a list with a dict
-        assert isinstance(oinfo[0],dict) # should be just a dict
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', True)
-        assert isinstance(oinfo,dict) # should be just a dict
-        assert len(oinfo) == 0 
-    except AssertionError as e:
+        for orbitname in ('full_orbitname_that_doesnt_exist', 'orbitnamedoesntexist'):
+            # Test what happens when you look for an orbit that doesn't exist
+            oinfo = senv.get_orbit_info(orbitname)
+            assert len(oinfo) == 1
+            assert len(oinfo[0]) == 0 # should be a list with a dict
+            assert isinstance(oinfo[0],dict) # should be just a dict
+            oinfo = senv.get_orbit_info(orbitname, False)
+            assert len(oinfo) == 1
+            assert len(oinfo[0]) == 0 # should be a list with a dict
+            assert isinstance(oinfo[0],dict) # should be just a dict
+            oinfo = senv.get_orbit_info(orbitname, True)
+            assert isinstance(oinfo,dict) # should be just a dict
+            assert len(oinfo) == 0 
+    except AssertionError as e: # pragma: no cover
         raise e
 
     # Show which orbits contain more than one value
@@ -483,7 +485,7 @@ def main():
     t0 = time.time()
 
     logging.basicConfig(
-        level=logging.DEBUG, stream=sys.stdout,
+        level=logging.INFO, stream=sys.stdout,
         format='[%(relativeCreated)5d %(name)-6s %(levelname)-7s] %(message)s')
     logging.info("Starting main()")
     # Exercise functions
