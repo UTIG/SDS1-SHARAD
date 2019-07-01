@@ -148,8 +148,8 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
 
         if save_format == 'hdf5':
             orbit_data = {'orbit'+str(obn): result}
-            h5 = hdf.hdf(outfile, mode='w')
-            h5.save_dict('beta5', orbit_data)
+            with hdf.hdf(outfile, mode='w') as h5:
+                h5.save_dict('beta5', orbit_data)
         elif save_format == 'csv':
             #fname1 = fname.replace('_a.dat', '.csv.gz')
             #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)
