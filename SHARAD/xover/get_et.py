@@ -73,8 +73,8 @@ def read_science_np(label_path, data_path):
                          #nlist.append('PACKET')
 
         else:
-            dty = PDS3_DATA_TYPE_TO_DTYPE[column[1]['DATA_TYPE']]+str(
-                    column[1]['BYTES'])
+            dty = PDS3_DATA_TYPE_TO_DTYPE[column[1]['DATA_TYPE']] + \
+                  str(column[1]['BYTES'])
             if '<u3' in dty:
                 dtype.append('<u2')
                 #nlist.append(name+'_MSB')
@@ -159,8 +159,8 @@ def main():
     print("Found {:d} record files in {:s}".format(len(records), raw))
     for i, record in enumerate(records):
         #p.print_Prog(int(i))
-        rec = pds3.read_science(lbl_file,record,science=False)
-        rec2 = read_science_np(lbl_file,record)[0]
+        rec = pds3.read_science(lbl_file, record, science=False)
+        rec2 = read_science_np(lbl_file, record)[0]
         et = rec['EPHEMERIS_TIME']#np.zeros(len(rec))
         print(rec['SCET_BLOCK_WHOLE'])
         #for j in range(len(rec)):

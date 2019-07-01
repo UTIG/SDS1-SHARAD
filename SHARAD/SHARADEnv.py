@@ -168,7 +168,7 @@ class SHARADEnv:
             for typ in self.out:
                 path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
                 files = glob.glob(path)
-                self.orbitinfo[orbit][0][typ.replace('_','')] = files
+                self.orbitinfo[orbit][0][typ.replace('_', '')] = files
 
 
         #out['dataset'] = os.path.basename(out['data_path'])
@@ -289,7 +289,7 @@ class SHARADEnv:
                 data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
             except (OSError, KeyError) as e:
                 logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
-                raise(e)
+                raise e
 
             out = {'et':data['block0_values'][:, 0]}
             for i, val in enumerate(data['block0_items'][:]):
@@ -430,7 +430,7 @@ def test_alt(senv):
         for i, orbit in enumerate(orbitnames):
             try:
                 altdata = senv.alt_data(orbit)
-            except (OSError,KeyError) as e:
+            except (OSError, KeyError) as e:
                 #KeyError: "Unable to open object (object 'beta5' doesn't exist)"
                 #OSError: Unable to open file (file signature not found)
                 logging.error("Can't open h5 for {:s}: {:s}".format(orbit, str(e)))
@@ -455,14 +455,14 @@ def test_orbit_info(senv):
             oinfo = senv.get_orbit_info(orbitname)
             assert len(oinfo) == 1
             assert len(oinfo[0]) == 0 # should be a list with a dict
-            assert isinstance(oinfo[0],dict) # should be just a dict
+            assert isinstance(oinfo[0], dict) # should be just a dict
             oinfo = senv.get_orbit_info(orbitname, False)
             assert len(oinfo) == 1
             assert len(oinfo[0]) == 0 # should be a list with a dict
-            assert isinstance(oinfo[0],dict) # should be just a dict
+            assert isinstance(oinfo[0], dict) # should be just a dict
             oinfo = senv.get_orbit_info(orbitname, True)
-            assert isinstance(oinfo,dict) # should be just a dict
-            assert len(oinfo) == 0 
+            assert isinstance(oinfo, dict) # should be just a dict
+            assert len(oinfo) == 0
     except AssertionError as e: # pragma: no cover
         raise e
 
@@ -503,7 +503,4 @@ def main():
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-
-
-
 

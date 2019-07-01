@@ -31,7 +31,7 @@ Y = [0, 10, 20, 30, 40 50, 60, 70, 80, 90, 100]
 Sample-and-hold (also known as boxcar interpolation) can be implemented
 by defining as a function h2[t]
 
-h2[t] = { h[t1] for the greatest t1 in X such that t1 <= t} 
+h2[t] = { h[t1] for the greatest t1 in X such that t1 <= t}
 
 
 
@@ -92,10 +92,10 @@ def vector_interp(vect):
     Description:
 
     Given a vector that represents the values of a discrete-time function that has
-    been upsampled using sample-and-hold interpolation, return a vector that 
+    been upsampled using sample-and-hold interpolation, return a vector that
     "improves" the interpolation method to linear interpolation, assuming that
-    the center of the observed sample-and-hold intervals is the 
-   
+    the center of the observed sample-and-hold intervals is the
+
 
 
 
@@ -175,7 +175,7 @@ def vector_interp2(vect, t=None, type='linear'):
 
     # v_uniq is a list of the unique values in this vector
     v_uniq = np.unique(vect)
-    unix = []    
+    unix = []
 
     len_vect = len(vect)
     for ii in range(len(v_uniq)):
@@ -189,11 +189,12 @@ def vector_interp2(vect, t=None, type='linear'):
         #print("ii={:d} t3={:d}".format(ii,t3))
         # Finding the nearest neighbors to the current index
         # flipud to get the lowest highest index in the original array that is closest
-        # t4 is the index distance from the highest-indexed closest-argument to the end of the vector
-        #t4 = abs(len_vect - minidx[-1]) # 
+        # t4 is the index distance from the highest-indexed
+        # closest-argument to the end of the vector
+        #t4 = abs(len_vect - minidx[-1]) #
         t4 = abs(len_vect - np.argmin(np.flipud(t2)))
         #unix.append(  np.round(np.mean([t3, t4])) )
-        unix.append(round( (t3+t4) / 2.0))
+        unix.append(round((t3+t4) / 2.0))
         #unix[ii] = np.round(np.mean([t3, t4]))
         #print("ii={:d} t3={:d} t4={:d}".format(ii,t3, t4))
     out = np.interp(np.arange(0, len_vect, 1), unix, v_uniq)
@@ -220,7 +221,7 @@ def smooth(y, t=None, kind='linear', place='mid', epsilon=0.0):
 4~    kind: string
         String defining type of interpolation to perform for smoothing.
         See scipy interp1d.
-    place: 
+    place:
         Controls where to place returned samples.  See reduce_samphold.
 
     epsilon:
@@ -239,7 +240,7 @@ def smooth(y, t=None, kind='linear', place='mid', epsilon=0.0):
     y1, t1 = reduce_samphold(y, t, place, epsilon)
 
     # We allow extrapolation because it should only be for a short distance, but
-    # hopefully this assumption doesn't break down.  
+    # hopefully this assumption doesn't break down.
     fsmooth = scipy.interpolate.interp1d(t1, y1, kind, fill_value="extrapolate")
     try:
         y2 = fsmooth(t)
@@ -267,7 +268,7 @@ def reduce_samphold(y, t=None, place='mid', epsilon=0.0):
     y: numpy array representing data samples acquired using sample-and-hold, to be reduced
     t: nupy array of time (independent variable) corresponding to y. If
        t is none, then t is internally generated to be the indices of y
-    place: 
+    place:
          Controls where to place returned samples.
         'mid': place reduced samples in the middle of the interval (default)
         'low': place reduced samples at the least t value in the interval
@@ -289,20 +290,19 @@ def reduce_samphold(y, t=None, place='mid', epsilon=0.0):
         t = np.array(range(len(y)))
 
     assert len(y) == len(t)
-    outfunc = None
 
     # difference between consecutive samples
-    dy =  np.abs(np.diff(y)) 
+    dy = np.abs(np.diff(y))
 
     # Find points where the value changes
     endpoints_idx = np.array(np.argwhere(dy > epsilon)[:, 0])
-    endpoints_y = np.insert( y[endpoints_idx + 1], 0, y[0] )
+    endpoints_y = np.insert(y[endpoints_idx + 1], 0, y[0])
 
     if place == 'mid':
         # get t for the low end of intervals
-        endpoints_t1 = np.insert( t[endpoints_idx+1], 0, t[0] )
+        endpoints_t1 = np.insert(t[endpoints_idx+1], 0, t[0])
         # get t for the high end of intervals
-        endpoints_t2 = np.append( t[endpoints_idx], t[-1])
+        endpoints_t2 = np.append(t[endpoints_idx], t[-1])
         # get the average
         endpoints_t = (endpoints_t1 + endpoints_t2) / 2
 
@@ -321,37 +321,37 @@ def reduce_samphold(y, t=None, place='mid', epsilon=0.0):
     elif place == 'high':
         raise Exception('Mode "high" has not been tested')
         # get t for the high end of the interval
-        endpoints_t = np.concatenate((t[endpoints_idx], np.array(t[-1]) ))        
+        endpoints_t = np.concatenate((t[endpoints_idx], np.array(t[-1])))
 
     return endpoints_y, endpoints_t
 
-               
+
 
 
 
 def test_vector_interp(ntests=100):
-    # Test that vector_interp is equivalent to vector_interp2
-    v = np.array(list(range(80)) + list(range(90,100,2)))
+    """ Test that vector_interp is equivalent to vector_interp2"""
+    vtest = np.array(list(range(80)) + list(range(90, 100, 2)))
 
-    w1 = vector_interp(v)
-    w2 = vector_interp2(v)
+    w1 = vector_interp(vtest)
+    w2 = vector_interp2(vtest)
     try:
         assert np.array_equal(w1, w2)
     except AssertionError as e:
-        print(v)
+        print(vtest)
         print(w1)
         print(w2)
         raise e
 
-    for i in range(ntests):
-        v = np.random.randint(1,500, 100)
+    for _ in range(ntests):
+        vrand = np.random.randint(1, 500, 100)
 
-        w1 = vector_interp(v)
-        w2 = vector_interp2(v)
+        w1 = vector_interp(vrand)
+        w2 = vector_interp2(vrand)
         try:
             assert np.array_equal(w1, w2)
         except AssertionError as e:
-            print(v)
+            print(vrand)
             print(w1)
             print(w2)
             raise e
@@ -363,45 +363,45 @@ def demo_vector_interp(funcname, func):
     # TODO: if running reduce_samphold, then also try the different placements
 
 
-    for hold_interval in (1,2,3,4):
+    for hold_interval in (1, 2, 3, 4):
         y1 = []
 
         for i in range(10):
-            y1.extend([10*i,]*hold_interval )
+            y1.extend([10*i,]*hold_interval)
         t = np.array(range(len(y1)))
 
         # Demonstrate problems with a strictly monotonic function
-        y2,t2 = func(np.array(y1))
+        y2, t2 = func(np.array(y1))
         plt.clf()
         plt.plot(t, y1, 'x')
         plt.plot(t2, y2, '+')
-        plt.legend(['Original',funcname])
+        plt.legend(['Original', funcname])
         plt.title('Function with repeat step {:d}'.format(hold_interval))
         plt.savefig('demo_{:s}{:d}.png'.format(funcname, hold_interval))
 
 
     # Show what happens in some pathological cases
 
-    y1 = np.array([0,1,2,3,4,5,6,7,8,7,6,5,4,3,2,1])
+    y1 = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1])
     t = np.array(range(len(y1)))
     y2, t2 = func(y1)
     plt.clf()
     plt.plot(t, y1, 'x')
     plt.plot(t2, y2, '+')
-    plt.legend(['Original',funcname])
+    plt.legend(['Original', funcname])
     plt.title('Triangle function')
     plt.savefig('demo_{:s}_tri.png'.format(funcname))
 
 
     # Constant function
 
-    y1 = np.array([0] * 10 )
+    y1 = np.array([0] * 10)
     t = np.array(range(len(y1)))
-    y2,t2 = func(y1)
+    y2, t2 = func(y1)
     plt.clf()
     plt.plot(t, y1, 'x')
     plt.plot(t2, y2, '+')
-    plt.legend(['Original',funcname])
+    plt.legend(['Original', funcname])
     plt.title('Triangle function')
     plt.savefig('demo_{:s}_const.png'.format(funcname))
 
@@ -409,25 +409,22 @@ def demo_vector_interp(funcname, func):
 
 
 def test_argmin(ntests=1000):
-    print("test_argmin() start")
-    for i in range(ntests):
-        v = np.random.randint(1, 99, 400)
-
-
-        #np.argmin(np.flipud(t2)
-        #min1a = np.argmin(v)
-        min2a = np.argmin(np.flipud(v))
-        min2b = np.flip(np.argmin(          v ))
+    """ Check out what the argmin function does """
+    logging.info("test_argmin() start")
+    for _ in range(ntests):
+        vrand = np.random.randint(1, 99, 400)
+        min2a = np.argmin(np.flipud(vrand))
+        min2b = np.flip(np.argmin(vrand))
 
         try:
             assert np.array_equal(min2a, min2b)
-        except AssertionError as e:
-            print(v)
+        except AssertionError as excp:
+            print(vrand)
             print(min2a)
             print(min2b)
-            raise e
-    print("test_argmin() end")
-    
+            raise excp
+    logging.info("test_argmin() end")
+
 
 
 
@@ -447,9 +444,9 @@ def main():
                         format="sar: [%(levelname)-7s] %(message)s")
 
     # test_argmin()
-    demo_vector_interp('vector_interp',vector_interp_wrapped)
-    demo_vector_interp('reduce_samphold',reduce_samphold)
-    demo_vector_interp('smooth',smooth)
+    demo_vector_interp('vector_interp', vector_interp_wrapped)
+    demo_vector_interp('reduce_samphold', reduce_samphold)
+    demo_vector_interp('smooth', smooth)
     test_vector_interp()
 
 
@@ -461,5 +458,3 @@ if __name__ == "__main__":
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     main()
-
-
