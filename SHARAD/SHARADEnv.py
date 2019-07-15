@@ -166,22 +166,13 @@ class SHARADEnv:
                 self.orbitinfo[orbit] = []
 
             self.orbitinfo[orbit].append(orbitinfo)
-        logging.debug("Index basic info")
-        # don't calculate this until it's used.  See get_orbit_info
-        # List files of available for all data products
-        #for orbit in self.orbitinfo:
-        #    self.index_typ_files(orbit)
 
-    def index_typ_files(self, orbit):
-        for typ in self.out:
-            t1 = typ.replace('_','')
-            # Don't index if we've already indexed it.
-            if t1 in self.orbitinfo[orbit][0]:
-                continue
-            path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
-            files = glob.glob(path)
-            self.orbitinfo[orbit][0][t1] = files
-            logging.debug("self.orbitinfo[{:s}][0][{:s}] = {:s}".format(orbit, t1, str(files)))
+        # List files of avaialble for all data products
+        for orbit in self.orbitinfo:
+            for typ in self.out:
+                path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
+                files = glob.glob(path)
+                self.orbitinfo[orbit][0][typ.replace('_', '')] = files
 
 
         #out['dataset'] = os.path.basename(out['data_path'])
@@ -244,7 +235,7 @@ class SHARADEnv:
                     return self.orbitinfo[orbit][0]
                 else:
                     return self.orbitinfo[orbit]
-                return self.orbitinfo[orbit]
+
         except KeyError:
             return {} if b_single else [{}]
 
@@ -304,25 +295,13 @@ class SHARADEnv:
         if not files:
             return None # no file found
         # TODO: assert glob only has one result
-
-        return files[0]
-
-    def alt_data(self, orbit, typ='beta5', ext='h5'):
-        filename = self.alt_filename(orbit, typ, ext)
-        return self.read_alt_data(filename, orbit, typ)
-
-    def read_alt_data(self, alt_filename, orbit, typ='beta5'):
-        """Output data processed and archived by the altimetry processor
-        """
-        if alt_filename is None:
-            return None
-        logging.debug("alt_data reading " + alt_filename)
-        if alt_filename.endswith('h5'):
+        out = None
+        if ext == 'h5':
             try:
                 data = h5.File(alt_filename, 'r')[typ]['orbit'+orbit]
             except (OSError, KeyError) as e:
-                logging.error("Can't read {:s}: {:s}".format(alt_filename, str(e)))
-                raise(e)
+                logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
+                raise e
 
             out = {'et':data['block0_values'][:, 0]}
             for i, val in enumerate(data['block0_items'][:]):
@@ -347,8 +326,8 @@ class SHARADEnv:
 
         fil = glob.glob('/'.join(tecpat)[0])
         #foo = check(fil)
-        out = np.loadtxt(fil)
-        return out
+        return np.loadtxt(fil)
+
 
 
     def cmp_filename(self, orbit, typ='ion'):
@@ -474,7 +453,7 @@ def test_alt(senv):
         for i, orbit in enumerate(orbitnames):
             try:
                 altdata = senv.alt_data(orbit)
-            except (OSError,KeyError) as e:
+            except (OSError, KeyError) as e:
                 #KeyError: "Unable to open object (object 'beta5' doesn't exist)"
                 #OSError: Unable to open file (file signature not found)
                 logging.error("Can't open h5 for {:s}: {:s}".format(orbit, str(e)))
@@ -494,19 +473,20 @@ def test_alt(senv):
 
 def test_orbit_info(senv):
     try:
-        # Test what happens when you look for an orbit that doesn't exist
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
-        assert len(oinfo) == 1
-        assert len(oinfo[0]) == 0 # should be a list with a dict
-        assert isinstance(oinfo[0],dict) # should be just a dict
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', False)
-        assert len(oinfo) == 1
-        assert len(oinfo[0]) == 0 # should be a list with a dict
-        assert isinstance(oinfo[0],dict) # should be just a dict
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', True)
-        assert isinstance(oinfo,dict) # should be just a dict
-        assert len(oinfo) == 0 
-    except AssertionError as e:
+        for orbitname in ('full_orbitname_that_doesnt_exist', 'orbitnamedoesntexist'):
+            # Test what happens when you look for an orbit that doesn't exist
+            oinfo = senv.get_orbit_info(orbitname)
+            assert len(oinfo) == 1
+            assert len(oinfo[0]) == 0 # should be a list with a dict
+            assert isinstance(oinfo[0], dict) # should be just a dict
+            oinfo = senv.get_orbit_info(orbitname, False)
+            assert len(oinfo) == 1
+            assert len(oinfo[0]) == 0 # should be a list with a dict
+            assert isinstance(oinfo[0], dict) # should be just a dict
+            oinfo = senv.get_orbit_info(orbitname, True)
+            assert isinstance(oinfo, dict) # should be just a dict
+            assert len(oinfo) == 0
+    except AssertionError as e: # pragma: no cover
         raise e
 
     # Show which orbits contain more than one value
@@ -528,7 +508,7 @@ def main():
     t0 = time.time()
 
     logging.basicConfig(
-        level=logging.DEBUG, stream=sys.stdout,
+        level=logging.INFO, stream=sys.stdout,
         format='[%(relativeCreated)5d %(name)-6s %(levelname)-7s] %(message)s')
     logging.info("Starting main()")
     # Exercise functions
@@ -546,7 +526,4 @@ def main():
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-
-
-
 
