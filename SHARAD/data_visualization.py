@@ -8,6 +8,7 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'data visualization function'}}
 
+import sys
 import os
 import argparse
     
@@ -16,6 +17,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tkinter import *
 
+sys.path.insert(0, '../xlib/')
+import cmp.pds3lbl as pds3
 
 def snr(data, noise_window=250):
     '''
@@ -47,7 +50,7 @@ def main():
     parser.add_argument('-snr', '--snr', default='Yes', help='plot final radargrams in SNR?')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD', help='Output base directory')
     parser.add_argument('--product', default='foc', help='Type of data product to be visualized')
-    parser.add_argument('--orbit', default='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1748102/e_1748102_001_ss19_700_a_a.dat',
+    parser.add_argument('--orbit', default='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat',
                         help='Path to auxiliary file for orbit of interest')
     
     args = parser.parse_args()
@@ -61,6 +64,10 @@ def main():
     datapath = os.path.join(args.output, args.product, pathfile)
     datafile = os.path.basename(datapath).replace('_a.dat', '_s.h5')
     datapath = os.path.dirname(datapath)
+    auxpath = args.orbit
+    scipath = args.orbit.replace('a.dat', 's.dat')
+    scifmtpath = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
+    auxfmtpath = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
 
     if args.product == 'foc':
         
@@ -160,19 +167,52 @@ def main():
         datapath = os.path.join(datapath, 'ion', datafile)
         tecupath = datapath.replace('.h5', '_TECU.txt')
         
+        # load relevant metadata
+        scimd = pds3.read_science(scipath, scifmtpath, science=True, bc=True)
+        auxmd = pds3.read_science(auxpath, auxfmtpath, science=False, bc=False)
+        rxwot = scimd['RECEIVE_WINDOW_OPENING_TIME'].values
+        pricode = scimd['PULSE_REPETITION_INTERVAL'].values
+        scrad = scimd['RADIUS_INTERPOLATE'].values
+
+        # determine range to start of each receive window
+        dt = 0.0375E-6
+        t = np.zeros(len(pricode), dtype=float)
+        for ii in range(len(pricode)):
+            if pricode[ii] == 1: pri_step = 1428E-6
+            elif pricode[ii] == 2: pri_step = 1429E-6
+            elif pricode[ii] == 3: pri_step = 1290E-6
+            elif pricode[ii] == 4: pri_step = 2856E-6
+            elif pricode[ii] == 5: pri_step = 2984E-6
+            elif pricode[ii] == 6: pri_step = 2580E-6
+            t[ii] = rxwot[ii] * dt + pri_step - 11.98E-6
+        t = t - (2 * (scrad - min(scrad)) * 1000 / 299792458)
+        t = t - min(t) 
+
         # load the relevant complex-valued radargram
         real = np.array(pd.read_hdf(datapath, 'real'))
         imag = np.array(pd.read_hdf(datapath, 'imag'))
         data = real + 1j * imag
-        if SNR:
-            data = snr(data)
-        else:
-            data = np.abs(data)
 
         # load the relevant TECU data
         ## tecu estimate in column 0
         ## 1-sigma of tecu estimate in column 1
         tecu = np.genfromtxt(tecupath)
+
+        # align radar data according to receive window opening times
+        n = np.size(data, axis=1)
+        fs = np.fft.fftfreq(n, dt)
+        adata = np.zeros((len(data), n), dtype=complex)
+        for ii in range(len(data)):
+            tempA = np.multiply(np.fft.fft(data[ii], norm='ortho'),
+                                np.exp(-1j * 2 * np.pi * t[ii] * fs))
+            adata[ii] = np.fft.ifft(tempA, norm='ortho')
+            del tempA
+
+        # convert to SNR if desired
+        if SNR:
+            data = snr(adata)
+        else:
+            data = np.abs(data)
 
         # plot the results
         plt.figure()
