@@ -47,7 +47,7 @@ def main():
     parser.add_argument('-snr', '--snr', default='Yes', help='plot final radargrams in SNR?')
     parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD', help='Output base directory')
     parser.add_argument('--product', default='foc', help='Type of data product to be visualized')
-    parser.add_argument('--orbit', default='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat',
+    parser.add_argument('--orbit', default='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1748102/e_1748102_001_ss19_700_a_a.dat',
                         help='Path to auxiliary file for orbit of interest')
     
     args = parser.parse_args()

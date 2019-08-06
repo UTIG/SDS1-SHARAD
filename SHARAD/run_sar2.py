@@ -160,6 +160,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         path_file = os.path.relpath(path, inputroot)
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
+        #h5_file = data_file.replace('_a.dat', '_s_1bit.h5')
         h5_file = data_file.replace('_a.dat', '_s.h5')
         cmp_path = os.path.join(path_root, path_file, 'ion', h5_file)
         label_path = SDS + '/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
@@ -169,9 +170,15 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         logging.debug("{:s}: Loading cmp data from {:s}".format(taskname, cmp_path))
 
         # load the range compressed and ionosphere corrected data
+        
         real = np.array(pd.read_hdf(cmp_path, 'real'))
         imag = np.array(pd.read_hdf(cmp_path, 'imag'))
         cmp_track = real + 1j * imag
+
+        #import matplotlib.pyplot as plt
+        #plt.figure()
+        #plt.imshow(np.transpose(20 * np.log10(np.abs(cmp_track))), aspect='auto')
+        #plt.show()
 
         idx_start = 0            if idx_start is None else max(0, idx_start)
         idx_end = len(cmp_track) if idx_end   is None else min(len(cmp_track), idx_end)
@@ -349,7 +356,7 @@ def main():
         'mf_Er': 1.00,
         'ddv2_interpolate_dx [m]': 5,
         'ddv2_posting_interval [range lines]': 5,
-        'ddv2_aperture_dist [km]': 30,
+        'ddv2_aperture_dist [km]': 40,
         'ddv2_trim [samples]': []
     }
 
@@ -423,6 +430,10 @@ def main():
             '22769': [55243,  61243],
             '49920': [55035,  61035],
 
+            # 1-BIT SAR TESTING ########
+            '12945': [40000, 120000],
+            '17481': [    0,  25000],
+            
             ## WESTERN ALBA MONS #######
             '03512': [    0,  10688],
             '04774': [    0,   1844],

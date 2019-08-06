@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 import logging
 import scipy
 
+from sar import smooth
+
 def sar_posting(dpst, La, idx, tlp, et):
     '''
     Algorithm for defining the centers and extent of output SAR columns along
@@ -341,8 +343,10 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt,
     '''
 
     # interpolate the positional vectors as required
-    tlp = vector_interp(tlp)
-    vt = vector_interp(vt)
+    tlp, _ = smooth.smooth(tlp)
+    vt, _ = smooth.smooth(vt)
+    #tlp = vector_interp(tlp)
+    #vt = vector_interp(vt)
 
     ## define posting centers for SAR columns
     pst_trc, pst_et = sar_posting(dpst, La, int(len(data)), tlp, et)
@@ -555,7 +559,8 @@ def matched_filter(data, dpst, La, Er, af0, recal_int, tlp, et, rxwot, comb_ml=T
     Rmin = min_rxwin * 299792458 / 2
 
     # interpolate the positional vectors as required
-    tlp = vector_interp(tlp)
+    tlp, _ = smooth.smooth(tlp)
+    #tlp = vector_interp(tlp)
 
     ## define the number of looks
     looks = int(np.round(2 * La * af0))
@@ -675,7 +680,8 @@ def track_interpolation(indata, intrack, step, datatype='vector'):
 
     # normalize the alongtrack positions such that they start at 0 and set up
     # the output
-    track_norm = vector_interp(intrack - np.min(intrack))
+    track_norm, _ = smooth.smooth(intrack - np.min(intrack))
+    #track_norm = vector_interp(intrack - np.min(intrack))
     interpolated_track = np.arange(0, np.max(track_norm), step)
     if datatype == 'radargram':
         interpolated_data = np.zeros((len(interpolated_track), np.size(indata, axis=1)), dtype=complex)
@@ -1301,6 +1307,10 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim,
     rx_shifts = rxwindow_time - dc_rxshift
     aligned_data = rx_opening(indata, rx_shifts, dt)
 
+    #plt.figure()
+    #plt.imshow(np.transpose(np.abs(aligned_data)), aspect='auto')
+    #plt.show()
+
     # apply 2D filter (both in Fourier domain)
     # --> step is currently being skipped for 'MARSIS' data
     if instrument == 'SHARAD':
@@ -1374,8 +1384,11 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim,
     #    plt.figure(); plt.imshow(np.abs(np.transpose(hann_data)), aspect='auto', cmap='jet'); plt.title('after hann window')
 
         # Doppler centroid estimation and extraction
-        centroid = doppler_centroid(R, PRF, fc + BW / 2)
-        focused_data[ii, :] = hann_data[centroid, :]
+        if instrument == 'SHARAD':
+            centroid = -1 * doppler_centroid(R, PRF, fc + BW / 2)
+        elif instrument == 'MARSIS':
+            centroid = doppler_centroid(R, PRF, fc + BW / 2)
+        focused_data[ii, :] = hann_data[ centroid, :]
     #    print(ii, centroid)
     #    plt.figure(); plt.plot(np.abs(focused_data[ii, :])); plt.title('focused range line: Doppler bin index ' + str(centroid))
 

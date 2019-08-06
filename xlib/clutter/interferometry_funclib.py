@@ -20,7 +20,7 @@ from scipy.signal import detrend
 import scipy.special
 
 import interface_picker as ip
-import unfoc as unfoc
+import unfoc_KMS2 as unfoc
 from parse_channels import parse_channels
 
 def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
@@ -128,13 +128,16 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
 
     Outputs:
     ------------
-       power image for the rangeline of interst
+        output: power image for the rangeline of interest
+           lim: number of range lines in the untrimmed radargram
     '''
 
     # load the MARFA dataset
     mag, phs = load_marfa(line, channel, pth)
+    mag = mag[trim[0]:trim[1], :]
     if trim[3] != 0:
-        mag = mag[trim[0]:trim[1], trim[2]:trim[3]]
+        mag = mag[:, trim[2]:trim[3]]
+    lim = np.size(mag, axis=1)
 
     # incoherently stack to desired trace spacing
     if fresnel != 1:
@@ -145,7 +148,7 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
     else:
         output = mag
 
-    return output
+    return output, lim
 
 def convert_to_complex(magnitude, phase, mag_dB=True, pwr_flag=True):
     '''
@@ -873,7 +876,7 @@ def hamming(trunc_sweep_length):
     return filt
 
 def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
-                        output_samples=3200, do_cinterp=True):
+                        output_samples=3200, do_cinterp=True, bp=True):
     '''
     Denoise and dechirp HiCARS/MARFA data
 
@@ -887,6 +890,7 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
                      of the reference chirp
      output_samples: number of output fast-time samples (3200 for MARFA)
          do_cinterp: (does something for HiCARS)
+                 bp: flag to set bandpass filter for chirp (False for HiCARS legacy)
 
     Output:
     -----------
@@ -908,7 +912,7 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
 
     # prepare the reference chirp
     hamm = hamming(output_samples)
-    refchirp = get_ref_chirp(chirp_path, bandpass=False, nsamp=output_samples)
+    refchirp = get_ref_chirp(chirp_path, bandpass=bp, nsamp=output_samples)
 
     #plt.figure()
     #plt.subplot(311); plt.imshow(np.abs(bxdsA[sigwin[0]:sigwin[1], :]), aspect='auto'); plt.title('bxdsA')
