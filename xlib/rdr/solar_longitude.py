@@ -159,7 +159,7 @@ def Ls(year, month, day, hour, minute, second):
         min_Ls, min_sol, max_sol = 330, 612.9, 668.6
     else:
         # It isn't in range!
-        assert False
+        assert False # pragma: no cover
     month_length_in_sols = max_sol - min_sol
     proportion_through_month = (elapsed_sols - min_sol) / month_length_in_sols
     long_sol = (30 * proportion_through_month) + min_Ls
@@ -253,7 +253,7 @@ def test_Ls_new1():
     for yyyy in range(100):
         yweeks = yyyy*52
         for week in range(52):
-            for hour in range(0, 7*24, 4):
+            for hour in range(0, 7*24, 8):
                 deltat = dt.timedelta(weeks=week+yweeks, hours=hour, seconds=2.0)
                 date1 = MY1_START_DATE + deltat
                 MY1, lon1 = Ls(     date1.year, date1.month, date1.day, date1.hour, date1.minute, date1.second)
@@ -264,16 +264,16 @@ def test_Ls_new1():
                 try:
                     assert MY1 == MY2
                     assert deltalon < 1e-9
-                except AssertionError:
-                    print("date", date1)
-                    print("lon1", lon1)
-                    print("lon2", lon2)
+                except AssertionError: # pragma: no cover
+                    logging.error("date", date1)
+                    logging.error("lon1", lon1)
+                    logging.error("lon2", lon2)
                     raise
-        print(date1)
+        logging.debug(date1)
     errors = np.array(errors)
-    print("Average error: {:0.3g} deg".format(np.mean(errors)))
-    print("Std dev error: {:0.3g} deg".format(np.std(errors)))
-    print("Maximum error: {:0.3g} deg".format(np.max(errors)))
+    logging.info("Average error: {:0.3g} deg".format(np.mean(errors)))
+    logging.info("Std dev error: {:0.3g} deg".format(np.std(errors)))
+    logging.info("Maximum error: {:0.3g} deg".format(np.max(errors)))
     assert np.mean(errors) < 1e-15
     assert np.std(errors) < 1e-14
     assert np.max(errors) < 1e-13
@@ -295,14 +295,26 @@ def test_ISO8601():
 
         assert abs(j2000a - j2000b) < 1e-9
 
+    # Test what happens if we supply a bad timestamp
+    try:
+        ISO8601_to_J2000('notatime')
+        # This should be an exception
+        assert False # pragma: no cover
+    except ValueError:
+        pass
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout,
+        format='solar_longitude: [%(name)-6s %(levelname)-7s] %(message)s')
+
     test_ISO8601()
     test_Ls_new1()
 
 if __name__ == "__main__":
     # execute only if run as a script
+    import logging
+    import sys
     main()
 
 

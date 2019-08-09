@@ -20,8 +20,8 @@ each record within the SHARAD data set.
 The area is limited to the HRSC MC11E DTM.
 """
 
-#import sys
 import os
+#import sys
 #import glob
 
 import numpy as np
@@ -62,11 +62,11 @@ def main():
         onb = np.empty(len(rec), dtype=np.int)
         # NOTE: could use list comprehensions here
         # et = np.array([ row[2] for row in rec ])
-        for j in range(len(rec)):
-            et[j] = rec[j][2]
-            onb[j] = rec[j][5]
-            lat[j] = rec[j][11]
-            lon[j] = rec[j][10]
+        for j, col in enumerate(rec):
+            et[j] = col[2]
+            onb[j] = col[5]
+            lat[j] = col[11]
+            lon[j] = col[10]
         indx = np.where((lat > 0) & (lat < 30) &
                         (lon > 337.5) & (lon < 359.9))[0]
         if len(indx) > 2:
@@ -79,4 +79,3 @@ def main():
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-

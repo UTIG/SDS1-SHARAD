@@ -142,7 +142,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
             opt = [-1, 0, -1]
             cov = [-1, -1, -1]
 
-        if debug:
+        if debug: # pragma: no cover
             print('Gauss fit opt/cov:', opt, cov)
 
         x0 = min(49, max(0, opt[1]))
@@ -250,11 +250,11 @@ def decompress_sci_data(data, compression, presum, bps, SDI):
                 S = SDI - 16
             decompressed_data = data * (np.power(2, S) / N)
         return decompressed_data
-    else:
+    else: # pragma: no cover
         # TODO: logging, should this be an exception?
         print('Decompression Error: Compression Type {}'
               ' not understood'.format(compression))
-    return
+        return None
 
 
 
@@ -394,7 +394,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
                 logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
             elif saving == 'none':
                 pass
-            else:
+            else: # pragma: no cover
                 logging.error("{:s}: Unrecognized output format '{:s}'".format(taskname, saving))
 
             basename = data_file.replace('.dat', '_TECU.txt')
@@ -403,7 +403,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
             logging.info("{:s}: Wrote {:s}".format(taskname, outfile_TECU))
 
 
-    except Exception as e:
+    except Exception as e: # pragma: no cover
 
         logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
         for line in traceback.format_exc().split("\n"):
@@ -473,10 +473,10 @@ def main():
         logging.debug("Adding " + infile)
         process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
 
-    if args.maxtracks > 0:
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         process_list = process_list[0:args.maxtracks]
 
-    if args.dryrun:
+    if args.dryrun: # pragma: no cover
         sys.exit(0)
 
     logging.info("Start processing {:d} tracks".format(len(process_list)))

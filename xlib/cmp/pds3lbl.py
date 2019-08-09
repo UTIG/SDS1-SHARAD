@@ -362,11 +362,10 @@ def test_cmp_gold(datafile, labelfile, goldfile):
     with gzip.open(goldfile, "rb") as  fin:
         pdsdata2 = json.load(fin)
 
-    result = cmp(pdsdata1, pdsdata2)
-    assert(result)
+    assert cmp(pdsdata1, pdsdata2)
 
 
-def test1():
+def test1(outputdir='.'):
     """ Test basic PDS file read functionality """
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
@@ -386,8 +385,23 @@ def main():
     """ main function """
     global G_DEBUG
     G_DEBUG = True
-    test1()
+
+    parser = argparse.ArgumentParser(description='Planetary Data System 3 Labels')
+    parser.add_argument('-o', '--output', default='.', help="Output directory")
+    parser.add_argument('-v', '--verbose', action="store_true",
+                        help="Display verbose output")
+
+    args = parser.parse_args()
+
+
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
+
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+                        format="pds3lbl: [%(levelname)-7s] %(message)s")
+
+    test1(args.output)
 
 if __name__ == "__main__":
     # execute only if run as a script
+    import argparse
     main()

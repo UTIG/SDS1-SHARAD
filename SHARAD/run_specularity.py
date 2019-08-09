@@ -179,8 +179,31 @@ if ii == 0:
         
     # extract surface amplitudes at positions with acceptable surface
     # picks and calculate specularity
+    short_sar_snr = np.zeros(len(et))
+    long_sar_snr = np.zeros(len(et))
+    for jj in range(len(et)):
+        if not np.isnan(short_surf[jj]):
+            short_sar_snr[jj] = short_sar[jj, int(short_surf[jj])]
+        else:
+            short_sar_snr[jj] = np.nan
+        if not np.isnan(long_surf[jj]):
+            long_sar_snr[jj] = long_sar[jj, int(short_surf[jj])]
+        else:
+            long_sar_snr[jj] = np.nan
+    specularity = np.divide(short_sar_snr, long_sar_snr)
 
-
+    if True:
+        fig, ax1 = plt.subplots()
+        ax1.set_xlabel('Ephemeris Time [s]')
+        ax1.set_ylabel('SNR [dB]')
+        ax1.plot(et, short_sar_snr, color='r', label='short')
+        ax1.plot(et, long_sar_snr, color='b', label='long')
+        ax1.legend()
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('Specularity')
+        ax2.plot(et, specularity, color='k', linewidth=2)
+        fig.tight_layout()
+        plt.show()
 
 
 

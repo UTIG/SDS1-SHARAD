@@ -39,6 +39,7 @@ import argparse
 import warnings
 import importlib.util
 import multiprocessing
+import json
 
 import numpy as np
 import pandas as pd
@@ -131,14 +132,14 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         # print info in debug mode
         logging.debug("{:s}: SAR method: {:s}".format(taskname, focuser))
         if focuser == 'Delay Doppler v1':
-            number_of_looks = no.floor(procparam['ddv1_aperture_time [s]'] * 2 * procparam['ddv1_bandwidth [Hz]'])
+            number_of_looks = np.floor(procparam['ddv1_aperture_time [s]'] * 2 * procparam['ddv1_bandwidth [Hz]'])
             logging.debug("{:s}: SAR column posting interval [m]: {:f}".format(taskname, procparam['ddv1_posting_distance [m]']))
             logging.debug("{:s}: SAR aperture length [s]: {:f}".format(taskname, procparam['ddv1_aperture_time [s]']))
             logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, procparam['ddv1_bandwidth [Hz]']))
             logging.debug('{:s}: SAR number of looks: {:d}'.format(taskname, int(number_of_looks)))
             del number_of_looks
         elif focuser == 'Matched Filter':
-            number_of_looks = no.floor(procparam['mf_aperture_time [s]'] * 2 * procparam['mf_bandwidth [Hz]'])
+            number_of_looks = np.floor(procparam['mf_aperture_time [s]'] * 2 * procparam['mf_bandwidth [Hz]'])
             logging.debug("{:s}: SAR column posting interval [m]: {:f}".format(taskname, procparam['mf_posting_distance [m]']))
             logging.debug("{:s}: SAR aperture length [s]: {:f}".format(taskname, procparam['mf_aperture_time [s]']))
             logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, procparam['mf_bandwidth [Hz]']))
@@ -292,6 +293,8 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                     np.save(os.path.join(outputdir, "sar.npy"), sar)
                     np.save(os.path.join(outputdir, "columns.npy"), columns)
                     np.save(os.path.join(outputdir, "interpolated_ephemeris.npy"), int_et)
+            elif saving == "none":
+                pass
             else:
                 logging.error("Can't save to format '{:s}'".format(saving))
                 return 1
@@ -320,6 +323,11 @@ def main():
     parser.add_argument('--ofmt', default='hdf5',
                         choices=('hdf5', 'npy', 'none'),
                         help="Output data format")
+    parser.add_argument('--focuser', default='ddv2',
+                        choices=('ddv1', 'mf', 'ddv2'),
+                        help="Focusing algorithm")
+    parser.add_argument('--params', default=None,
+                        help="Processing parameters configuration file (JSON format)")
     parser.add_argument('-j', '--jobs', type=int, default=3,
                         help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v', '--verbose', action="store_true",
@@ -344,8 +352,13 @@ def main():
     outputroot = args.output
 
     # set SAR processing variables as a dictionary
-    focuser = 'Delay Doppler v2'
-    processing_parameters = {
+    focuser_names = {
+        'ddv1': 'Delay Doppler v1', 
+        'mf': 'Matched Filter',
+        'ddv2': 'Delay Doppler v2', 
+    }
+    focuser = focuser_names[args.focuser]
+    processing_parameters = { # default processing parameters
         'ddv1_posting_distance [m]': 115,
         'ddv1_aperture_time [s]': 8.774,
         'ddv1_bandwidth [Hz]': 0.4,
@@ -359,16 +372,26 @@ def main():
         'ddv2_aperture_dist [km]': 40,
         'ddv2_trim [samples]': []
     }
+    if args.params is not None:
+        # Load a json file if specified
+        logging.debug("Loading processing parameters from {:s}".format(args.params))
+        with open(args.params, 'r') as configfile:
+            try:
+                processing_parameters = json.load(configfile)
+            except json.decoder.JSONDecodeError as e:
+                logging.error("Problem parsing {:s}".format(args.params))
+                raise e
+        
 
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
     #keys = h5file.keys()
-    #lookup = np.genfromtxt('lookup.txt',dtype='str')
-    lookup = np.genfromtxt(args.tracklist, dtype='str')
+    with open(args.tracklist) as fin:
+        lookup = [line.strip() for line in fin if line.strip() != '']
+
     # Build list of processes
     process_list = []
     logging.info("Making task list from {:s}".format(args.tracklist))
-
     inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
     for i, path in enumerate(lookup):
     #for orbit in keys:

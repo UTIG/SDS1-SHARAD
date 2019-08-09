@@ -20,3 +20,6 @@ SPICE
 EDR*.txt
 lookup.txt
 *.pdf
+
+# Coverage files
+.coverage

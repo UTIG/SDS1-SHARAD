@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-
+Convert coordinates in a pandas dataframe
 """
 import numpy as np
 import pandas as pd
@@ -114,15 +114,15 @@ def sph2cart(coord, indeg=True,
     cart : ndarray
         Array with cartesian coordinates (x, y, z).
     """
+
     sph = _coord_check(coord, cols)
     cart = np.empty_like(sph, dtype=float)
-    scl = 1.0
-    if indeg:
-        scl = deg
-    clat = ncos(sph[:, 0]*scl)
-    slat = nsin(sph[:, 0]*scl)
-    clon = ncos(sph[:, 1]*scl)
-    slon = nsin(sph[:, 1]*scl)
+
+    scale = deg if indeg else 1.0
+    clat = ncos(sph[:, 0]*scale)
+    slat = nsin(sph[:, 0]*scale)
+    clon = ncos(sph[:, 1]*scale)
+    slon = nsin(sph[:, 1]*scale)
     r = sph[:, 2] + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     cart[:, 0] = r * clon * clat
     cart[:, 1] = r * slon * clat
@@ -168,12 +168,11 @@ def cart2sph(coord, indeg=True,
     """
     cart = _coord_check(coord, cols)
     sph = np.empty_like(cart, dtype=float)
-    scl = 1.0
-    if indeg:
-        scl = deg
+
+    scale = deg if indeg else 1.0
     sph[:, 2] = nsqrt(cart[:, 0]**2 + cart[:, 1]**2 + cart[:, 2]**2)
-    sph[:, 0] = nasin(cart[:, 2]/sph[:, 2])/scl
-    sph[:, 1] = ((natan2(cart[:, 1], cart[:, 0]) + 2*pi) % (2*pi))/scl
+    sph[:, 0] = nasin(cart[:, 2]/sph[:, 2])/scale
+    sph[:, 1] = ((natan2(cart[:, 1], cart[:, 0]) + 2*pi) % (2*pi))/scale
     sph[:, 2] = sph[:, 2] - ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     return sph
 
@@ -182,11 +181,10 @@ def sph2lsh(coord, Dtm, indeg=True,
             cols=('spot_lat', 'spot_lon', 'spot_radius'), **kwargs):
     sph = _coord_check(coord, cols)
     lsh = np.empty_like(sph, dtype=float)
-    scl = 1.0
-    if not indeg:
-        scl = deg
+
+    scale = deg if indeg else 1.0
     # carto routine wants degrees for the coordinates
-    lsh[:, 0:2] = Dtm.carto(sph[:, 0:2]/scl, -1)
+    lsh[:, 0:2] = Dtm.carto(sph[:, 0:2]/scale, -1)
     # the 3rd component is kept as it is
     lsh[:, 2] = sph[:, 2]  # + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     return lsh
@@ -195,12 +193,10 @@ def sph2lsh(coord, Dtm, indeg=True,
 def lsh2sph(coord, Dtm, indeg=True,
             cols=('line', 'sample', 'height'), **kwargs):
     lsh = _coord_check(coord, cols)
-    scl = 1.0
-    if not indeg:
-        scl = deg
+    scale = deg if indeg else 1.0
     sph = np.empty_like(lsh, dtype=float)
     # carto routine gives degrees for coordinates
-    sph[:, 0:2] = Dtm.carto(lsh[:, 0:2], 1)*scl
+    sph[:, 0:2] = Dtm.carto(lsh[:, 0:2], 1)*scale
     # the 3rd component is kept as it is
     sph[:, 2] = lsh[:, 2]  # + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     return sph
@@ -256,3 +252,8 @@ def sph_dist(sph1, sph2, radius, indeg=True):
                    np.cos(sph1[:, 0]) * np.cos(sph2[:, 0]) *
                    np.cos(sph1[:, 1] - sph2[:, 1]))
     return radius*ds
+
+
+def test():
+    # Test that functions are inverses of each other
+    pass
