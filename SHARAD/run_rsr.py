@@ -87,6 +87,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     lon = aux['SUB_SC_EAST_LONGITUDE']
     rng = aux['SPACECRAFT_ALTITUDE']
     roll = aux['SC_ROLL_ANGLE']
+    sza = aux['SOLAR_ZENITH_ANGLE']
+    ls = aux['SOLAR_LONGITUDE']
 
     #----------------------
     # Get surface amplitude
@@ -128,10 +130,9 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     # TODO: def archive_surface_amp(senv, orbit, srf_data)
     #--------
 
-    out = {'et':et, 'lat':lat, 'lon':lon, 'rng':rng, 'roll':roll, 'y':y, 'amp':amp, 'pdb':pdb}
+    out = {'et':et, 'lat':lat, 'lon':lon, 'sza':sza, 'ls':ls,
+            'rng':rng, 'roll':roll, 'y':y, 'amp':amp, 'pdb':pdb}
     out = pd.DataFrame(data=out)
-    #out = out.reindex(columns=['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp'])
-    #out = out[['utc', 'lat', 'lon', 'rng', 'roll', 'y', 'amp']]
 
     if sav is True:
         #k = p['orbit_full'].index(orbit_full)
@@ -152,7 +153,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True, 
+def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     senv=None, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique applied along
@@ -216,7 +217,7 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     #----------
     # Load data
     #----------
-    
+
     # This should be done in aux_data?
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
@@ -226,6 +227,8 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     lon = aux['SUB_SC_EAST_LONGITUDE']
     rng = aux['SPACECRAFT_ALTITUDE']
     roll = aux['SC_ROLL_ANGLE']
+    sza = aux['SOLAR_ZENITH_ANGLE']
+    ls = aux['SOLAR_LONGITUDE']
 
     #----------------------
     # Get surface amplitude
@@ -263,6 +266,8 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     b['lon'] = lon[ b['xo'].values.astype(int) ]
     b['lat'] = lat[ b['xo'].values.astype(int) ]
     b['roll'] = roll[ b['xo'].values.astype(int) ]
+    b['sza'] = sza[ b['xo'].values.astype(int) ]
+    b['ls'] = ls[ b['xo'].values.astype(int) ]
     b = b.rename(index=str, columns={"flag":"ok"})
 
     #--------
@@ -329,14 +334,14 @@ def todo(delete=False, senv=None):
 
 def main():
     parser = argparse.ArgumentParser(description='RSR processing routines')
-    
+
     # Job control options
 
     #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
 
     parser.add_argument('-o','--output', default=None, help="Debugging output data directory")
     parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'), help="Output data format")
-    parser.add_argument('orbits', metavar='orbit', nargs='+', 
+    parser.add_argument('orbits', metavar='orbit', nargs='+',
                         help='Orbit IDs to process (including leading zeroes). If "all", processes all orbits')
     parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing. -1 to disable multiprocessing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
@@ -373,7 +378,7 @@ def main():
     for orbit in args.orbits:
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
-                bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'), 
+                bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
                 senv=senv)
 
         if args.output is not None:
