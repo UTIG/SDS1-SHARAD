@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+
+""" 
+
+This script works with a repository, iterates through all of the changesets,
+and runs pylint on each one. It then collects metrics on linting numbers,
+and produces a graph of these metrics over time.
+
+
+To run this script, we need to
+pip3 install pylint, to install pylint for python3
+
+On melt, we need to run pylint using python3 so that it picks up
+all of the same libraries, and so that it recognizes python3 syntax.
+
+To run this, I recommend setting up two repositories.
+1: a master repository from which to run this script, and
+2. a regression repository that gets updated to each revision
+
+./run_pylint_all $SDS/code/work/ngg/regress_master
+
+
+"""
+
+import re
+import os
+import sys
+import logging
+import subprocess
+import argparse
+import time
+import datetime
+
+import numpy as np
+
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    b_plot_avail = True
+    #import pylab
+except ImportError:
+    b_plot_avail = False
+
+
+def backtick1(cmd, loglevel=logging.INFO):
+    logging.log(loglevel,"cmd: " + cmd)
+    return subprocess.check_output(cmd, shell=True)
+
+def system1(cmd, loglevel=logging.INFO):
+    logging.log(loglevel, "cmd: " + cmd)
+    return os.system(cmd)
+
+
+def count_pylint_messages(filename):
+    ##   W: 13, 0:
+    #pat_msg = re.compile(r"^([A-Z]):\s*\d+,\s*\d+:")
+    #make_dtm.py:11:0: C0103: Constant name "res 
+    pat_msg = re.compile(r"^(.+?):\d+:\d+:\s+(([A-Z])(\d+))\:")
+    counts2 = {}
+    counts1 = {}
+    with open(filename,'r') as flog:
+        for line in flog:
+            m = pat_msg.match(line)
+            if m:
+                c = m.group(2)
+                # The entire warning ID
+                counts2[c] = counts2.get(c,0) + 1
+                # Just the first letter
+                counts1[c[0]] = counts1.get(c[0],0) + 1
+
+    return counts1, counts2
+
+def count_py_lines(inpath):
+    """ Count the number of lines of code in python scripts in a path """
+    linecount = 0
+    logging.debug("Counting python lines in " + os.path.abspath(inpath))
+    for root, dirs, files in os.walk(inpath):
+        for f in files:
+            if not f.endswith('.py'):
+                continue
+            filename = os.path.join(root, f)
+            with open(filename, 'r') as fin:
+                for line in fin:
+                    line1 = line.strip()
+                    # Ignore comments and blank lines. TODO: docstrings
+                    if line1.startswith('#') or line1 == '':
+                        continue
+                    linecount += 1
+    return linecount
+
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    outdefault=os.path.join(os.path.abspath(os.path.dirname(__file__)), 'run_pylint_all_data')
+    parser.add_argument('input', help='Full path to regression repository')
+    parser.add_argument('-o','--output', default=outdefault, help='Output directory',
+                        required=False)
+    parser.add_argument('-v','--verbose', action="store_true", help='verbose output',
+                        required=False)
+    args = parser.parse_args()
+
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout)
+
+    if not os.path.exists(args.input):
+        logging.error("Input path doesn't exist")
+        sys.exit(1)
+
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
+    cwd = os.path.abspath(os.getcwd())
+    os.chdir(os.path.join(args.input, 'regress'))
+    # Get all git commits
+    # hash,parents,author name, author date, commit message
+    #pat_line=re.compile(r"(\w+)\t([\w ]+)\t(.+?)\t(.+?)\t'''(\.+?)'''\n", flags=(re.MULTILINE | re.DOTALL))
+    #result = backtick1("""git log --no-decorate --reverse --format=format:"%H%x09%P%x09%an%x09%ai%x09'''%B'''" """).decode()
+    pat_line = re.compile(r"^((\w+)\t([\w ]+)\t(.+?)\t(.+?))\t", flags=re.MULTILINE)
+    result = backtick1("""git log --no-decorate --reverse --format=format:"%H%x09%P%x09%an%x09%ai%x09" """).decode()
+    
+    logging.info("Writing reports to " + args.output)
+
+    logscript = os.path.join( os.getenv('SDS','/disk/tio/SDS'), 
+                'code/work/ngg/sds_master/regress/run_pylint_combined')
+    out1 = os.path.join(args.output, "pylint_all.txt")
+    mydata = []
+    try:
+        with open(out1, 'w') as fout:
+            for match in pat_line.finditer(result):
+                #logging.info(match)
+
+                line, hash, parents, authorname, authordate = match.groups((1, 2, 3, 4, 5))
+
+                logfile=os.path.join(args.output, hash + ".log")
+                if not os.path.isfile(logfile):
+                    system1("git checkout " + hash)
+                    system1("{:s} .. {:s}".format(logscript, logfile))
+
+                if True:
+                    counts, counts2 = count_pylint_messages(logfile)
+                    # Why is there this second checkout? I guess we don't know if we checked out.
+                    system1("git checkout " + hash)
+                    counts['LINES'] = count_py_lines('..')
+                    counts['HASH'] = hash
+                    counts['TIME'] = authordate
+                    counts['AUTHOR'] = authorname
+                    print(counts) # print(counts2)
+                    fieldnames = ('HASH','TIME','AUTHOR','TIME','LINES','W','C','F','E','R')
+                    fields = [ str(counts.get(k,0)) for k in fieldnames ]
+                    fout.write(",".join(fields) + "\n")
+
+                    try:
+                        dt = datetime.datetime.strptime(authordate[0:-6], '%Y-%m-%d %H:%M:%S')
+                    except ValueError as e:
+                        logging.error("Can't parse time string '{:s}' in '{:s}'".format(authordate, line))
+                        raise e
+                    counts['TIME'] = dt
+                    mydata.append( counts )
+
+    finally:
+        # Always go back to checking out master
+        logging.info("Switching back to master")
+        system1("git checkout master")
+
+    os.chdir(cwd)
+
+
+    # make a graph of the pylint metrics
+    t = np.array([ x['TIME'] for x in mydata ])
+    fields2 = ('Convention','Warning','Refactor','Error','Fatal')
+    fieldmul = (10.0,1.0,1.0,1.0,1.0)
+
+
+    fig, ax1 = plt.subplots(figsize=(15,10))
+    for i,k in enumerate(fields2):
+        y = np.array( [x.get(k[0],0.5)/fieldmul[i] for x in mydata])
+        plt.plot(t,y)
+
+    # Overlay the total lines of code on the 2nd y axis
+    #plt.xticks(rotation=45)
+    ax1.legend([ "{:0.0f}x {:s}".format(x,s) for s,x in zip(fields2,fieldmul)])
+    ax2 = ax1.twinx()
+    nlines = np.array([x['LINES'] for x in mydata])
+    ax2.set_ylim([0,np.max(nlines)])
+    ax2.plot(t, nlines, 'kx-' )
+    ax2.set_ylabel('Lines of Python code')
+    ax2.legend(['Lines of Code'])
+    #plt.tight_layout()
+
+    plt.grid(True)
+    fig.autofmt_xdate()
+    plt.title('Pylint message statistics')
+
+    outfile = os.path.join(args.output,'pylint_all.png')
+    plt.savefig(outfile, bbox_inches='tight')
+
+
+if __name__ == "__main__":
+    main()
+
