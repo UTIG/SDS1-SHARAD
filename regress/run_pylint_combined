@@ -32,12 +32,15 @@ PYLINT='python3 -m pylint'
 
 
 echo "$S0: Logging to $logfile1"
+# Don't run in parallel because this causes files to be analyzed in a non-deterministic order.
 # Run this many jobs in parallel
-JOBS=4
+#JOBS=4
 # iterate through all python files and pass them to pylint
+#find "$1" -iname "*.py" -print0 | sort -z | \
+#   xargs -0 $PYLINT -j $JOBS > $logfile1
 
-find "$1" -iname "*.py" -print0 | \
-   xargs -0 $PYLINT -j $JOBS > $logfile1
+find "$1" -iname "*.py" -print0 | sort -z | \
+   xargs -0 $PYLINT > $logfile1
 
 echo "$S0: Logged to $logfile1"
 wc -l $logfile1
