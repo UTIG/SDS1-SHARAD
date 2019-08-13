@@ -131,11 +131,12 @@ def vector_interp_wrapped(vect):
     v2 = vector_interp(vect)
     return v2, range(len(v2))
 
+"""
 def get_minimums(arr):
-    """
-    Find the minimum value in the array, and the indices of
-    all elements that match this value.
-    """
+    #"""
+    #Find the minimum value in the array, and the indices of
+    #all elements that match this value.
+    #"""
     minv = None
     minidx = None
     for i, x in enumerate(arr):
@@ -145,7 +146,7 @@ def get_minimums(arr):
         elif x == minv:
             minidx.append(i)
     return minv, minidx
-
+"""
 
 def vector_interp2(vect, t=None, type='linear'):
     '''
@@ -244,7 +245,7 @@ def smooth(y, t=None, kind='linear', place='mid', epsilon=0.0):
     fsmooth = scipy.interpolate.interp1d(t1, y1, kind, fill_value="extrapolate")
     try:
         y2 = fsmooth(t)
-    except ValueError as e:
+    except ValueError as e: # pragma: no cover
         logging.error("y1: " + str(y1))
         logging.error("t1: " + str(t1))
         logging.error("t:  " + str(t))
@@ -337,7 +338,7 @@ def test_vector_interp(ntests=100):
     w2 = vector_interp2(vtest)
     try:
         assert np.array_equal(w1, w2)
-    except AssertionError as e:
+    except AssertionError as e: # pragma: no cover
         print(vtest)
         print(w1)
         print(w2)
@@ -350,7 +351,7 @@ def test_vector_interp(ntests=100):
         w2 = vector_interp2(vrand)
         try:
             assert np.array_equal(w1, w2)
-        except AssertionError as e:
+        except AssertionError as e: # pragma: no cover
             print(vrand)
             print(w1)
             print(w2)
@@ -418,7 +419,7 @@ def test_argmin(ntests=1000):
 
         try:
             assert np.array_equal(min2a, min2b)
-        except AssertionError as excp:
+        except AssertionError as excp: # pragma: no cover
             print(vrand)
             print(min2a)
             print(min2b)

@@ -8,5 +8,5 @@ omit =
     */.local/*
     # omit everything in /usr
     /usr/*
-
+    ../xlib/cmp_old
 

@@ -5,7 +5,7 @@
 # Was previously known as read_ztim.py
 # Adapted for compatibility with python2.7 or python3
 
-# Note: There is a prety good implementation of zread in
+# Note: There is a pretty good implementation of zread in
 # $WAIS/syst/linux/src/deva/zutils.py
 # that combines reading and writing in pure python
 """
@@ -43,7 +43,7 @@ def read_ztim(filename, field_names=None):
         # 'zfil1zeeee\n'
         # where the number of e's indicates how many fields after the ztim.
         zformat = zfile.readline()
-        if not zformat.startswith(b'zfil1z'):
+        if not zformat.startswith(b'zfil1z'): # pragma: no cover
             logging.error("read_ztim: Input is not a zfile!")
             return None
 
@@ -55,7 +55,7 @@ def read_ztim(filename, field_names=None):
             field_names = ['d'+str(elem) for elem in range(num_fields)]
         print(field_names)
 
-        if len(field_names) != num_fields:
+        if len(field_names) != num_fields: # pragma: no cover
             logging.warning("read_ztim: Input field names of wrong length! "
                             "zformat is %r, names are %r in file %s",
                             zformat, field_names, filename)
@@ -83,7 +83,7 @@ def read_ztim_text(filename):
     with open(filename, "r") as fin:
         for i, line in enumerate(fin):
             pmatch = pat_ztim.match(line)
-            if not pmatch:
+            if not pmatch: # pragma: no cover
                 logging.warning("Malformed ztim '{:s}' at {:s} "
                                 "line {:d}".format(line.strip(), filename, i+1))
                 yield (float('nan'), float('nan'), float('nan'))
@@ -171,14 +171,14 @@ def test_read_ztim_bin(limit=None):
     """ Test by reading known ztim files, up to the qty specified by limit """
     files = glob.glob('/disk/kea/WAIS/targ/tpro/MBL/*/*/*/ztim_llz_bedelv.bin')
 
-    if limit is not None and len(files) > limit:
+    if limit is not None and len(files) > limit: # pragma: no cover
         files = files[0:limit]
 
     logging.info("Found {:d} ztim files".format(len(files)))
     for filename in files:
         test_read_one_zfile(filename)
 
-def test_read_one_zfile(filename):
+def test_read_one_zfile(filename): # pragma: no cover
     """ Read a zfile and print its parsed contents """
     try:
         logging.debug("Reading %s", filename)
@@ -192,7 +192,7 @@ def test_read_one_zfile(filename):
 
 
 def test_att_zfile(filename):
-    """ Read a zfile formatted with attitude data """
+    # Read a zfile formatted with attitude data
     logging.debug("test_att_zfile('{:s}')".format((filename)))
     field_names = ['xx', 'yy', 'aircraft_elevation', 'roll_angle', 'pitch_angle',
                    'heading_angle', 'position_error', 'EW_acceleration',
@@ -203,28 +203,54 @@ def test_att_zfile(filename):
     data2 = read_ztim(filename)
     logging.debug(data2)
 
+def test_read_ztim_text(limit=None):
+    files = glob.glob('/disk/kea/WAIS/targ/norm/MBL/JKB2h/Y90a/*/syn_ztim')
+    if limit is not None and len(files) > limit: # pragma: no cover
+        files = files[0:limit]
+    logging.info("Found {:d} ztim files".format(len(files)))
+    
+    yyyy, doy, sod = parse_ztim_str('(2011, 340, 309557902)')
+    assert yyyy == 2011
+    assert doy == 340
+    assert sod == 309557902
+    # Test malformed ztim
+    
+    yyyy, doy, sod = parse_ztim_str('this isnt a ztim')
+    # Test column generator
+    yyyy, doy, sod = read_ztim_text_ascolumns(files[0])
+    
+    # Test ascii generator
+    #infile='/disk/kea/WAIS/targ/artl/onset-nature/norm/RTZ6/TF09/TT21a/LAS_SJBa/syn_ztim'
+    for infile in files:
+        logging.debug(infile)
+        ztfirst1 = None
+        for ztim in read_ztim_text(infile):
+            j2000 = ztim_to_j2000(ztim)
+            unixt = ztim_to_seconds(ztim, EPOCH_UNIX)
+            #print(ztim,j2000, unixt)
+            if ztfirst1 is None:
+                ztfirst1 = ztim
+            ztlast1 = ztim
+
+        ztfirst, ztlast = get_ztim_range(infile)
+        assert ztfirst == ztfirst1
+        assert ztlast == ztlast1
+        get_ztim_range_posix(infile)
+
 
 def main():
     """ Main test routine """
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
                         format="zfile: [%(levelname)-7s] %(message)s")
 
-#    # Test ascii generator
-#    infile='/disk/kea/WAIS/targ/artl/onset-nature/norm/RTZ6/TF09/TT21a/LAS_SJBa/syn_ztim'
-#    for ztim in read_ztim_text(infile):
-#        j2000 = ztim_to_j2000(ztim)
-#        unixt = ztim_to_seconds(ztim, EPOCH_UNIX)
-#        #print(ztim,j2000, unixt)
-#
-#    # Test column generator
-#    yyyy, doy, sod = read_ztim_text_ascolumns(infile)
     test_read_ztim_bin(limit=5)
 
     filename = '/disk/kea/WAIS/targ/treg/NAQLK/JKB2j/ZY1b/TRJ_JKB0/ztim_llzrphsaaa.bin'
-    read_ztim(filename)
+    test_att_zfile(filename)
+    test_read_ztim_text(limit=10)
 
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     import sys
     main()

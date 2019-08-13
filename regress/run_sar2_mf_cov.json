@@ -1,0 +1,9 @@
+{
+    "_comment":  "run sar2.py processing parameters, relaxed for code coverage, mf no interpolation",
+    "mf_posting_distance [m]": 200,
+    "mf_aperture_time [s]": 1.0,
+    "mf_bandwidth [Hz]": 0.4,
+    "mf_recalc_int [samples]": 2000,
+    "mf_Er": 1.00
+}
+

@@ -31,6 +31,11 @@ $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
 echo $S0: CMD $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py
 $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py -o ./covdata/
 
+echo $S0: CMD $COV run $FLAGS -a ../xlib/sar/smooth.py
+$COV run $FLAGS -a ../xlib/sar/smooth.py
+echo $S0: CMD $COV run $FLAGS -a ../MARFA/zfile.py
+$COV run $FLAGS -a ../MARFA/zfile.py
+
 RNGDATA=./covdata/rng_cmp/
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1 --ofmt none
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1
@@ -49,7 +54,7 @@ $COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser d
 $COV run $FLAGS -a ../SHARAD/run_sar2.py -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt  --ofmt hdf5 --focuser ddv2 --params run_sar2_cov2.json
 
 echo $S0: run_sar2 mf
-$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser mf
+$COV run $FLAGS -a ../SHARAD/run_sar2.py -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt $RUN_SAR2_FLAGS --ofmt none --focuser mf --params run_sar2_mf_cov.json
 
 # This one still takes too long with default params
 #echo $S0: run_sar2 ddv1
