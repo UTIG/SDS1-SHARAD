@@ -301,8 +301,6 @@ def todo(delete=False, senv=None):
     Inputs
     ------
 
-    orbit: string
-        orbit (accepts regex expressions, e.g., 25*)
     delete: boolean
         If True, delete existing RSR products and re-process.
         If False, only generate RSR products that do not exist.
@@ -319,10 +317,14 @@ def todo(delete=False, senv=None):
     alt_orbits = []
     rsr_orbits = []
     for orbit in senv.orbitinfo:
-        if any(s.endswith('.h5') for s in senv.orbitinfo[orbit][0]['altpath']):
-            alt_orbits.append(orbit)
-        if any(s.endswith('.txt') for s in senv.orbitinfo[orbit][0]['altpath']):
-            rsr_orbits.append(orbit)
+        for suborbit in senv.orbitinfo[orbit]:
+            try:
+                if any(s.endswith('.h5') for s in suborbit['altpath']):
+                    alt_orbits.append(suborbit['name'])
+                if any(s.endswith('.txt') for s in suborbit['rsrpath']):
+                    rsr_orbits.append(suborbit['name'])
+            except KeyError:
+                pass
 
     if delete is True:
         out = alt_orbits
