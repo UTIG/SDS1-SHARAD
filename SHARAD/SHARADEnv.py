@@ -163,13 +163,13 @@ class SHARADEnv:
 
             self.orbitinfo[orbit].append(orbitinfo)
 
-        # List files of avaialble for all data products
+        # List files available for all data products
         for orbit in self.orbitinfo:
-            for typ in self.out:
-                path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
-                files = glob.glob(path)
-                self.orbitinfo[orbit][0][typ.replace('_', '')] = files
-
+            for n, suborbit in enumerate(self.orbitinfo[orbit]):
+                for typ in self.out:
+                    path = os.path.join(self.out[typ], suborbit['relpath']) + '/**/*'
+                    files = glob.glob(path)
+                    self.orbitinfo[orbit][n][typ.replace('_', '')] = files
 
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
@@ -286,7 +286,8 @@ class SHARADEnv:
         out = None
         if ext == 'h5':
             try:
-                data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
+                suffix = orbit.split('_')[1] if '_' in orbit else orbit
+                data = h5.File(files[0], 'r')[typ]['orbit'+suffix]
             except (OSError, KeyError) as e:
                 logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
                 raise e
@@ -309,7 +310,7 @@ class SHARADEnv:
         """
         orbit_info = self.get_orbit_info(orbit, True)
 
-        tecpat = os.path.join(self.out['cmp_path'], 
+        tecpat = os.path.join(self.out['cmp_path'],
                  orbit_info['relpath'], typ, '*TECU.txt')
 
         fil = glob.glob('/'.join(tecpat)[0])
