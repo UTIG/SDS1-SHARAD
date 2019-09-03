@@ -167,8 +167,8 @@ class SHARADEnv:
         for orbit in self.orbitinfo:
             for n, suborbit in enumerate(self.orbitinfo[orbit]):
                 for typ in self.out:
-                    path = os.path.join(self.out[typ], suborbit['relpath']) + '/**/*'
-                    files = glob.glob(path)
+                    path = os.path.join(self.out[typ], suborbit['relpath']) + '/**/'
+                    files = glob.glob(path + suborbit['name'] + '*')
                     self.orbitinfo[orbit][n][typ.replace('_', '')] = files
 
         #out['dataset'] = os.path.basename(out['data_path'])
@@ -332,23 +332,35 @@ class SHARADEnv:
         return redata + 1j*imdata
 
 
-    def srf_data(self, orbit, typ='cmp'):
-        """Output data processed and archived by the altimetry processor
-          (surface) """
+    def srf_data(self, orbit):
+        """Output data processed and archived by the surface processor
+        """
 
         orbit_info = self.get_orbit_info(orbit, True)
 
-        if 'relpath' not in orbit_info: # orbit not found
-            return None
+        if 'relpath' not in orbit_info:
+            return None # no file found
 
-        path1 = os.path.join(self.out['srf_path'], orbit_info['relpath'],
-                             typ, '*.txt')
-        files = glob.glob(path1)
-        # TODO: assert glob only has one result
+        files = orbit_info['srfpath']
         if not files:
             return None # no file found
 
-        # TODO: assert glob only has one result
+        out = np.genfromtxt(files[0], delimiter=',', names=True)
+        return out
+
+
+    def rsr_data(self, orbit, typ='cmp'):
+        """Output data processed and archived by the rsr processor
+        """
+        orbit_info = self.get_orbit_info(orbit, True)
+
+        if 'relpath' not in orbit_info:
+            return None # no file found
+
+        files = orbit_info['rsrpath']
+        if not files:
+            return None # no file found
+
         out = np.genfromtxt(files[0], delimiter=',', names=True)
         return out
 
