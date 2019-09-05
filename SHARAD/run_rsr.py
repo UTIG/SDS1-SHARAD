@@ -60,13 +60,11 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     Output:
     ------
 
-    amp: Surface amplitudes
+    pandas dataframe with auxilliary data and surface amplitudes
 
     """
 
-    #----------
     # Load data
-    #----------
 
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
@@ -82,25 +80,15 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     if aux is None: # pragma: no cover
         raise("No Auxiliary Data for orbit " + orbit)
 
-    et = aux['EPHEMERIS_TIME']
-    lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
-    lon = aux['SUB_SC_EAST_LONGITUDE']
-    rng = aux['SPACECRAFT_ALTITUDE']
-    roll = aux['SC_ROLL_ANGLE']
-    sza = aux['SOLAR_ZENITH_ANGLE']
-    ls = aux['SOLAR_LONGITUDE']
-
-    #----------------------
     # Get surface amplitude
-    #----------------------
 
     alty = alt['idx_fine']
-    y = alty * 0
-    amp = alty * 0
+    surf_y = alty * 0
+    surf_amp = alty * 0
     for i, val in enumerate(alty):
         if (not np.isfinite(val)) or (val == 0):
-            y[i] = np.nan
-            amp[i] = np.nan
+            surf_y[i] = np.nan
+            surf_amp[i] = np.nan
         else:
             # Pulse amplitude
             pls = np.abs(rdg[i, :])
@@ -117,21 +105,23 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
                 maxprd = 0
                 maxind = 0
                 maxvec = 0
-            y[i] = maxind
-            amp[i] = maxvec
+            surf_y[i] = maxind
+            surf_amp[i] = maxvec
 
-    # Geomtric-loss-corrected power
-    lc = 10*np.log10(sr.utils.geo_loss(2*rng*1e3))
-    pdb = 20*np.log10(amp) + gain - lc
-
-
-    #--------
     # Archive
     # TODO: def archive_surface_amp(senv, orbit, srf_data)
-    #--------
 
-    out = {'et':et, 'lat':lat, 'lon':lon, 'sza':sza, 'ls':ls,
-            'rng':rng, 'roll':roll, 'y':y, 'amp':amp, 'pdb':pdb}
+    out = { 'EPHEMERIS_TIME':aux['EPHEMERIS_TIME'],
+            'SUB_SC_PLANETOCENTRIC_LATITUDE':aux['SUB_SC_PLANETOCENTRIC_LATITUDE'],
+            'SUB_SC_EAST_LONGITUDE':aux['SUB_SC_EAST_LONGITUDE'],
+            'SOLAR_ZENITH_ANGLE':aux['SOLAR_ZENITH_ANGLE'],
+            'SOLAR_LONGITUDE':aux['SOLAR_LONGITUDE'],
+            'SPACECRAFT_ALTITUDE':aux['SPACECRAFT_ALTITUDE'],
+            'SC_ROLL_ANGLE':aux['SC_ROLL_ANGLE'],
+            'surf_y':surf_y,
+            'surf_amp':surf_amp,
+            'surf_pow':20*np.log10(surf_amp),
+            }
     out = pd.DataFrame(data=out)
 
     if sav is True:
@@ -153,7 +143,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
+def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
     senv=None, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique applied along
@@ -172,10 +162,8 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
         For SHARAD, it includes the instrumental gain and the absolute calibration value
     save: boolean
         Whether to save the results in a txt file into the hierarchy
-
     senv: SHARADEnv
         A SHARADEnv environment object
-
     Any keywords from rsr.utils.inline_estim, especially:
 
     fit_model : string
@@ -193,7 +181,8 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
 
     Output
     ------
-    Results are gathered in a pandas Dataframe that includes the following columns:
+    Results are gathered in a pandas Dataframe that inherits from some of the
+    auxilliary data plus the following columns:
     xa: First x-coordinate of the window gathering the considered amplitudes
     xb: Last x-coordinate of the window gathering the considered amplitudes
     xo: Middle x-coordinate of the window gathering the considered amplitudes
@@ -204,78 +193,35 @@ def rsr_processor(orbit, typ='cmp', gain=-211.32, sav=True, verbose=True,
     chisqr: Chi-square of the RSR fit
     mu: HK structure parameter
     ok:  Whether the RSR fit converged correctly (1) or not (0)
-    rng: Range to surface [m]
-    lc: Coherent geometric losses [dB power]
-    ln: Incoherent geometric losses [dB power]
-    rc: Surface reflection coefficient [dB power]
-    rn: Surface scattering coefficient [dB power]
     """
 
     if senv is None:
-        senv = SHARAD.SHARADEnv()
-
-    #----------
-    # Load data
-    #----------
+        senv = SHARADEnv.SHARADEnv()
 
     # This should be done in aux_data?
     orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
 
-    aux = senv.aux_data(orbit_full)
-    utc = aux['EPHEMERIS_TIME']
-    lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
-    lon = aux['SUB_SC_EAST_LONGITUDE']
-    rng = aux['SPACECRAFT_ALTITUDE']
-    roll = aux['SC_ROLL_ANGLE']
-    sza = aux['SOLAR_ZENITH_ANGLE']
-    ls = aux['SOLAR_LONGITUDE']
-
-    #----------------------
-    # Get surface amplitude
-    #----------------------
-
+    # Surface amplitudes
     surf = surface_amp(senv, orbit, gain=gain, **kwargs)
-    amp = surf['amp'].values
 
-    #-------------------------------
-    # Get surface coefficients (RSR)
-    #-------------------------------
-
+    # Surface coefficients (RSR)
     logging.debug('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
+    b = rsr.run.along(surf['surf_amp'].values , **kwargs)
 
-    pdb = 20*np.log10(amp) + gain
-    amp2 = 10**(pdb/20)
+    # Reformat results
+    xo = b['xo'].values.astype(int)# along-track frame number
+    for key in surf.keys():
+        b[key] = surf[key].to_numpy()[xo]
 
-    # RSR process
-    b = rsr.run.along(amp2, **kwargs)
-
-    # 2-way Geometric losses
-    b['rng'] = rng[ b['xo'].values.astype(int)  ]*1e3
-    b['lc'] = 10*np.log10(sr.utils.geo_loss(2*b['rng'].values))
-    b['ln'] = 10*np.log10(sr.utils.geo_loss(b['rng'].values)**2)
-
-    # Pulse-limited footprint surface area
-    b['as'] = 10*np.log10( np.pi * sr.utils.footprint_rad_pulse(b['rng'].values, 10e6)**2 )
-
-    # Surface coefficients
-    b['rc'] = b['pc'].values - b['lc'].values
-    b['rn'] = b['pn'].values - b['ln'].values - b['as'].values
-
-    # reformat/clean results
-    b['utc'] = utc[ b['xo'].values.astype(int) ]
-    b['lon'] = lon[ b['xo'].values.astype(int) ]
-    b['lat'] = lat[ b['xo'].values.astype(int) ]
-    b['roll'] = roll[ b['xo'].values.astype(int) ]
-    b['sza'] = sza[ b['xo'].values.astype(int) ]
-    b['ls'] = ls[ b['xo'].values.astype(int) ]
     b = b.rename(index=str, columns={"flag":"ok"})
 
-    #--------
+    # Work-around for pandas' bug "ValueError: Big-endian buffer not supported
+    # on little-endian compiler"
+    b = pd.DataFrame(np.array(b).byteswap().newbyteorder(), columns=b.keys())
+
     # Archive
     # TODO: make this a separate function (should it be a member of SHARADEnv?)
     # archive_rsr(senv, orbit, rsr_data)
-    #--------
-
     if sav is True:
         # TODO: change this to use b_single
         # orbit_info = senv.get_orbit_info(orbit_full, True)
