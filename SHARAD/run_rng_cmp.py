@@ -24,6 +24,7 @@ import warnings
 import multiprocessing
 import traceback
 
+from pathlib import Path
 import numpy as np
 from scipy.optimize import curve_fit
 import importlib.util
@@ -173,6 +174,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
             np.savetxt(outfile_TECU,E_track)
 
+        print(radargram)
         if radargram:
             # Plot a radargram
             rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx]
@@ -229,24 +231,28 @@ def main():
     path_outroot = args.output
 
     logging.debug("Base output directory: " + path_outroot)
-    for i,infile in enumerate(lookup):
+    #for i,infile in enumerate(lookup):
     #for orbit in keys:
-        #gob = int(orbit.replace('/orbit', ''))    
-        #path = lookup[gob]
-        #idx_start = h5file[orbit]['idx_start'][0]
-        #idx_end = h5file[orbit]['idx_end'][0]
+    with open(args.tracklist, 'r') as flist:
+        for i, infile in enumerate(flist):
+            #gob = int(orbit.replace('/orbit', ''))    
+            #path = lookup[gob]
+            #idx_start = h5file[orbit]['idx_start'][0]
+            #idx_end = h5file[orbit]['idx_end'][0]
 
-        # check if file has already been processed
-        path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-        data_file = os.path.basename(path_file)
-        path_file = os.path.dirname(path_file)
-        outdir    = os.path.join(path_outroot,path_file, 'ion')
+            # check if file has already been processed
+            path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','').rstrip('\n\r')
+            data_file = os.path.basename(path_file)
+            path_file = os.path.dirname(path_file)
+            outdir    = os.path.join(path_outroot,path_file, 'ion')
+            outfilebase = data_file.replace('.dat','.h5')
+            outfile     = os.path.join(outdir, outfilebase)
 
-        if not os.path.exists(outdir):
-            logging.debug("Adding " + infile)
-            process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
-        else:
-            logging.debug('File already processed. Skipping ' + infile)
+            if not os.path.isfile(outfile):
+                logging.debug("Adding " + infile)
+                process_list.append([infile.rstrip('\n\r'), outdir, None, None, "Task{:03d}".format(i+1)])
+            else:
+                logging.debug('File already processed. Skipping ' + infile)
 
     #h5file.close()
     if args.maxtracks > 0:
