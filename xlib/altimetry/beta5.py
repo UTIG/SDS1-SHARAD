@@ -94,8 +94,8 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     re = pd.read_hdf(cmp_path, key='real').values[idx_start:idx_end]
     im = pd.read_hdf(cmp_path, key='imag').values[idx_start:idx_end]
     cmp_track = re+1j*im
-    tecu = np.genfromtxt(cmp_path.replace('.h5','_TECU.txt'))[idx_start:idx_end,0]
-
+    #tecu = np.genfromtxt(cmp_path.replace('_s.h5','_s_TECU.txt'))[idx_start:idx_end,0]
+    tecu = '/disk/tio/SDS/code/work/gbs/SHARAD/1bit_cmp_s_TECU.txt'
     t1 = time.time()
     logging.debug("Read input elapsed time: {:0.2f} sec".format(t1-t0))
     t0 = t1
@@ -123,6 +123,17 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         lon = aux['SUB_SC_EAST_LONGITUDE'].values[idx_start:idx_end]
         lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values[idx_start:idx_end]
 
+    # Get the shot frequency.
+    if fix_pri is None:
+        pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
+    else:
+        pri_code = np.full_like(sc, fix_pri)
+
+    pri_table = { 1 : 1428E-6, 2: 1429E-6, 3: 1290E-6, 4: 2856E-6, 5: 2984E-6, 6: 2580E-6 }
+    pri = np.array([ pri_table.get( x, float('nan') ) for x in pri_code ] )
+
+    #del data
+
     t1 = time.time()
     logging.debug("Spice Geometry calculations: {:0.2f} sec".format(t1-t0))
     t0 = t1
@@ -132,29 +143,11 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     phase = -sc_cor+range_window_start
     tx0 = int(min(phase))
     offset = int(max(phase) - tx0)
-    shift_param = phase-tx0
-
-    # Get the shot frequency.
-    if fix_pri is None:
-        pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
-    else:
-        pri_code = np.full_like(sc, fix_pri)
-
-    # TODO GNG: Alternative coding suggestion using list comprehensions
-    pri_table = { 1 : 1428E-6, 2: 1429E-6, 3: 1290E-6, 4: 2856E-6, 5: 2984E-6, 6: 2580E-6 }
-    pri = np.array([ pri_table.get( x, float('nan') ) for x in pri_code ] )
-    #pri = np.zeros(len(pri_code))
-    #pri[np.where(pri_code == 1)] = 1428E-6
-    #pri[np.where(pri_code == 2)] = 1429E-6
-    #pri[np.where(pri_code == 3)] = 1290E-6
-    #pri[np.where(pri_code == 4)] = 2856E-6
-    #pri[np.where(pri_code == 5)] = 2984E-6
-    #pri[np.where(pri_code == 6)] = 2580E-6
+    shift_param = (phase-tx0) % 3600
 
     t1 = time.time()
     logging.debug("Calc offsets for radargram and get shot frequency: {:0.2f} sec".format(t1-t0))
     t0 = t1
-
 
     # Compute SAR apertures for coherent and incoherent stacking
     sc_alt = aux['SPACECRAFT_ALTITUDE'].values[idx_start:idx_end]*1000
@@ -166,7 +159,6 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     t1 = time.time()
     logging.debug("Compute SAR apertures: {:0.2f} sec".format(t1-t0))
     t0 = t1
-
 
 
     #========================
@@ -194,7 +186,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Construct radargram
     radargram=np.zeros((len(cmp_track),3600),dtype=np.complex)
     for rec in range(len(cmp_track)):
-        radargram[rec] = np.roll(wvfrm[rec],int(phase[rec+idx_start]-tx0))
+        radargram[rec] = np.roll(wvfrm[rec],int(phase[rec]-tx0))
 
     # Perform averaging in slow time. Pulse is averaged over the 1/4 the
     # distance of the first pulse-limited footprint and according to max
@@ -218,6 +210,24 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         avg = abs(avg_c)
 
+    """
+    import matplotlib.pyplot as plt
+    fig,ax = plt.subplots(figsize=(300,4))
+    plt.imshow(np.transpose(10*np.log10(abs(avg[:,0:1500])**2)),aspect='auto', vmax=70)
+    cbar = plt.colorbar()
+    cbar.set_label('[dB]')
+    plt.show()
+    
+    import cmp.plotting
+    print('control')
+    rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
+    tx0=data['RECEIVE_WINDOW_OPENING_TIME'][0]
+    tx=np.empty(len(data))
+    for rec in range(len(data)):
+        tx[rec]=data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
+    cmp.plotting.plot_radargram(10*np.log10(np.abs(avg)**2),tx,samples=3600)
+    """
+
     # Coarse detection
     coarse = np.zeros(len(avg), dtype=int)
     deriv = np.zeros((len(avg), 3599))
@@ -225,13 +235,12 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     for i in range(len(avg)):
         deriv[i] = np.abs(np.diff(avg[i]))
 
-
     # TODO: does this yield to parallel prefix sum or vectorizing?
     noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
     for i in range(len(deriv)):
         #found = False
-        j0 = int(phase[i]-tx0)+20
-        j1 = min(int(phase[i]-tx0)+1020, len(deriv[i]))
+        j0 = int(shift_param[i] + 20)
+        j1 = int(min(shift_param[i] + 1020, len(deriv[i])))
         # Find the noise level to set the threshold to, and set the starting
         # lvl to that, to accelerate the search.
         # Round up to the next highest level
@@ -244,6 +253,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         #logging.debug("lvlstart={:f}".format(lvlstart))
 
         for lvl in np.arange(lvlstart, 0, -0.1):
+
             noise_threshold = noise[i]*lvl
             """ 
             for j in range(j0, j1):
@@ -259,7 +269,6 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
                 coarse[i] = idxes[0] + j0
                 #found = True
                 break
-
 
     t1 = time.time()
     logging.debug("Coarse detection: {:0.2f} sec".format(t1-t0))
@@ -287,7 +296,8 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         delta = coarse
 
     # Ionospheric delay
-    disp = 1.69E-6/20E6*tecu*1E+16
+    #print(tecu)
+    disp = 0#1.69E-6/20E6*tecu*1E+16
     dt_ion = disp/(2*np.pi*20E6)
     # Time-of-Flight (ToF)
     tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
@@ -302,9 +312,11 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
 
     spots = np.empty((len(r), 7))
+
     columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', 'idx_coarse', 'idx_fine', 'range']
     for i in range(len(r)):
-        spots[i, :] = [ets[i], lat[i], lon[i], r[i], (coarse-shift_param)[i], (delta-shift_param)[i], r[i]]
+        spots[i, :] = [ets[i], lat[i], lon[i], r[i], (coarse-shift_param)[i], (delta-shift_param)[i], d[i]]
+
     df = pd.DataFrame(spots, columns=columns)
     t1 = time.time()
     logging.debug("LSQ, Frame Conversion, DataFrame building: {:0.2f} sec".format(t1-t0))
