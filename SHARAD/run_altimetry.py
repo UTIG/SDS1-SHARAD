@@ -18,12 +18,13 @@ import spiceypy as spice
 import pandas as pd
 import traceback
 
-sys.path.append('../xlib')
+sys.path.append('../xlib/altimetry')
 #import misc.prog as prog
 import misc.hdf as hdf
-
-import altimetry.beta5 as b5
-#import beta5 as b5
+import matplotlib.pyplot as plt
+#import altimetry.beta5 as b5
+import beta5 as b5
+#import b5int as b5
 
 def main():
     desc = 'Run SHARAD altimetry processing'
@@ -71,16 +72,16 @@ def main():
             path_file = os.path.relpath(path, path_edr)
             data_file = os.path.basename(path)
             outfile = os.path.join(args.output, relpath, 'beta5',
-                                   data_file.replace('.dat', ext[args.ofmt]))
+                                   data_file.replace('.dat', '.h5'))
 
-            #if not os.path.exists(outfile):
-            process_list.append({
-                'inpath': path,
-                'outfile': outfile,
-                'idx_start': 0,
-                'idx_end': None,
-                'save_format': args.ofmt})
-            logging.debug("[{:d}] {:s}".format(i+1, str(process_list[-1])))
+            if not os.path.exists(outfile) and not os.path.exists(outfile.replace('_a_a.h5', '_a_s.h5')):
+                process_list.append({
+                    'inpath': path,
+                    'outfile': outfile,
+                    'idx_start': 0,
+                    'idx_end': None,
+                    'save_format': args.ofmt})
+                logging.debug("[{:d}] {:s}".format(i+1, str(process_list[-1])))
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
@@ -126,14 +127,19 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
 
         science_path = inpath.replace('_a.dat', '_s.dat')
         if not os.path.exists(cmp_path):
-            logging.warning(cmp_path + " does not exist")
-            return 0
+            cmp_path = cmp_path.replace('_s.h5', '_a.h5')
+            if not os.path.exists(cmp_path):
+                logging.warning(cmp_path + " does not exist")
+                return 0
 
         logging.info("Reading " + cmp_path)
         result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
                                     idx_start=idx_start, idx_end=idx_end,
                                     use_spice=False, ft_avg=10, max_slope=25,
                                     noise_scale=20, fix_pri=1, fine=True)
+
+        #plt.plot(result['spot_radius'])
+        #plt.show()
 
         if save_format == '' or save_format == 'none':
             return 0
@@ -146,8 +152,8 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
 
         if save_format == 'hdf5':
             orbit_data = {'orbit'+str(obn): result}
-            os.system("rm " + outputfile)
-            h5 = hdf.hdf(outputfile, mode='w')
+            #os.system("rm " + outfile)
+            h5 = hdf.hdf(outfile, mode='w')
             h5.save_dict('beta5', orbit_data)
             h5.close()
         elif save_format == 'csv':
