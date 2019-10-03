@@ -148,15 +148,9 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
 
         if saving:
-            #path_outroot = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-            #path_file = science_path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-            #data_file = path_file.split('/')[-1]
-            #path_file = path_file.replace(data_file,'')
-            #new_path = path_outroot+path_file+'ion/'
             data_file   = os.path.basename(infile)
-            outfilebase = data_file.replace('.dat', '.h5')
+            outfilebase = data_file.replace('_a.dat', '_s.h5')
             outfile     = os.path.join(outdir, outfilebase)
-
             logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,outdir))
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
@@ -169,10 +163,9 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             dfreal.to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
             dfimag.to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
             #np.save(new_path+data_file.replace('.dat','.npy'),cmp_track)
-            outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt'))
+            outfile_TECU = os.path.join(outdir, data_file.replace('_a.dat','_s_TECU.txt'))
             np.savetxt(outfile_TECU, E_track)
 
-        print(radargram)
         if radargram:
             # Plot a radargram
             rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx]
