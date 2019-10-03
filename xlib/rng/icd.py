@@ -21,9 +21,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import rng.icsim as icsim
 
-def icd_ranging(cmp_path, dtm_path, science_path, label_science, 
-                idx_start, idx_end, debug = False, ipl = False,
-                window = 50, average = 30, co_sim = 10, co_data = 30,
+def icd_ranging(cmp_path, dtm_path, science_path, label_science,
+                aux_path, label_aux, idx_start, idx_end, 
+                debug = False, ipl = False, window = 50, 
+                average = 30, co_sim = 10, co_data = 30,
                 cluttergram_path = None, save_clutter_path = None):
 
     """
@@ -62,11 +63,13 @@ def icd_ranging(cmp_path, dtm_path, science_path, label_science,
     # Data for RXWOTs
     data = pds3.read_science(science_path, label_science, science=True, 
                               bc=False)
+    aux = pds3.read_science(aux_path, label_aux, science=False,
+                              bc=False)
     # Range window starts
     rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
 
     # Perform clutter simulation or load existing cluttergram
-    if cluttergram is None:
+    if cluttergram_path is None:
         pri_code = np.ones(Necho)
         p_scx = aux['X_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
         p_scy = aux['Y_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
@@ -81,7 +84,7 @@ def icd_ranging(cmp_path, dtm_path, science_path, label_science,
     else:
         sim = np.load(cluttergram_path)
 
-    plt.imshow(rgram)
+    plt.imshow(sim)
     plt.show()
 
     #TODO: Check if that is necessary
