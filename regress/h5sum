@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Create a checksum of hdf5 files by converting them to XML and then
+# calculating the md5 checksum
+
+for FILE in $@
+do
+
+    SHA1=`h5dump -x $FILE | sha1sum | cut -d ' ' -f 1`
+    echo "$SHA1 $FILE"
+done

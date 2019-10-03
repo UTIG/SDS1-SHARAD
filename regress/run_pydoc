@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+__authors__ = ['Gregory Ng, ngg@utexas.edu']
+__version__ = '1.0'
+__history__ = {
+    '1.0':
+        {'date': 'May 28, 2019',
+         'author': 'Gregory Ng, UTIG',
+         'info': 'Initial documentation build script'}}
+
+import sys
+import os
+import time
+import logging
+import argparse
+
+import traceback
+
+#sys.path.append('../xlib/')
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate pydoc documentation')
+    parser.add_argument('-i','--input', default='../',
+                        help="Input base directory")
+    parser.add_argument('-o','--output', default='./pydoc',
+                        help="Output base directory")
+    parser.add_argument('--ofmt', default='html', choices=('html'),
+                        help="Output file format")
+
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    
+    args = parser.parse_args()
+
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+ 
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+        format="run_pydoc: [%(levelname)-7s] %(message)s")
+    inpath = os.path.abspath(args.input)
+    outpath = os.path.abspath(args.output)
+
+    # Exclude directories by these names
+    exclude = ('.git','env','regress')
+
+    #os.chdir(args.output)
+    for (root,dirs,files) in os.walk(inpath):
+        relroot = os.path.relpath(root, inpath)
+        outdir1 = os.path.join(outpath, relroot)
+        print(root, relroot, outdir1)
+        if not os.path.exists(outdir1):
+            os.makedirs(outdir1)
+        os.chdir( outdir1 )
+
+        for f in files:
+            if not f.endswith('.py'):
+                continue
+            fullfile = os.path.join(root, f)
+            system1("pydoc -w " + fullfile)
+        dirs[:] = [d for d in dirs if d not in exclude]
+
+        #print dirs 
+        #print files 
+
+def system1(cmd):
+    return os.system(cmd)
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
+

@@ -1,0 +1,16 @@
+{
+    "_comment":  "run sar2.py processing parameters, relaxed for code coverage",
+    "ddv1_posting_distance [m]": 4000,
+    "ddv1_aperture_time [s]": 8.774,
+    "ddv1_bandwidth [Hz]": 0.4,
+    "mf_posting_distance [m]": 115,
+    "mf_aperture_time [s]": 8.774,
+    "mf_bandwidth [Hz]": 0.4,
+    "mf_recalc_int [samples]": 20,
+    "mf_Er": 1.00,
+    "ddv2_interpolate_dx [m]": 100,
+    "ddv2_posting_interval [range lines]": 100,
+    "ddv2_aperture_dist [km]": 30,
+    "ddv2_trim [samples]": []
+}
+

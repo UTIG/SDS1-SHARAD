@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 import logging
 import scipy
 
+from sar import smooth
+
 def sar_posting(dpst, La, idx, tlp, et):
     '''
     Algorithm for defining the centers and extent of output SAR columns along
@@ -115,7 +117,7 @@ def twoD_filter(data, dt, rf0, rf1, af0, af1, dres, m, n):
            slow-time/fast-time domain
            - range lines organized by row
            - frequency samples organized by column
-       dt: time step [s]    
+       dt: time step [s]
       rf0: low time frequency [Hz]
       rf1: upper time frequency [Hz]
       af0: low-pass azimuth frequency [Hz]
@@ -148,7 +150,7 @@ def twoD_filter(data, dt, rf0, rf1, af0, af1, dres, m, n):
     afilt[af0i-1:af0i+bw] = ahann
     afilt[m+2-af1i-1:m+2-af0i] = np.flipud(ahann)
     afilt[0:af0i-1] = 1.0
-    afilt[m+3-af0i-1:m] = 1.0    
+    afilt[m+3-af0i-1:m] = 1.0
     # combined
     filt = np.multiply(rfilt.transpose(), afilt.conj())
 
@@ -179,7 +181,7 @@ def rx_opening(data, rxwot, dt):
 
     # define required temporary parameters
     n = np.size(data, axis=1)
-    f = np.fft.fftfreq(n, dt)
+    fs = np.fft.fftfreq(n, dt)
 
     # define the output
     out = np.zeros((len(data), n), dtype=complex)
@@ -187,7 +189,7 @@ def rx_opening(data, rxwot, dt):
     # apply phase shift
     for jj in range(len(data)):
         tempA = np.multiply(np.fft.fft(data[jj], norm='ortho'),
-                            np.exp(-1j * 2 * np.pi * rxwot[jj] * f))
+                            np.exp(-1j * 2 * np.pi * rxwot[jj] * fs))
         out[jj] = np.fft.ifft(tempA, norm='ortho')
 
     return out
@@ -234,10 +236,10 @@ def dD_rngmig(data, R0, et, vt, dt):
 
     # apply phase shift to each range line corresponding to required range
     # migration
-    f = np.fft.fftfreq(np.size(data, axis=1), dt)
+    fs = np.fft.fftfreq(np.size(data, axis=1), dt)
     for jj in range(len(data)):
         tempB = np.multiply(np.fft.fft(data[jj], norm='ortho'),
-                            np.exp(1j * 2 * np.pi * dt_aperture[jj] * f))
+                            np.exp(1j * 2 * np.pi * dt_aperture[jj] * fs))
         out[jj] = np.fft.ifft(tempB, norm='ortho')
 
     return out
@@ -308,8 +310,8 @@ def dD_traceconstructor(data):
                                         (np.size(data, axis=1), len(hann))))
     return np.abs(np.fft.ifftshift(np.multiply(temp, hann), axes=(0,)))
 
-def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb_ml=True,
-                  debugtag="SAR"):
+def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt,
+                  comb_ml=True, debugtag="SAR"):
     '''
     Attempt at delay Doppler SAR processing of SHARAD radar data. Based on
     US methodology as presented in the US PDS data descriptions
@@ -332,7 +334,7 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb
               - True: combine and produce a single multilook-ed image
               - False: produce a three axis array of individual looks
 
-     debugtag: Optional unique tag prepended to debugging messaages     
+     debugtag: Optional unique tag prepended to debugging messaages
 
      Outputs:
     -------------
@@ -341,8 +343,10 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb
     '''
 
     # interpolate the positional vectors as required
-    tlp = vector_interp(tlp)
-    vt = vector_interp(vt)
+    tlp, _ = smooth.smooth(tlp)
+    vt, _ = smooth.smooth(vt)
+    #tlp = vector_interp(tlp)
+    #vt = vector_interp(vt)
 
     ## define posting centers for SAR columns
     pst_trc, pst_et = sar_posting(dpst, La, int(len(data)), tlp, et)
@@ -355,7 +359,8 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb
     elif looks % 2 == 0:
         looks = looks - 1
 
-    logging.debug("{:s}: Number of looks in delay Doppler SAR processing is {:d}".format(debugtag,looks))
+    logging.debug("{:s}: Number of looks in delay Doppler "
+                  "SAR processing is {:d}".format(debugtag, looks))
 
     # predefine output and start sar processor
     if looks != 1:
@@ -366,7 +371,8 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb
 
     for ii in range(len(pst_trc)):
         if ii % 50 == 0:
-            logging.debug("{:s}: Working delay Doppler SAR column {:d} of {:d}".format(debugtag, ii, len(pst_trc)) )
+            logging.debug("{:s}: Working delay Doppler SAR column "
+                          "{:d} of {:d}".format(debugtag, ii, len(pst_trc)) )
 
         if pst_trc[ii, 1] == 0 or pst_trc[ii, 2] == 0:
             continue
@@ -388,7 +394,7 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt, comb
                                et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
                                vt[pst_trc[ii, 1]:pst_trc[ii, 2]], 0.0375E-6)
         # azimuth migration
-        temp_data4 = dD_azmig( temp_data3, R0,
+        temp_data4 = dD_azmig(temp_data3, R0,
                                et[pst_trc[ii, 1]:pst_trc[ii, 2]] - et[pst_trc[ii, 0]],
                                vt[pst_trc[ii, 1]:pst_trc[ii, 2]])
         logging.debug("{:s}: Shape of azimuth-migrated line {:3d}: {!r}".format(debugtag, ii, temp_data4.shape))
@@ -553,7 +559,8 @@ def matched_filter(data, dpst, La, Er, af0, recal_int, tlp, et, rxwot, comb_ml=T
     Rmin = min_rxwin * 299792458 / 2
 
     # interpolate the positional vectors as required
-    tlp = vector_interp(tlp)
+    tlp, _ = smooth.smooth(tlp)
+    #tlp = vector_interp(tlp)
 
     ## define the number of looks
     looks = int(np.round(2 * La * af0))
@@ -611,13 +618,13 @@ def matched_filter(data, dpst, La, Er, af0, recal_int, tlp, et, rxwot, comb_ml=T
     return rl, pst_trc
 
 def time_to_rxwindow(dt, rxwindow_samp, scradius, pri, instrument):
-    '''    
+    '''
     Determine the time after pulse transmission at which the receive window
     opens while accounting for changes in spacecraft radius along the
-    groundtrack 
+    groundtrack
 
     Inputs:
-    ------------- 
+    -------------
                   dt: fast-time sample interval [s]
        rxwindow_samp: number of samples before receive window opening for each
                       range line
@@ -639,8 +646,8 @@ def time_to_rxwindow(dt, rxwindow_samp, scradius, pri, instrument):
             elif pri[ii] == 3: pri_step = 1290E-6
             elif pri[ii] == 4: pri_step = 2856E-6
             elif pri[ii] == 5: pri_step = 2984E-6
-            elif pri[ii] == 6: pri_step = 2580E-6 
-            else: pri_step=0
+            elif pri[ii] == 6: pri_step = 2580E-6
+            else: pri_step = 0
             out[ii] = rxwindow_samp[ii] * dt + pri_step - 11.98E-6
         out = out - (2 * (scradius - min(scradius)) * 1000 / 299792458)
     elif instrument == 'MARSIS':
@@ -651,7 +658,7 @@ def time_to_rxwindow(dt, rxwindow_samp, scradius, pri, instrument):
             elif rxwindow_samp[ii] != rxwindow_samp[ii - 1]:
                 scrad = scradius[ii]
             out[ii] = out[ii] - (2 * (scrad - min(scradius)) * 1000 / 299792458)
-            
+
     return out
 
 def track_interpolation(indata, intrack, step, datatype='vector'):
@@ -673,7 +680,8 @@ def track_interpolation(indata, intrack, step, datatype='vector'):
 
     # normalize the alongtrack positions such that they start at 0 and set up
     # the output
-    track_norm = vector_interp(intrack - np.min(intrack))
+    track_norm, _ = smooth.smooth(intrack - np.min(intrack))
+    #track_norm = vector_interp(intrack - np.min(intrack))
     interpolated_track = np.arange(0, np.max(track_norm), step)
     if datatype == 'radargram':
         interpolated_data = np.zeros((len(interpolated_track), np.size(indata, axis=1)), dtype=complex)
@@ -698,7 +706,7 @@ def apertures(alongtrack, posting_interval, aperture_length, debug=False):
     '''
     algorithm to define aperture limits along the range line of interest.
     apertures are defined by which samples belong in which aperture
-    
+
     Inputs:
     -------------
               ephemeris: vector of along-track ephemeris times [s]
@@ -740,7 +748,7 @@ def apertures(alongtrack, posting_interval, aperture_length, debug=False):
 def define_R(aperture, latitude, longitude, scradius, topography):
     '''
     Estimate the distance between the spacecraft and the mid-aperture nadir
-    surface for each position within the aperture 
+    surface for each position within the aperture
 
     Inputs:
     -------------
@@ -763,14 +771,14 @@ def define_R(aperture, latitude, longitude, scradius, topography):
     # select data within aperture
     apt_longitude = longitude[aperture[0]:aperture[2], ]
     apt_latitude = latitude[aperture[0]:aperture[2], ]
-    apt_scradius = scradius[aperture[0]:aperture[2], ]    
-    
+    apt_scradius = scradius[aperture[0]:aperture[2], ]
+
     # define the position of the mid-aperture nadir surface point in spherical
     # coordinates
     srf_rad = topography[aperture[1], ]
     srf_inc = np.pi * ((90 - latitude[aperture[1], ]) / 180)
     srf_azi = 2 * np.pi * (longitude[aperture[1], ] / 360)
-    
+
     # define the position of spacecraft across the aperture in spherical
     # coordinates
     sc_rad = apt_scradius
@@ -819,10 +827,10 @@ def range_migration(data, R, dt):
 
     # apply phase shift to each range line corresponding to required range
     # migration
-    f = np.fft.fftfreq(np.size(data, axis=1), dt)
+    fs = np.fft.fftfreq(np.size(data, axis=1), dt)
     for jj in range(len(data)):
         tempB = np.multiply(np.fft.fft(data[jj], norm='ortho'),
-                            np.exp(1j * 2 * np.pi * dt_aperture[jj] * f))
+                            np.exp(1j * 2 * np.pi * dt_aperture[jj] * fs))
         out[jj] = np.fft.ifft(tempB, norm='ortho')
 
     return out
@@ -838,7 +846,7 @@ def azimuth_migration(data, R, f):
       data: input radar data within the aperture
          R: distance between spacecraft and mid-aperture nadir surface across
             the aperture [km]
-         f: highest frequency within the radar bandwidth   
+         f: highest frequency within the radar bandwidth
 
      Outputs:
     -------------
@@ -848,8 +856,8 @@ def azimuth_migration(data, R, f):
 #    dr = -1000 * (R - np.min(R))
     Rmid = R[int(np.ceil(np.divide(len(R), 2)))]
     dr = np.multiply(-1000, (R - Rmid))
-    
-    dphi = np.exp(-1j * ((4 * np.pi / (299792458 / f)) * dr))    
+
+    dphi = np.exp(-1j * ((4 * np.pi / (299792458 / f)) * dr))
     dphi = np.transpose(np.broadcast_to(np.transpose(dphi), (np.size(data, axis=1), len(dphi))))
     out = np.multiply(data, np.conj(dphi))
 
@@ -880,24 +888,24 @@ def hann_window(data):
 def doppler_centroid(R, PRF, f, window=0, plot=False):
     '''
     Estimate the instantaneous Doppler centroid for the mid-aperture range
-    line. This Doppler centroid will used to extract the focused radar data 
+    line. This Doppler centroid will used to extract the focused radar data
     from the correct Doppler bin.
 
     Input:
     -----------
          R: range to the mid-aperture range line from evey position within the
             aperture [km]
-       PRF: pulse repitition frequency [Hz]
+       PRF: pulse repetition frequency [Hz]
          f: signal frequency [Hz]
     window: number of samples around the mid-aperture range line used to
             define the tangent
-        
+
 
     Output:
     -----------
         out: index of the estimated Doppler centroid
     '''
-    
+
     # estimate Doppler frequency for the mid-aperture range line
     l = 299792458 / f
     t = np.multiply(np.divide(1, PRF), np.arange(0, len(R)))
@@ -913,22 +921,22 @@ def doppler_centroid(R, PRF, f, window=0, plot=False):
         x1 = t[i0 - step_down:i0 + step_up]
         y1 = np.multiply(R[i0 - step_down:i0 + step_up], 1000)
         dydx = np.divide(y1[len(y1) - 1] - y1[0], x1[len(x1) - 1] - x1[0])
-    
+
     if plot:
-        tngnt = lambda x: dydx*x + (y1[0]-dydx*x1[0]) 
+        tngnt = lambda x: dydx*x + (y1[0]-dydx*x1[0])
         plt.figure()
-        plt.plot(t,R * 1000)
-        plt.plot(t[i0],R[i0] * 1000, "or")
-        plt.plot(t,tngnt(t), label="tangent") 
+        plt.plot(t, R * 1000)
+        plt.plot(t[i0], R[i0] * 1000, "or")
+        plt.plot(t, tngnt(t), label="tangent")
         plt.legend()
-    
+
     fDop = np.multiply(np.divide(-2, l), dydx)
-#    print(fDop)
-    
+    # print(fDop)
+
     # find the closest discrete Doppler frequency
     discrete_fDop = np.fft.fftfreq(len(R), np.divide(1, PRF))
     out = np.argmin(np.abs(discrete_fDop - fDop))
-    
+
     return int(out)
 
 def extract_mola(data, lat, lon, bounds):
@@ -1029,7 +1037,7 @@ def load_mola(pth):
     lat_samp = label['IMAGE']['LINES']
     dtype = []
     for ii in range(lon_samp):
-        dtype.append(('Line_'+str(ii), '>i2'))
+        dtype.append(('Line_' + str(ii), '>i2'))
     dtype = np.dtype(dtype)
     fil = glob.glob(pth)[0]
     arr = np.fromfile(fil, dtype=dtype)
@@ -1038,7 +1046,7 @@ def load_mola(pth):
 
     topo = np.zeros((lat_samp, lon_samp))
     for jj in range(lon_samp):
-        topo[:, jj] = dfr[0:lat_samp]['Line_'+str(jj)].as_matrix()
+        topo[:, jj] = dfr[0:lat_samp]['Line_' + str(jj)].as_matrix()
     del dtype, arr, dfr, fil, out
 
     return topo
@@ -1108,14 +1116,14 @@ def ellipsoidal_distance(lat1, long1, lat2, long2, a, b, number_iterations=8):
                       a: equatorial radius of the reference ellipsoid [m]
                       b: semi-minor axis of the reference ellipsoid [m]
       number_iterations: number of iterations used to solve for ellipsoidal
-                         distance   
+                         distance
 
     Output:
     ------------
         output is the distance between the two points along the ellipsoid
     '''
 
-    f = np.divide((a - b), a)   # elipsoid flattening 
+    f = np.divide((a - b), a)   # elipsoid flattening
     tolerance = 1e-4           # to stop iteration
 
     phi1, phi2 = lat1, lat2
@@ -1129,19 +1137,19 @@ def ellipsoidal_distance(lat1, long1, lat2, long2, a, b, number_iterations=8):
     ind = 0
 
     while True:
-    
+
         ind += 1
         t = np.square(scipy.cos(U2) * scipy.sin(lambda_old))
         t += np.square(scipy.cos(U1) * scipy.sin(U2) - scipy.sin(U1) * scipy.cos(U2) * scipy.cos(lambda_old))
         sin_sigma = np.sqrt(t)
         cos_sigma = scipy.sin(U1) * scipy.sin(U2) + scipy.cos(U1) * scipy.cos(U2) * scipy.cos(lambda_old)
         sigma = scipy.arctan2(sin_sigma, cos_sigma)
-    
+
         sin_alpha = scipy.cos(U1) * scipy.cos(U2) * scipy.sin(lambda_old) / sin_sigma
         cos_sq_alpha = 1 - np.square(sin_alpha)
         cos_2sigma_m = cos_sigma - 2 * scipy.sin(U1) * scipy.sin(U2) / cos_sq_alpha
         C = f * cos_sq_alpha * (4 + f * (4 - 3 * cos_sq_alpha)) / 16
-    
+
         t = sigma + C * sin_sigma * (cos_2sigma_m + C * cos_sigma * (-1 + 2 * np.square(cos_2sigma_m)))
         lambda_new = L + (1 - C) * f * sin_alpha * t
         if abs(lambda_new - lambda_old) <= tolerance:
@@ -1175,7 +1183,7 @@ def groundtrack(latitude, longitude, a=3396.19E3, b=3376.2E3):
 
     Output:
     ------------
-        output is vector of groundtrack positions [km] 
+        output is vector of groundtrack positions [km]
     '''
 
     output = np.zeros(len(latitude))
@@ -1183,20 +1191,22 @@ def groundtrack(latitude, longitude, a=3396.19E3, b=3376.2E3):
     latitude = np.deg2rad(latitude)
     longitude = np.deg2rad(longitude)
     for ii in range(1, len(latitude)):
-        s = ellipsoidal_distance(latitude[ii - 1], longitude[ii - 1], latitude[ii], longitude[ii], a, b)
+        s = ellipsoidal_distance(latitude[ii-1], longitude[ii-1], 
+                                 latitude[ii], longitude[ii], a, b)
         output[ii] = s + output[ii - 1]
 
     return np.divide(output, 1000)
 
-def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, aperture_length,
-                  ephemeris, topography, pri, scradius, rxwindow_samp,
-                  latitude, longitude, band, instrument='SHARAD', marID = '1', debugtag='SAR'):
+def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, 
+                  aperture_length, ephemeris, topography, pri, scradius, 
+                  rxwindow_samp, latitude, longitude, band, 
+                  instrument='SHARAD', marID='1', debugtag='SAR'):
     '''
     Second generation of a Delay Doppler SAR focuser that tries to move towards
     dealing with some of the peculiarities of REASON. This version of the
     focuser can handle both SHARAD and MARSIS data.
 
-    New features in this version of the processor: 
+    New features in this version of the processor:
     -- range cell migration is characterized using spherical coordinates
     -- apertures are defined in terms of groundtrack distances
     -- radar data are interpolated to a constant groundtrack range line spacing
@@ -1222,7 +1232,7 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
                         aperture
              ephemeris: list of ephemeris times [s] associated with each input
                         range line
-            topography: list of nadir surafce radius [km] from the center of 
+            topography: list of nadir surafce radius [km] from the center of
                         target mass associated with each input range line
                    pri: list of pri codes associated with each input range line
                         -- empty matrix for 'MARSIS' processing
@@ -1241,8 +1251,8 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
             instrument: 'SHARAD' or 'MARSIS'
                  marID: 'MARSIS' frequency channel selector; '1' or '2'
 
-              debugtag: Optional unique tag prepended to debugging messaages     
-    
+              debugtag: Optional unique tag prepended to debugging messaages
+
     Outputs:
     -------------
            focused_data: complex-valued array of focused radar data
@@ -1255,7 +1265,7 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
     # setup instrument parameters
     if instrument == 'SHARAD':
         PRF = 175         # alongtrack PRF [Hz]
-        f = 20E6          # signal center frequency [Hz]
+        fc = 20E6         # signal center frequency [Hz]
         BW = 10E6         # signal bandwidth [Hz]
         dt = 0.0375E-6    # fast-time sample interval [s]
         fs = 1 / dt       # fast time sampling rate [Hz]
@@ -1268,16 +1278,16 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
         BW = 1E6          # signal bandwidth [Hz]
         dt = 1 / 2.8E6    # fast-time sample interval [s]
         fs = 1 / dt       # fast time sampling rate [Hz]
-        if F == 'F1':  
-            if int(band[0]) == 0: f = 4.0E6
-            elif int(band[0]) == 1: f = 1.8E6
-            elif int(band[0]) == 2: f = 3.0E6
-            elif int(band[0]) == 3: f = 5.0E6
+        if F == 'F1':
+            if int(band[0]) == 0: fc = 4.0E6
+            elif int(band[0]) == 1: fc = 1.8E6
+            elif int(band[0]) == 2: fc = 3.0E6
+            elif int(band[0]) == 3: fc = 5.0E6
         elif F == 'F2':
-            if int(band[0]) == 0: f = 1.8E6
-            elif int(band[0]) == 1: f = 4.0E6
-            elif int(band[0]) == 2: f = 3.0E6
-            elif int(band[0]) == 3: f = 5.0E6
+            if int(band[0]) == 0: fc = 1.8E6
+            elif int(band[0]) == 1: fc = 4.0E6
+            elif int(band[0]) == 2: fc = 3.0E6
+            elif int(band[0]) == 3: fc = 5.0E6
 
     # define positions in terms of groundtrack distances
     grndtrck = groundtrack(latitude, longitude)
@@ -1285,28 +1295,33 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
     # trim radar data if desired
     if len(data_trim) != 0:
         indata = indata[:, 0:data_trim[0]]
-        
+
     # correct time to start of receiver window
     rxwindow_time = time_to_rxwindow(dt, rxwindow_samp, scradius, pri,
                                      instrument)
-    
+
     # align data relative to a common start time
     # --> common start time set to be the minimum rx opening time. shifting is
     #     done in the fast-time Fourier domain
     dc_rxshift = np.min(rxwindow_time)
     rx_shifts = rxwindow_time - dc_rxshift
     aligned_data = rx_opening(indata, rx_shifts, dt)
-    
+
+    #plt.figure()
+    #plt.imshow(np.transpose(np.abs(aligned_data)), aspect='auto')
+    #plt.show()
+
     # apply 2D filter (both in Fourier domain)
     # --> step is currently being skipped for 'MARSIS' data
     if instrument == 'SHARAD':
         filtered_data = twoD_filter(aligned_data, dt, 0, 13E6, 10, 60, (1 / PRF),
-                                len(aligned_data), np.size(aligned_data, axis=1))
+                                    len(aligned_data), 
+                                    np.size(aligned_data, axis=1))
     elif instrument == 'MARSIS':
     #    filtered_data = sar.twoD_filter(aligned_data, dt, 0, 2E6, 10, 30, (1 / PRF),
     #                            len(aligned_data), np.size(aligned_data, axis=1))
         filtered_data = aligned_data
-        
+
     # interpolate data to constant alongtrack trace spacing
     if interpolate_dx == 0:
         interp_ephemeris = ephemeris
@@ -1328,7 +1343,7 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
 
     # define the bounds of individual sar apertures
     aperture = apertures(interp_groundtrack, posting_interval, aperture_length)
-    
+
     # predefine the SAR-focused output
     focused_data = np.zeros((len(aperture), np.size(interp_data, axis=1)), dtype=complex)
 
@@ -1337,40 +1352,43 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, apertu
     #if ii == 100:
     #for ii in range(400):
     for ii in range(len(aperture)):
-    
+
         if ii % 1000 == 0:
             logging.debug("{:s}: Working delay Doppler SAR v2 column {:d} of {:d}".format(debugtag, ii, len(aperture)) )
-        
+
         # select data within aperture
         apt_data = interp_data[aperture[ii, 0]:aperture[ii, 2], :]
     #    plt.figure()
     #    plt.subplot(211); plt.imshow(np.abs(np.transpose(apt_data)), aspect='auto', cmap='jet'); plt.title('input magnitude')
     #    plt.subplot(212); plt.imshow(np.angle(np.transpose(apt_data)), aspect='auto', cmap='jet'); plt.title('input phase')
-    
+
         # define the distance between the spacecraft and mid-aperture nadir surface
         # point across the aperture
         R = define_R(aperture[ii, :], interp_latitude, interp_longitude, interp_scradius, interp_topography)
     #    plt.figure(); plt.plot(R); plt.title('Distance to mid-aperture nadir position')
-    
+
         # range migration
         rm_data = range_migration(apt_data, R, dt)
     #    plt.figure()
     #    plt.subplot(211); plt.imshow(np.abs(np.transpose(rm_data)), aspect='auto', cmap='jet'); plt.title('range migrated magnitude')
     #    plt.subplot(212); plt.imshow(np.angle(np.transpose(rm_data)), aspect='auto', cmap='jet'); plt.title('range migrated phase')
-    
+
         # azimuth migration
-        am_data = azimuth_migration(rm_data, R, f + BW / 2)
+        am_data = azimuth_migration(rm_data, R, fc + BW / 2)
     #    plt.figure()
     #    plt.subplot(211); plt.imshow(np.abs(np.transpose(am_data)), aspect='auto', cmap='jet'); plt.title('azimuth migrated magnitude')
     #    plt.subplot(212); plt.imshow(np.angle(np.transpose(am_data)), aspect='auto', cmap='jet'); plt.title('azimuth migrated phase')
-    
+
         # hann window
         hann_data = hann_window(am_data)
     #    plt.figure(); plt.imshow(np.abs(np.transpose(hann_data)), aspect='auto', cmap='jet'); plt.title('after hann window')
-        
+
         # Doppler centroid estimation and extraction
-        centroid = doppler_centroid(R, PRF, f + BW / 2)
-        focused_data[ii, :] = hann_data[centroid, :]
+        if instrument == 'SHARAD':
+            centroid = -1 * doppler_centroid(R, PRF, fc + BW / 2)
+        elif instrument == 'MARSIS':
+            centroid = doppler_centroid(R, PRF, fc + BW / 2)
+        focused_data[ii, :] = hann_data[ centroid, :]
     #    print(ii, centroid)
     #    plt.figure(); plt.plot(np.abs(focused_data[ii, :])); plt.title('focused range line: Doppler bin index ' + str(centroid))
 

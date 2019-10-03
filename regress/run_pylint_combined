@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Runs pylint on all python files under a path, and outputs
+# the results to a log file.  If no logfile is given,
+# output to a filename with a datestamp
+
+if [ $# -lt 1 ]
+then
+    echo "Usage: $0 CODEDIR [abs_path_to_logfile]"
+    exit 1
+fi
+
+CODEDIR=$1
+
+
+
+if [ $# -ge 2 ]
+then
+    # Note that this logfile MUST be expressed as an absolute path
+    #logbase1=$2
+    logfile1=$2
+else
+    logbasename=`date "+pylint_%Y%m%d-%H%M_"`
+    logbase1="${logbasename}_cwd.log"
+    logfile1=`pwd`/$logbase1
+fi
+S0=`basename $0`
+
+PYLINT='python3 -m pylint'
+#PYLINT_FLAGS="superfluous-parens"
+#PYLINT_FLAGS="--reports=n --rcfile=/dev/null"
+
+
+echo "$S0: Logging to $logfile1"
+# Don't run in parallel because this causes files to be analyzed in a non-deterministic order.
+# Run this many jobs in parallel
+#JOBS=4
+# iterate through all python files and pass them to pylint
+#find "$1" -iname "*.py" -print0 | sort -z | \
+#   xargs -0 $PYLINT -j $JOBS > $logfile1
+
+find "$1" -iname "*.py" -print0 | sort -z | \
+   xargs -0 $PYLINT > $logfile1
+
+echo "$S0: Logged to $logfile1"
+wc -l $logfile1

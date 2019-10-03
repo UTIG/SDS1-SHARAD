@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 __authors__ = ['Gregor Steinbruegge, gregor@ig.utexas.edu',
-             'Kirk Scanlan, kirk.scanlan@gmail.com']
+               'Kirk Scanlan, kirk.scanlan@gmail.com']
 __version__ = '1.0'
 __history__ = {
     '1.0':
@@ -142,7 +142,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
             opt = [-1, 0, -1]
             cov = [-1, -1, -1]
 
-        if debug:
+        if debug: # pragma: no cover
             print('Gauss fit opt/cov:', opt, cov)
 
         x0 = min(49, max(0, opt[1]))
@@ -207,10 +207,10 @@ def Hamming(Fl, Fh):
     dfreq = max_freq - min_freq + 1
     hamming = np.sin(np.linspace(0, 1, num=dfreq) * np.pi)
     hfilter = np.flipud(np.hstack((np.zeros(min_freq), hamming,
-                        np.zeros(3600 - min_freq - hamming.size))))
+                                   np.zeros(3600 - min_freq - hamming.size))))
     return hfilter
 
-def decompressSciData(data, compression, presum, bps, SDI):
+def decompress_sci_data(data, compression, presum, bps, SDI):
     """
     Decompress the science data according to the
     SHARAD interface specification.
@@ -250,15 +250,17 @@ def decompressSciData(data, compression, presum, bps, SDI):
                 S = SDI - 16
             decompressed_data = data * (np.power(2, S) / N)
         return decompressed_data
-    else:
+    else: # pragma: no cover
         # TODO: logging, should this be an exception?
-        print('Decompression Error: Compression Type {} not understood'.format(compression))
-    return
+        print('Decompression Error: Compression Type {}'
+              ' not understood'.format(compression))
+        return None
 
 
 
-def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX",
-                  chrp_filt=True, verbose=False, saving='hdf5'):
+def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
+                       taskname="TaskXXX", chrp_filt=True, verbose=False,
+                       saving='hdf5'):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -289,7 +291,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
         data = pds3.read_science(science_path, label_path, science=True)
         aux  = pds3.read_science(infile      , aux_path,   science=False)
 
-        stamp1=time.time() - time_start
+        stamp1 = time.time() - time_start
         logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
 
         # Array of indices to be processed
@@ -306,15 +308,15 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
         compression = 'static' if (data['COMPRESSION_SELECTION'][idx_start] == 0) else 'dynamic'
 
         # Tracking presumming table. Converts TPS field into presumming count
-        tps_table = (1,2,3,4,8,16,32,64)
+        tps_table = (1, 2, 3, 4, 8, 16, 32, 64)
         tps = data['TRACKING_PRE_SUMMING'][idx_start]
-        assert(tps >= 0 and tps <= 7)
+        assert tps >= 0 and tps <= 7
         presum = tps_table[tps]
         SDI = data['SDI_BIT_FIELD'][idx_start]
         bps = 8
 
         # Decompress the data
-        decompressed = decompressSciData(raw_data, compression, presum, bps, SDI)
+        decompressed = decompress_sci_data(raw_data, compression, presum, bps, SDI)
         # TODO: E_track can just be a list of tuples
         E_track = np.empty((idx_end-idx_start, 2))
         # Get groundtrack distance and define 30 km chunks
@@ -323,8 +325,8 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
         chunks = []
         i0 = 0
         for i in range(len(tlp)):
-            if tlp[i] > tlp0+30:
-                chunks.append([i0,i])
+            if tlp[i] > tlp0 + 30:
+                chunks.append([i0, i])
                 i0 = i
                 tlp0 = tlp[i]
 
@@ -336,13 +338,13 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
         else:
             chunks[-1][1] = idx_end - idx_start
 
-        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks) ))
+        logging.debug('{:s}: Made {:d} chunks'.format(taskname, len(chunks)))
         # Compress the data chunkwise and reconstruct
 
 
-        list_cmp_track=[]
+        list_cmp_track = []
         for i, chunk in enumerate(chunks):
-            start,end = chunks[i]
+            start, end = chunks[i]
 
             #check if ionospheric correction is needed
             iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end] < 100)[0]
@@ -350,13 +352,14 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
             minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
             logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f} '
                           ' Ionospheric Correction: {!r}'.format(
-                taskname, i, len(chunks), minsza, b_iono) )
+                          taskname, i, len(chunks), minsza, b_iono))
 
-            E, sigma, cmp_data = us_rng_cmp(
-                decompressed[start:end], chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
+            E, sigma, cmp_data = us_rng_cmp(decompressed[start:end],
+                                            chirp_filter=chrp_filt,
+                                            iono=b_iono, debug=verbose)
             list_cmp_track.append(cmp_data)
-            E_track[start:end,0] = E
-            E_track[start:end,1] = sigma
+            E_track[start:end, 0] = E
+            E_track[start:end, 1] = sigma
 
         cmp_track = np.vstack(list_cmp_track)
         list_cmp_track = None  # free memory
@@ -370,7 +373,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
             outfilebase = data_file.replace('.dat', '.h5')
             outfile     = os.path.join(outdir, outfilebase)
 
-            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname, outdir) )
+            logging.debug('{:s}: Saving to {:s}'.format(taskname, outdir))
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
 
@@ -385,101 +388,106 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="T
             elif saving == 'npy':
                 # Round it just like in an hdf5 and save as side-by-side arrays
                 cmp_track = np.vstack([real, imag])
-
-                outfile = os.path.join(outdir, data_file.replace('.dat','.npy') )
-                np.save(outfile,cmp_track)
+                basename = data_file.replace('.dat', '.npy')
+                outfile = os.path.join(outdir, basename)
+                np.save(outfile, cmp_track)
                 logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
             elif saving == 'none':
                 pass
-            else:
+            else: # pragma: no cover
                 logging.error("{:s}: Unrecognized output format '{:s}'".format(taskname, saving))
 
-            outfile_TECU = os.path.join(outdir, data_file.replace('.dat','_TECU.txt') )
-            np.savetxt(outfile_TECU,E_track)
+            basename = data_file.replace('.dat', '_TECU.txt')
+            outfile_TECU = os.path.join(outdir, basename)
+            np.savetxt(outfile_TECU, E_track)
             logging.info("{:s}: Wrote {:s}".format(taskname, outfile_TECU))
 
 
-    except Exception as e:
+    except Exception as e: # pragma: no cover
 
         logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
         for line in traceback.format_exc().split("\n"):
-            logging.error('{:s}: {:s}'.format(taskname, line) )
+            logging.error('{:s}: {:s}'.format(taskname, line))
         return 1
     logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
     return 0
 
 def chop_raw_data(data, idx, idx_start):
-    raw_data=np.zeros((len(idx),3600),dtype=np.complex)
+    raw_data = np.zeros((len(idx), 3600), dtype=np.complex)
     for j in range(3600):
         k = 'sample' + str(j)
-        raw_data[:,j]=data[k][idx].values
+        raw_data[:, j] = data[k][idx].values
     return raw_data
 
 
 def main():
 
-    # TODO: improve description
-    parser = argparse.ArgumentParser(description='Run SAR processing')
-    parser.add_argument('-o','--output', default='./rng_cmp_data',
+    parser = argparse.ArgumentParser(description='Range compression library')
+    parser.add_argument('-o', '--output', default='./rng_cmp_data',
                         help="Output base directory")
-    parser.add_argument('--ofmt', default='npy', choices=('hdf5','npy','none'),
+    parser.add_argument('--ofmt', default='npy',
+                        choices=('hdf5', 'npy', 'none'),
                         help="Output file format")
 
-    #parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
-    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
-    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    parser.add_argument('-v', '--verbose', action="store_true",
+                        help="Display verbose output")
+    parser.add_argument('-n', '--dryrun', action="store_true",
+                        help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default=None, #"elysium.txt",
-        help="List of tracks to process")
-    parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
+                        help="List of tracks to process")
+    parser.add_argument('--maxtracks', type=int, default=0,
+                        help="Maximum number of tracks to process")
 
     args = parser.parse_args()
 
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
-    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="rng_cmp: [%(levelname)-7s] %(message)s")
 
 
     # Read lookup table associating gob's with tracks
     if args.tracklist is None:
+        root = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
         lookup = (
-            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr03xxx/edr0336603/e_0336603_001_ss19_700_a_a.dat',
-            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm286/edr5272901/e_5272901_001_ss19_700_a_a.dat',
-            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm278/edr5116601/e_5116601_001_ss19_700_a_a.dat',
-            '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_a.dat',
+            root + '/mrosh_0001/data/edr03xxx/edr0336603/e_0336603_001_ss19_700_a_a.dat',
+            root + '/mrosh_0004/data/rm286/edr5272901/e_5272901_001_ss19_700_a_a.dat',
+            root + '/mrosh_0004/data/rm278/edr5116601/e_5116601_001_ss19_700_a_a.dat',
+            root + '/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_a.dat',
         )
     else:
-        lookup = np.genfromtxt(args.tracklist, dtype = 'str')
+        lookup = np.genfromtxt(args.tracklist, dtype='str')
 
     # Build list of processes
     logging.info("Building task list for test")
-    process_list=[]
+    process_list = []
     path_outroot = args.output
 
     logging.debug("Base output directory: " + path_outroot)
-    for i,infile in enumerate(lookup):
+    for i, infile in enumerate(lookup):
         path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
-        outdir    = os.path.join(path_outroot,path_file, 'ion')
+        outdir    = os.path.join(path_outroot, path_file, 'ion')
 
         logging.debug("Adding " + infile)
         process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
 
-    if args.maxtracks > 0:
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         process_list = process_list[0:args.maxtracks]
 
-    if args.dryrun:
+    if args.dryrun: # pragma: no cover
         sys.exit(0)
 
     logging.info("Start processing {:d} tracks".format(len(process_list)))
 
     start_time = time.time()
-    named_params = {'saving':args.ofmt,'chrp_filt':True,'verbose':args.verbose}
+    named_params = {'saving':args.ofmt, 
+                    'chrp_filt':True, 'verbose':args.verbose}
     # Single processing (for profiling)
     for t in process_list:
         test_cmp_processor(*t, **named_params)
-    logging.info("Done in {:0.2f} seconds".format( time.time() - start_time ) )
+    logging.info("Done in {:0.2f} seconds".format(time.time() - start_time))
 
 
 if __name__ == "__main__":

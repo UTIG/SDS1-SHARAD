@@ -16,24 +16,25 @@ class hdf:
 
     def keys(self, group, full_path=True):
         node = self.file.get_node(group)
-        if (node is None):
+        if node is None:
             print('ERROR: No data for '+group+' in input file.')
             return None
+
+        if (full_path):
+            return [group+'/'+key for key in node._v_children.keys()]
         else:
-            if (full_path):
-                return [group+'/'+key for key in node._v_children.keys()]
-            else:
-                return [key for key in node._v_children.keys()]
+            return [key for key in node._v_children.keys()]
 
     def to_dict(self, group):
         """
         Return one group of the h5file as a dictionary
         """
         keys = self.keys(group, full_path=False)
-        if (keys is not None):
+
+        if keys is not None:
             return {key: self.file[group+'/'+key] for key in keys}
-        else:
-            return None
+
+        return None
 
     def to_DataFrame(self, group):
         """
@@ -48,7 +49,7 @@ class hdf:
         """
         import numpy as np
         data = self.to_dict(group)
-        if (col_names is not None):
+        if col_names is not None:
             return np.concatenate([data[key][col_names].values
                                    for key in data.keys()])
         else:
@@ -86,11 +87,8 @@ class hdf:
             2. "user" - user who created the file (always included)
             3. "info" - description of the data (should be included)
         """
-        try:
-            label = self.file['label']
-        except:
-            label = None
-        if (label is not None):
+        label = self.file.get('label', None)
+        if label is not None:
             if formatted:
                 print_str = 'Using input file: ' + self.file._path + '\n'
                 print_str += ('Description: ' +
@@ -130,5 +128,3 @@ class hdf:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             self.file['label'] = pd.Series(kwargs)
-
-

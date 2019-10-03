@@ -8,7 +8,6 @@
 
 import argparse
 from collections import namedtuple
-import cProfile
 import logging
 import numpy as np
 import os
@@ -29,7 +28,7 @@ from parse_channels import parse_channels, PIK1ChannelSpec
 # Enable metadata index writing.
 # This should normally be disabled only for legacy testing.
 # It does not make things slower to output this data.
-enable_meta_index=True
+enable_meta_index = True
 ################################################
 
 class Trace:
@@ -93,7 +92,7 @@ def cinterp(sweep_fft, index):
     r = (np.abs(sweep_fft[index-1]) + np.abs(sweep_fft[index+1])) / 2
     t1 = np.angle(sweep_fft[index-1])
     t2 = np.angle(sweep_fft[index+1])
-    if (np.abs(t1 - t2) > np.pi):
+    if np.abs(t1 - t2) > np.pi:
         t1 = t1 + 2 * np.pi
     theta = (t1 + t2) / 2
     sweep_fft[index] = r * (np.cos(theta) + 1j * np.sin(theta))
@@ -118,21 +117,21 @@ def denoise_and_dechirp(trace, # type: np.ndarray
     #find peak energy below blanking samples
     ## [n,m]=sort(trace);
     ## shifter=abs((m(output_samples)));
-    shifter=int(np.median(np.argmax(trace)));
-    trace=np.roll(trace,-shifter);
+    shifter = int(np.median(np.argmax(trace)));
+    trace = np.roll(trace, -shifter);
 
-    DFT = np.fft.fft(signal.detrend(trace))
+    dft = np.fft.fft(signal.detrend(trace))
 
     if do_cinterp:
         # Remove five samples per cycle problem
-        DFT = cinterp(DFT, output_samples * (1.0/5))
-        DFT = cinterp(DFT, output_samples * (1 - 1.0/5))
+        dft = cinterp(dft, output_samples * (1.0/5))
+        dft = cinterp(dft, output_samples * (1 - 1.0/5))
         # Remove the first harmonic for five samples
-        DFT = cinterp(DFT, output_samples * (2.0/5))
-        DFT = cinterp(DFT, output_samples * (1 - 2.0/5))
+        dft = cinterp(dft, output_samples * (2.0/5))
+        dft = cinterp(dft, output_samples * (1 - 2.0/5))
 
     # Do the dechirp
-    Product = np.multiply(ref_chirp, DFT)
+    Product = np.multiply(ref_chirp, dft)
     Dechirped = np.fft.ifft(Product)
     Dechirped = np.roll(Dechirped,shifter)
     return Dechirped
@@ -201,7 +200,7 @@ class PairedStack:
     def __init__(self, channel_spec, depth):
         # type: (PIK1ChannelSpec, int) -> None
         self.channel_spec = channel_spec
-        self.depth  = depth
+        self.depth = depth
 
         self.fullstacks0 = [] # type: List[np.ndarray]
         self.fullstacks1 = [] # type: List[np.ndarray]
@@ -217,7 +216,7 @@ class PairedStack:
         scale1 = self.channel_spec.scalef1 / float(self.depth)
         array_out1 = None
 
-        if not ((bDo0 and not bReady0) or (bDo1 and not bReady1)) :
+        if not ((bDo0 and not bReady0) or (bDo1 and not bReady1)):
             # assert self.fullstacks0[-1].shape[0] == self.depth?
 
             if bDo0 and bDo1:
@@ -228,9 +227,9 @@ class PairedStack:
                 array_out1 = scale1 * self.fullstacks1[-1]
 
             if bReady0:
-                self.fullstacks0.pop();
+                self.fullstacks0.pop()
             if bReady1:
-                self.fullstacks1.pop();
+                self.fullstacks1.pop()
             return Trace(self.channel_spec.chanout, array_out1)
 
 
@@ -317,8 +316,8 @@ def inco_stacks_gen(traces, # type: Generator[Trace, None, None]
 def get_radar_stream(filename):
     # type: (str) -> str
     # both RADnh3 and RADnh5 are the same first elements in header format
-    fmtstr='>HBBBBBB'
-    fmtlen=struct.calcsize(fmtstr)
+    fmtstr = '>HBBBBBB'
+    fmtlen = struct.calcsize(fmtstr)
     with open(filename, 'rb') as fd:
         # read header
         buff = fd.read(fmtlen)
@@ -327,18 +326,18 @@ def get_radar_stream(filename):
                             % (fmtlen, filename))
 
 # ****************************************************************************            
-        return 'RADnh3'
+#        return 'RADnh3'
 
-#        # TODO: This check should only  happen once, not every read!!
-#        # Check it then set a flag and move the file pointer back to the start!
-#        # Check the version byte and see if it is RADnh3 or RADnh5
-#        v = ord(buff[6])
-#        if v == 5:
-#            return "RADnh5"
-#        elif v == 0 or v == 255:
-#            return "RADnh3"
-#        else:
-#            raise Exception("Can't determine stream for file %s" % filename)
+        # TODO: This check should only  happen once, not every read!!
+        # Check it then set a flag and move the file pointer back to the start!
+        # Check the version byte and see if it is RADnh3 or RADnh5
+        v = buff[6]
+        if v == 5:
+            return "RADnh5"
+        elif v == 0 or v == 255:
+            return "RADnh3"
+        else:
+            raise Exception("Can't determine stream for file %s" % filename)
 # ****************************************************************************
 
 # Read individual traces out of RADnh3 or RADnh5 file
@@ -351,15 +350,15 @@ def read_RADnhx_gen(input_filename, channel_specs):
     if stream == "RADnh3":
         header_t = namedtuple('radnh3_header',
                               'nsamp nchan vr0 vr1 choff ver resvd2')
-        fmtstr='>HBBBBBB'
+        fmtstr = '>HBBBBBB'
     elif stream == "RADnh5":
         header_t = namedtuple('radnh5_header',
                               'nsamp nchan vr0 vr1 choff ver resvd2 absix relix xinc rseq scount tscount')
-        fmtstr='>HBBBBBBddfLHL'
+        fmtstr = '>HBBBBBBddfLHL'
     else:
         raise Exception("Invalid stream type for file: %s" % input_filename)
 
-    fmtlen=struct.calcsize(fmtstr)
+    fmtlen = struct.calcsize(fmtstr)
     # In theory, it's faster to do this here and only compile the format string once.
     header_struct = struct.Struct(fmtstr)
 
@@ -382,7 +381,7 @@ def read_RADnhx_gen(input_filename, channel_specs):
                 # to skip over 'em to get to the radar data.
                 if header.tscount > 0:
                     # timestamp count should be on the order of the number of stacks.
-                    assert(header.tscount < 100)
+                    assert header.tscount < 100
                     #tstamps = struct.unpack_from('>{:d}d'.format(tscount), fd.read(8*tscount))
                     fd.seek(8*header.tscount, os.SEEK_CUR)
 
@@ -395,7 +394,7 @@ def read_RADnhx_gen(input_filename, channel_specs):
 
             # reclen = SweepLength
             input_samples = header.nsamp
-            assert(input_samples > 0 and input_samples < 10000)
+            assert input_samples > 0 and input_samples < 10000
 
             if choff in choffs:
                 traces = np.fromfile(fd, dtype='>i2', count=input_samples*2)
@@ -435,8 +434,8 @@ class PIK1OutputFile(object):
         self.StackDepth = StackDepth
         self.IncoDepth = IncoDepth
 
-        self.record_increment=self.StackDepth*self.IncoDepth
-        self.record_idx=self.record_increment/2
+        self.record_increment = self.StackDepth*self.IncoDepth
+        self.record_idx = self.record_increment / 2
 
     def open(self, input_filename, do_phase=True, do_index=True):
         # type: (str, bool, bool) -> None
@@ -542,13 +541,10 @@ def get_hfilter(trunc_sweep_length):
 
 def main(args):
     # type: (Any) -> None
-    if args.debug:
-        LOGLEVEL=logging.DEBUG
-    else:
-        LOGLEVEL=logging.INFO
-    logging.basicConfig(level=LOGLEVEL,
-                    format='pik1: %(relativeCreated)8d [%(levelname)-5s] (%(process)d %(threadName)-10s) %(message)s',
-                   )
+    LOGLEVEL = logging.DEBUG if args.debug else logging.INFO
+
+    fmtstr = 'pik1: %(relativeCreated)8d [%(levelname)-5s] (%(process)d %(threadName)-10s) %(message)s'
+    logging.basicConfig(level=LOGLEVEL, format=fmtstr)
 
     # Obtain reference chirp
     ref_chirp = get_ref_chirp(args.bandpass, args.output_samples)
@@ -575,7 +571,8 @@ def main(args):
                                          not args.bandpass)
     # Incoherently stack
     istackgen = inco_stacks_gen(dechirpgen, channel_specs, args.IncoDepth,
-                                args.output_samples, do_phase=args.output_phases)
+                                args.output_samples, 
+                                do_phase=args.output_phases)
 
     # Initialize output files
     outfiles = {}
@@ -607,7 +604,8 @@ if __name__ == "__main__":
     # TODO(LEL): This argument is a PITA. Should be consistent channel spec,
     #    not optional int or string..
     parser.add_argument('--channel_def', required=True,
-                        help="Channel Number to compress (counts from 1) OR string that's the channel spec")
+                        help="Channel Number to compress (counts from 1) "
+                             "OR string that is the channel spec")
 
     parser.add_argument('--output_samples', required=True, type=int,
                         help='Length of each output sweep (in samples)')
@@ -630,13 +628,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    do_profile = False
-    if do_profile:
-        import os
-        prof_file = "/tmp/pik1b.{0:d}.prof".format(os.getpid())
-        cProfile.run('main(args)', prof_file)
-        import pstats
-        p = pstats.Stats(prof_file)
-        p.sort_stats('cumulative').print_stats(50)
-    else:
-        main(args)
+    main(args)

@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-
+Convert coordinates in a pandas dataframe
 """
 import numpy as np
 import pandas as pd
@@ -19,10 +20,10 @@ nsqrt = np.sqrt
 
 
 def _coord_check(coord, cols):
-    if (isinstance(coord, (list, tuple, set))):
+    if isinstance(coord, (list, tuple, set)):
         ncoord = np.array(coord)
-    elif (isinstance(coord, pd.core.frame.DataFrame)):
-        if (set(cols).issubset(set(coord.keys()))):
+    elif isinstance(coord, pd.core.frame.DataFrame):
+        if set(cols).issubset(set(coord.keys())):
             ncoord = coord[cols].values
         else:
             print('ERROR: Wrong column names ' +
@@ -31,12 +32,12 @@ def _coord_check(coord, cols):
             return None
     else:
         ncoord = np.array(coord)
-    if (len(ncoord.shape) == 1):
+    if len(ncoord.shape) == 1:
         ncoord = ncoord[np.newaxis]
     return ncoord
 
 
-def ellipsoid(sph, axes=[0, 0, 0], radius=0, indeg=True, unit=1, **kwargs):
+def ellipsoid(sph, axes=(0, 0, 0), radius=0, indeg=True, unit=1, **kwargs):
     """
     Computes ellipsoid radii at specified spherical coordinates.
 
@@ -64,16 +65,16 @@ def ellipsoid(sph, axes=[0, 0, 0], radius=0, indeg=True, unit=1, **kwargs):
     >>> ellipsoid(sph, axes, indeg=True)
 
     """
-    [a, b, c] = axes
+    a, b, c = axes
     abc = 1000/unit * a*b*c
-    if (abc == 0):
-        if (radius == 0):
+    if abc == 0:
+        if radius == 0:
             return np.zeros(len(sph))
         else:
             return np.full(len(sph), 1000/unit * radius)
     else:
         scl = 1.0
-        if (indeg):
+        if indeg:
             scl = deg
         sph = np.reshape(sph, (-1, 2))
         clat = np.cos(sph[:, 0]*scl)
@@ -87,7 +88,7 @@ def ellipsoid(sph, axes=[0, 0, 0], radius=0, indeg=True, unit=1, **kwargs):
 
 
 def sph2cart(coord, indeg=True,
-             cols=['spot_lat', 'spot_lon', 'spot_radius'], **kwargs):
+             cols=('spot_lat', 'spot_lon', 'spot_radius'), **kwargs):
     """
     Coverts spherical to catresian coordinates.
 
@@ -113,15 +114,15 @@ def sph2cart(coord, indeg=True,
     cart : ndarray
         Array with cartesian coordinates (x, y, z).
     """
+
     sph = _coord_check(coord, cols)
     cart = np.empty_like(sph, dtype=float)
-    scl = 1.0
-    if (indeg):
-        scl = deg
-    clat = ncos(sph[:, 0]*scl)
-    slat = nsin(sph[:, 0]*scl)
-    clon = ncos(sph[:, 1]*scl)
-    slon = nsin(sph[:, 1]*scl)
+
+    scale = deg if indeg else 1.0
+    clat = ncos(sph[:, 0]*scale)
+    slat = nsin(sph[:, 0]*scale)
+    clon = ncos(sph[:, 1]*scale)
+    slon = nsin(sph[:, 1]*scale)
     r = sph[:, 2] + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     cart[:, 0] = r * clon * clat
     cart[:, 1] = r * slon * clat
@@ -130,7 +131,7 @@ def sph2cart(coord, indeg=True,
 
 
 def cart2sph(coord, indeg=True,
-             cols=['spot_x', 'spot_y', 'spot_z'], **kwargs):
+             cols=('spot_x', 'spot_y', 'spot_z'), **kwargs):
     """
     Converts cartesian to spherical coordinates.
 
@@ -167,39 +168,35 @@ def cart2sph(coord, indeg=True,
     """
     cart = _coord_check(coord, cols)
     sph = np.empty_like(cart, dtype=float)
-    scl = 1.0
-    if (indeg):
-        scl = deg
+
+    scale = deg if indeg else 1.0
     sph[:, 2] = nsqrt(cart[:, 0]**2 + cart[:, 1]**2 + cart[:, 2]**2)
-    sph[:, 0] = nasin(cart[:, 2]/sph[:, 2])/scl
-    sph[:, 1] = ((natan2(cart[:, 1], cart[:, 0]) + 2*pi) % (2*pi))/scl
+    sph[:, 0] = nasin(cart[:, 2]/sph[:, 2])/scale
+    sph[:, 1] = ((natan2(cart[:, 1], cart[:, 0]) + 2*pi) % (2*pi))/scale
     sph[:, 2] = sph[:, 2] - ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     return sph
 
 
 def sph2lsh(coord, Dtm, indeg=True,
-            cols=['spot_lat', 'spot_lon', 'spot_radius'], **kwargs):
+            cols=('spot_lat', 'spot_lon', 'spot_radius'), **kwargs):
     sph = _coord_check(coord, cols)
     lsh = np.empty_like(sph, dtype=float)
-    scl = 1.0
-    if not(indeg):
-        scl = deg
+
+    scale = deg if indeg else 1.0
     # carto routine wants degrees for the coordinates
-    lsh[:, 0:2] = Dtm.carto(sph[:, 0:2]/scl, -1)
+    lsh[:, 0:2] = Dtm.carto(sph[:, 0:2]/scale, -1)
     # the 3rd component is kept as it is
     lsh[:, 2] = sph[:, 2]  # + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     return lsh
 
 
 def lsh2sph(coord, Dtm, indeg=True,
-            cols=['line', 'sample', 'height'], **kwargs):
+            cols=('line', 'sample', 'height'), **kwargs):
     lsh = _coord_check(coord, cols)
-    scl = 1.0
-    if not(indeg):
-        scl = deg
+    scale = deg if indeg else 1.0
     sph = np.empty_like(lsh, dtype=float)
     # carto routine gives degrees for coordinates
-    sph[:, 0:2] = Dtm.carto(lsh[:, 0:2], 1)*scl
+    sph[:, 0:2] = Dtm.carto(lsh[:, 0:2], 1)*scale
     # the 3rd component is kept as it is
     sph[:, 2] = lsh[:, 2]  # + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
     return sph
@@ -223,37 +220,40 @@ def cart2lsh(coord, Dtm, **kwargs):
     return lsh
 
 
-def latlon_profiles(prof, lat=[-90, 90], lon=[0, 360], min_len=0,
+def latlon_profiles(prof, lat=(-90, 90), lon=(0, 360), min_len=0,
                     verbose=False):
-    import numpy as np
     min_lat = min(lat)
     max_lat = max(lat)
     min_lon = min(lon)
     max_lon = max(lon)
     cut_prof = []
-    if (verbose):
+    if verbose:
         import pydlr.misc.prog as pr
-        p = pr.Prog(len(prof))
+        progress = pr.Prog(len(prof))
     for i in range(len(prof)):
         ind = np.where((prof[i][:, 0] <= max_lat) &
                        (prof[i][:, 0] >= min_lat) &
                        (prof[i][:, 1] <= max_lon) &
                        (prof[i][:, 1] >= min_lon))[0]
-        if (len(ind) > min_len):
+        if len(ind) > min_len:
             cut_prof.append(prof[i][ind])
-            if (verbose):
-                p.print_Prog(i)
-    if (verbose):
-        p.close_Prog()
+            if verbose:
+                progress.print_Prog(i)
+    if verbose:
+        progress.close_Prog()
     return np.asarray(cut_prof)
 
 
 def sph_dist(sph1, sph2, radius, indeg=True):
-    import numpy as np
-    if (indeg):
+    if indeg:
         sph1 = sph1*deg
         sph2 = sph2*deg
     ds = np.arccos(np.sin(sph1[:, 0]) * np.sin(sph2[:, 0]) +
                    np.cos(sph1[:, 0]) * np.cos(sph2[:, 0]) *
                    np.cos(sph1[:, 1] - sph2[:, 1]))
     return radius*ds
+
+
+def test():
+    # Test that functions are inverses of each other
+    pass

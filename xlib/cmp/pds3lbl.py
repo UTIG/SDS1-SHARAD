@@ -21,16 +21,16 @@ import pickle
 import logging
 import gzip
 import sys
+import json
 
 import pandas as pd
 import numpy as np
 import bitstring as bs
 import pvl
 
-g_debug = False
+G_DEBUG = False
 
 def read_science(data_path, label_path, science=True, bc=True):
-    global g_debug
 
     """
     Routine to read the pds3 label files and return the corresponding
@@ -155,13 +155,13 @@ def read_science(data_path, label_path, science=True, bc=True):
             science_label = pvl.load(data_path.replace('_a_s.dat', '_a.lbl'))
         else:
             science_label = pvl.load(data_path.replace('_a_a.dat', '_a.lbl'))
-    except:
-        new_path, filename = data_path.rsplit('/', 1)
+    except Exception: # TODO: be more specific: FileNotFound exception?
+        new_path, _ = data_path.rsplit('/', 1)
         os.chdir(new_path)
-        for file in glob.glob("*.LBL"):
-            science_label = pvl.load(file)
-        for file in glob.glob("*.lbl"):
-            science_label = pvl.load(file)
+        for filename in glob.glob("*.LBL"):
+            science_label = pvl.load(filename)
+        for filename in glob.glob("*.lbl"):
+            science_label = pvl.load(filename)
 
     # read number of range lines and science mode from label file
     rows = science_label['FILE']['SCIENCE_TELEMETRY_TABLE']['ROWS']
@@ -209,18 +209,18 @@ def read_science(data_path, label_path, science=True, bc=True):
     if science and pseudo_samples < 3600:
         s = out['samples']
         conv = np.empty((len(s), 3600), dtype='i1')
-        if pseudo_samples == 2700: 
+        if pseudo_samples == 2700:
             for j in range(len(s)):
                 conv[j] = [x for y in [
-                    [s[j][i]>>2, 
-                   ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4, 
-                   ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6, 
-                     s[j][i+2] & 0x3f ] for i in range(0,2700,3)] for x in y]
+                    [s[j][i]>>2,
+                   ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4,
+                   ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6,
+                     s[j][i+2] & 0x3f] for i in range(0, 2700, 3)] for x in y]
             for i in range(0, 3600):
-                dfr['sample' + str(i)] = pd.Series(conv[:,i], index=dfr.index)
+                dfr['sample' + str(i)] = pd.Series(conv[:, i], index=dfr.index)
         elif pseudo_samples == 1800:
             for j in range(len(s)):
-                conv[j] = [x for y in [[s[j][i] >> 4, s[j][i] & 0xf] 
+                conv[j] = [x for y in [[s[j][i] >> 4, s[j][i] & 0xf]
                           for i in range(1800)] for x in y]
             for i in range(0, 3600):
                 dfr['sample'+str(i)] = pd.Series(conv, index=dfr.index)
@@ -230,7 +230,7 @@ def read_science(data_path, label_path, science=True, bc=True):
             return 0
     if bc:
         # Replace the bitstrings
-        # Read the bitcolumns. These have been previously saved in np.void format
+        # Read bitcolumns. These have been previously saved in np.void format
         # and are now converted into bitstrings which are evaluated bit per bit.
 
         for bcl in bitcolumns:
@@ -249,13 +249,14 @@ def read_science(data_path, label_path, science=True, bc=True):
                     continue
 
                 nb_bits   = sub[1]['BITS']
-                start_bit = sub[1]['START_BIT']-1
+                start_bit = sub[1]['START_BIT'] - 1
                 dtype = PDS3_DATA_TYPE_TO_BS[sub[1]['BIT_DATA_TYPE']]\
                         +':'+str(nb_bits)
                 if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
                     dtype = 'bool'
-                if g_debug:
-                    logging.debug("start_bit={:d} nb_bits={:d} dtype={:s}".format(start_bit, nb_bits, dtype) )
+                if G_DEBUG:
+                    logging.debug("start_bit={:d} nb_bits={:d} dtype=s"\
+                                  .format(start_bit, nb_bits, dtype))
 
                 conv = np.array([bit_select2(bits, start_bit, dtype) for bits in bitdata])
                 dfr[name] = pd.Series(conv, index=dfr.index)
@@ -296,7 +297,7 @@ def bit_select(bits, start, num, form):
                                      )).readlist(form)[0]
 
 def bit_select2(bits, pos, form):
-    """ 
+    """
     This subroutine selects bits from a BitStream object and converts them
     to a numeric with the requested format.  The length of the bit field
     is encoded in the "form" field
@@ -350,29 +351,30 @@ def read_refchirp(path):
     return arr
 
 def test_write(datafile, labelfile, goldfile):
-    
+    """ Test writing pdsdata """
     pdsdata = read_science(datafile, labelfile)
     with gzip.open(goldfile, "wb") as  fout:
         pickle.dump(pdsdata, fout)
 
 def test_cmp_gold(datafile, labelfile, goldfile):
+    """ compare one file to another """
     pdsdata1 = read_science(datafile, labelfile)
     with gzip.open(goldfile, "rb") as  fin:
         pdsdata2 = json.load(fin)
 
-    #result = cmp(pdsdata1, pdsdata2)
-    #assert(result)
+    assert cmp(pdsdata1, pdsdata2)
 
 
-def test1():
+def test1(outputdir='.'):
+    """ Test basic PDS file read functionality """
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
     # Test pds3lbl on a known piece of data to assure correct output
-    datafile="/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_s.dat"
-    labelfile="/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt"
+    datafile = "/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_s.dat"
+    labelfile = "/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt"
     #outfile="rm184_edr3434001.gold.pickle.gz"
     #pdsdata1 = read_science(datafile, labelfile)
-    outfile="rm184_edr3434001.pickle.gz"
+    outfile = "rm184_edr3434001.pickle.gz"
     test_write(datafile, labelfile, outfile)
     #test_cmp_gold(datafile, labelfile, goldfile)
     # It would be nice to have something to compare with but oh well
@@ -380,10 +382,26 @@ def test1():
 
 
 def main():
-    global g_debug
-    g_debug = True
-    test1()
+    """ main function """
+    global G_DEBUG
+    G_DEBUG = True
+
+    parser = argparse.ArgumentParser(description='Planetary Data System 3 Labels')
+    parser.add_argument('-o', '--output', default='.', help="Output directory")
+    parser.add_argument('-v', '--verbose', action="store_true",
+                        help="Display verbose output")
+
+    args = parser.parse_args()
+
+
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
+
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+                        format="pds3lbl: [%(levelname)-7s] %(message)s")
+
+    test1(args.output)
 
 if __name__ == "__main__":
     # execute only if run as a script
+    import argparse
     main()

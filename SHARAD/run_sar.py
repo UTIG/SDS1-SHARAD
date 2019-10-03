@@ -7,41 +7,59 @@ __history__ = {
          'info': 'First release.'}}
 
 
+#import sys
+#import os
+import importlib.util
+import multiprocessing
+#import time
+import warnings
+#import logging
+import numpy as np
+import pandas as pd
+import misc.prog as prog
+import misc.hdf as hdf
+import matplotlib.pyplot as plt
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
+import sar.sar as sar
+import cmp.pds3lbl as pds3
+from scipy.constants import c
+
+
+
 def sar_processor(path, idx_start=None, idx_end=None,
                   sar_window=200):
 
-    import sar.sar as sar
-    import numpy
-    import matplotlib.pyplot as plt
-    import cmp.pds3lbl as pds3
-    from scipy.constants import c
 
     kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
     # create cmp path
-    path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+    path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/', '')
     data_file = path_file.split('/')[-1]
-    path_file = path_file.replace(data_file,'')
-    cmp_path = path_root+path_file+'ion/'+data_file.replace('_a.dat','_s.npy')
+    path_file = path_file.replace(data_file, '')
+    sfile = data_file.replace('_a.dat', '_s.npy')
+    cmp_path = path_root + path_file + 'ion/' + sfile
     label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
     aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-    science_path=path.replace('_a.dat','_s.dat')
+    science_path = path.replace('_a.dat', '_s.dat')
 
-    cmp_track=np.load(cmp_path)
+    cmp_track = np.load(cmp_path)
     if idx_start is not None:
-        idx_start = max(0,idx_start)
+        idx_start = max(0, idx_start)
     else:
         idx_start = 0
     if idx_end is not None:
-        idx_end = min(len(cmp_track),idx_end)
+        idx_end = min(len(cmp_track), idx_end)
     else:
         idx_end = len(cmp_track)
 
     cmp_track = cmp_track[idx_start:idx_end]
     data = pds3.read_science(science_path, label_path, science=True, bc=False)[idx_start:idx_end]
-    aux = pds3.read_science(science_path.replace('_s.dat','_a.dat'), aux_path, science=False, bc=False)[idx_start:idx_end]
+    afile = science_path.replace('_s.dat', '_a.dat')
+    aux = pds3.read_science(afile, aux_path, science=False, bc=False)[idx_start:idx_end]
 
     pri_code = 1
-    #pri_code = data['PULSE_REPETITION_INTERVAL'][0]                   
+    #pri_code = data['PULSE_REPETITION_INTERVAL'][0]
     if pri_code == 1:   pri = 1428E-6
     elif pri_code == 2: pri = 1429E-6
     elif pri_code == 3: pri = 1290E-6
@@ -55,13 +73,14 @@ def sar_processor(path, idx_start=None, idx_end=None,
     dpst = 460
     La = 8.774
     dBW = 0.4
-    tlp = data['TLP_INTERPOLATE'].as_matrix() 
+    tlp = data['TLP_INTERPOLATE'].as_matrix()
     scrad = data['RADIUS_INTERPOLATE'].as_matrix()
     tpgpy = data['TOPOGRAPHY'].as_matrix()
-    tof = 2000*(scrad-min(scrad))/c
-    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].as_matrix()*0.0375E-6+pri-11.98E-6-tof
+    tof = 2000*(scrad-min(scrad)) / c
+    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].as_matrix() \
+            * 0.0375E-6 + pri - 11.98E-6 - tof
     vt = data['TANGENTIAL_VELOCITY_INTERPOLATE'].as_matrix()
-    
+
     """
     sc = np.empty(len(ets))
     i = 0
@@ -72,27 +91,12 @@ def sar_processor(path, idx_start=None, idx_end=None,
     """
 
     rl, pst_trc = sar.delay_doppler(cmp_track, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt)
-    np.save('sar_test.npy',rl)
+    np.save('sar_test.npy', rl)
     plt.style.use('dark_background')
-    plt.imshow(rl.transpose(),cmap='binary_r',aspect='auto')
+    plt.imshow(rl.transpose(), cmap='binary_r', aspect='auto')
     plt.show()
-    
-    return 0
 
-import sys
-import os
-import numpy as np
-import importlib.util
-import pandas as pd
-import multiprocessing
-import time
-import logging
-import misc.prog as prog
-import misc.hdf as hdf
-import matplotlib.pyplot as plt
-import warnings
-warnings.filterwarnings("ignore", message="numpy.dtype size changed")
-warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+    return 0
 
 # Set number of cores
 nb_cores = 1
@@ -100,14 +104,14 @@ nb_cores = 1
 # Read lookup table associating gob's with tracks
 h5file = pd.HDFStore('mc11e_spice.h5')
 keys = h5file.keys()
-lookup = np.genfromtxt('lookup.txt',dtype='str')
+lookup = np.genfromtxt('lookup.txt', dtype='str')
 #lookup = np.genfromtxt('EDR_NorthPole_Path.txt', dtype = 'str')
 
 # Build list of processes
 print('build task list')
-process_list=[]
+process_list = []
 p=prog.Prog(len(keys))
-i=0
+i = 0
 path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
 for orbit in keys:
     p.print_Prog(i)
@@ -117,13 +121,13 @@ for orbit in keys:
     idx_start = h5file[orbit]['idx_start'][0]
     idx_end = h5file[orbit]['idx_end'][0]
 
-    process_list.append([path,None,None])# idx_start, idx_end])
-    i+=1
+    process_list.append([path, None, None])# idx_start, idx_end])
+    i += 1
     break
 p.close_Prog()
 h5file.close()
 
-print('start processing',len(process_list),'tracks')
+print('start processing', len(process_list), 'tracks')
 
 pool = multiprocessing.Pool(nb_cores)
 results = [pool.apply_async(sar_processor, t) for t in process_list]
@@ -133,5 +137,5 @@ i=0
 for result in results:
     p.print_Prog(i)
     dummy = result.get()
-    i+=1
+    i += 1
 print('done')

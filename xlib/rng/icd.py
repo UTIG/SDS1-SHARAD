@@ -5,7 +5,11 @@ __history__ = {
     '0.1':
         {'date': 'April 15, 2019',
          'author': 'Gregor Steinbruegge, UTIG',
-         'info': 'Initial Release. Working version. Not fully documented!'}}
+         'info': 'Initial Release. Working version. Not fully documented!'},
+    '1.0':
+	{'data': 'August 28, 2019',
+         'author': 'Gregor Steinbruegge, UTIG',
+         'info': 'Integrated the clutter simulation code and updated documentation'}}
 
 import numpy as np
 import sys
@@ -15,12 +19,13 @@ from scipy.constants import c
 from scipy.io import loadmat
 import pandas as pd
 import matplotlib.pyplot as plt
+import rng.icsim as icsim
 
-def icd_ranging(cmp_path, sim_path, science_path, label_science, 
+def icd_ranging(cmp_path, dtm_path, science_path, label_science, 
                 idx_start, idx_end, debug = False, ipl = False,
-                window = 50, average = 30, co_sim = 10, co_data = 30):
+                window = 50, average = 30, co_sim = 10, co_data = 30,
+                cluttergram_path = None, save_clutter_path = None):
 
-    # TODO: Documentation is incomplete. Interfaces are subject to change!
     """
     Computes the differential range between two tracks
     by matching inchorent cluttergrams with pulse compressed data.
@@ -47,6 +52,9 @@ def icd_ranging(cmp_path, sim_path, science_path, label_science,
     # SHARAD sampling frequency
     f = 1/0.0375E-6    
 
+    # Number of range lines
+    Necho = idx_end-idx_start
+
     #============================
     # Read and prepare input data
     #============================
@@ -54,21 +62,33 @@ def icd_ranging(cmp_path, sim_path, science_path, label_science,
     # Data for RXWOTs
     data = pds3.read_science(science_path, label_science, science=True, 
                               bc=False)
+    # Range window starts
+    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
 
-    # TODO: Currently no direct interface to Matlab clutter simulator
-    ita = loadmat(sim_path)
+    # Perform clutter simulation or load existing cluttergram
+    if cluttergram is None:
+        pri_code = np.ones(Necho)
+        p_scx = aux['X_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+        p_scy = aux['Y_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+        p_scz = aux['Z_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+        v_scx = aux['X_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+        v_scy = aux['Y_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+        v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+        state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
+        sim = icsim.incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end)
+        if save_clutter_path is not None: 
+            np.save(save_clutter_path,sim)
+    else:
+        sim = np.load(cluttergram_path)
 
-    # db simulated data
-    # TODO: One needs to add this offset - radiometry of clutter simulator 
-    # is odd.
-    #sim = np.transpose(20*np.log10(ita['rdrgr_hrsc']+abs(np.min(ita['rdrgr_hrsc']))+1))
-    sim = np.transpose(ita['rdrgr_hrsc'])
+    plt.imshow(rgram)
+    plt.show()
+
+    #TODO: Check if that is necessary
     lsim = len(sim)
     if lsim != idx_end-idx_start:
         if len(data)>(idx_end+1): idx_end+=1
         else: idx_start-=1
-
-    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
     
     # Free memory - science data not needed anymore
     del data
@@ -88,12 +108,11 @@ def icd_ranging(cmp_path, sim_path, science_path, label_science,
     data_new[np.where(data_new < (np.max(data_new) - co_data))] = (np.max(data_new) - co_data)
     sim_new[np.where(sim_new < (np.max(sim_new) - co_sim))] = (np.max(sim_new) - co_sim)
 
-
     # Normalize
     data_norm = (data_new-np.min(data_new))/(np.max(data_new)-np.min(data_new))
     sim_norm = (sim_new-np.min(sim_new))/(np.max(sim_new)-np.min(sim_new))
-    sim_norm[np.where(sim_norm>0.1)] = 1
-    data_norm[np.where(data_norm>0.1)] = 1
+    #sim_norm[np.where(sim_norm>0.1)] = 1
+    #data_norm[np.where(data_norm>0.1)] = 1
     
     # Average
     data_avg = np.zeros_like(data_norm)
