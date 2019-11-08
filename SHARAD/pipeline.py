@@ -31,152 +31,6 @@ import cmp.plotting
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
-
-
-def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
-                  chrp_filt=True, verbose=False, saving=False):
-    """
-    Processor for individual SHARAD tracks. Intended for multi-core processing
-    Takes individual tracks and returns pulse compressed data.
-
-    Input:
-    -----------
-      infile    : Path to track file to be processed.
-      outdir    : Path to directory to write output data
-      idx_start : Start index for processing.
-      idx_end   : End index for processing.
-      chrp_filt : Apply a filter to the reference chirp
-      verbose   : Gives feedback in the terminal.
-
-    Output:
-    -----------
-      E          : Optimal E value
-      cmp_pulses : Compressed pulses
-
-    """
-
-    try:
-    #if chrp_filt:
-        time_start = time.time()
-        # Get science data structure
-        label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-        # Load data
-        science_path = infile.replace('_a.dat', '_s.dat')
-        data = pds3.read_science(science_path, label_path, science=True)
-        aux  = pds3.read_science(infile      , aux_path,   science=False)
-
-        stamp1 = time.time()-time_start
-        logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
-
-        # Array of indices to be processed
-        if idx_start is None or idx_end is None:
-            idx_start = 0
-            idx_end = len(data)
-        idx = np.arange(idx_start, idx_end)
-
-        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
-
-        # Chop raw data
-        raw_data = np.zeros((len(idx), 3600), dtype=np.complex)
-        for j in range(0, 3600):
-            raw_data[idx-idx_start, j] = data['sample'+str(j)][idx].values
-
-        if data['COMPRESSION_SELECTION'][idx_start] == 0:
-            compression = 'static'
-        else:
-            compression = 'dynamic'
-        tps = data['TRACKING_PRE_SUMMING'][idx_start]
-        presum_table = (1, 2, 3, 4, 8, 16, 32, 64)
-        assert 0 <= tps <= 7
-        presum = presum_table[tps]
-        sdi = data['SDI_BIT_FIELD'][idx_start]
-        bps = 8
-
-        # Decompress the data
-        decompressed = cmp.rng_cmp.decompress_sci_data(raw_data, compression, presum, bps, sdi)
-        E_track = np.empty((idx_end-idx_start, 2))
-        # Get groundtrack distance and define 30 km chunks
-        tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
-        tlp0 = tlp[0]
-        chunks = []
-        i0 = 0
-        for i in range(len(tlp)):
-            if tlp[i] > tlp0+30:
-                chunks.append([i0, i])
-                i0 = i
-                tlp0 = tlp[i]
-        if not chunks: # if chunks is empty
-            chunks.append([0, idx_end-idx_start])
-        if (tlp[-1]-tlp[i0]) >= 15:
-            chunks.append([i0, idx_end-idx_start])
-        else:
-            chunks[-1][1] = idx_end-idx_start
-        #chunks = np.array(chunks)
-
-        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)))
-        # Compress the data chunkwise and reconstruct
-        for i, chunk in enumerate(chunks):
-            start, end = chunk
-
-            #check if ionospheric correction is needed
-            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
-            b_iono = len(iono_check) != 0
-            minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:0.3f}  Ionospheric Correction: {!r}'.format(
-                taskname, i, len(chunks), minsza, b_iono))
-
-            # GNG: These concats seem relatively expensive.
-            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end],\
-                                 chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
-            if i == 0:
-                cmp_track = cmp_data
-            else:
-                cmp_track = np.vstack((cmp_track, cmp_data))
-            E_track[start:end, 0] = E
-            E_track[start:end, 1] = sigma
-
-        stamp3 = time.time() - time_start - stamp1
-        logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
-
-        if saving:
-            data_file   = os.path.basename(infile)
-            outfilebase = data_file.replace('_a.dat', '_s.h5')
-            outfile     = os.path.join(outdir, outfilebase)
-            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,outdir))
-            if not os.path.exists(outdir):
-                os.makedirs(outdir)
-
-            # restructure of data save
-            real = np.array(np.round(cmp_track.real), dtype=np.int16)
-            imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
-            dfreal = pd.DataFrame(real)
-            dfimag = pd.DataFrame(imag)
-            dfreal.to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
-            dfimag.to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
-            #np.save(new_path+data_file.replace('.dat','.npy'),cmp_track)
-            outfile_TECU = os.path.join(outdir, data_file.replace('_a.dat','_s_TECU.txt'))
-            np.savetxt(outfile_TECU, E_track)
-
-        if radargram:
-            # Plot a radargram
-            rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx]
-            tx0 = data['RECEIVE_WINDOW_OPENING_TIME'][0]
-            tx = np.empty(len(data))
-            # GNG: this seems likely to be wrong. Should be:
-            #for rec in range(len(data['RECEIVE_WINDOW_OPENING_TIME'])):
-            for rec in range(len(data)):
-                tx[rec] = data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
-            cmp.plotting.plot_radargram(cmp_track, tx, samples=3600)
-
-    except Exception: # pylint: disable=W0703
-        logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
-        for line in traceback.format_exc().split("\n"):
-            logging.error('{:s}: {:s}'.format(taskname, line))
-        return 1
-    logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
-    return 0
-
 Processors = [
     [("Name","Run Range Compression"),
      ("Input","_a.dat"),
@@ -189,13 +43,12 @@ Processors = [
     ],
     [("Name","Run Altimetry"),
      ("Indir", "ion"),
-     ("Input","_a.dat"),
-     ("Input","_s.dat"),
-     ("Processor", "run_rng_cmp.py"), ("Library", "xlib/cmp/pds3lbl.py"),
-     ("Library", "xlib/cmp/plotting.py"), ("Library", "xlib/cmp/rng_cmp.py"),
-     ("Outdir", "ion"),
-     ("Output", "_s.h5"),
-     ("Output", "_s_TECU.txt")
+     ("Input", "_s.h5"),
+     ("Input", "_s_TECU.txt"),
+     ("Processor", "run_altimetry.py"),
+     ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
+     ("Outdir", "beta5"),
+     ("Output", ".h5")
     ]
 ]
 
