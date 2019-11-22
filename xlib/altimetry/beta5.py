@@ -10,14 +10,14 @@ __history__ = {
 import time
 from math import tan, pi, erf, sqrt
 import logging
-
+import sys
 import numpy as np
 from scipy.constants import c
 from scipy.ndimage.interpolation import shift
 import spiceypy as spice
 import pandas as pd
 from scipy.optimize import least_squares
-
+from misc import prog as prg
 from misc import coord as crd
 import cmp.pds3lbl as pds3
 
@@ -81,7 +81,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         Unfocussed SAR radargram (smoothed in fast time)
 
     """
-
+    MB = 1064*1064
     time0 = time.time()
     #============================
     # Read and prepare input data
@@ -90,12 +90,15 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Read input data
     dbc = fix_pri is None
     data = pds3.read_science(science_path, label_science, science=True, bc=dbc)
+    logging.debug("Size of 'edr' data: {:0.2f} MB".format(sys.getsizeof(data)/MB))
     aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'),
                             label_aux, science=False, bc=False)
+    logging.debug("Size of 'aux' data: {:0.2f} MB".format(sys.getsizeof(aux)/MB))
     re = pd.read_hdf(cmp_path, key='real').values[idx_start:idx_end]
     im = pd.read_hdf(cmp_path, key='imag').values[idx_start:idx_end]
+    cmp_track = np.empty(re.size,dtype=np.complex64)
     cmp_track = re+1j*im
-
+    logging.debug("Size of 'cmp' data: {:0.2f} MB".format(sys.getsizeof(cmp_track)/MB))
     tecu_filename = cmp_path.replace('.h5', '_TECU.txt')
     tecu = np.genfromtxt(tecu_filename)[idx_start:idx_end, 0]
 
@@ -153,12 +156,15 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     shift_param = (phase-tx0) % 3600
 
 
-
     time1 = time.time()
     logging.debug("radargram offsets get shot freq: {:0.2f} sec".format(time1-time0))
     time0 = time1
 
     # Compute SAR apertures for coherent and incoherent stacking
+    # Note the window for coherent stacking is by default set to preserve slopes
+    # up to 25deg. For SHARAD data this means that generally no incoherent stacking
+    # is performed, i.e. coh_window = 1. However, with variable observing geometries
+    # during Europa flybys, REASON data might allow for coherent stacking.
     sc_alt = aux['SPACECRAFT_ALTITUDE'].values[idx_start:idx_end]*1000
     vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'].values[idx_start:idx_end]*1000
     fresnel = np.sqrt(sc_alt*c/10E6+(c/(20E6))**2)
@@ -169,6 +175,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     logging.debug("Compute SAR apertures: {:0.2f} sec".format(time1-time0))
     time0 = time1
 
+    del aux
 
     #========================
     # Actual pulse processing
@@ -178,7 +185,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     if ft_avg is not None:
         wvfrm = np.empty((len(cmp_track), 3600), dtype=np.complex)
         for i in range(len(cmp_track)):
-            rmean = running_mean(abs(cmp_track[i]), 10)
+            rmean = running_mean(cmp_track[i], ft_avg)
             wvfrm[i] = rmean - np.mean(rmean)
             #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
             #wvfrm[i] -= np.mean(wvfrm[i])
@@ -187,17 +194,19 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         wvfrm = cmp_track
 
+    del cmp_track
     time1 = time.time()
     logging.debug("Waveform smoothing: {:0.2f} sec".format(time1-time0))
     time0 = time1
 
-
     # Construct radargram
-    radargram = np.zeros((len(cmp_track), 3600), dtype=np.complex)
-    for rec in range(len(cmp_track)):
+    radargram = np.zeros((len(wvfrm), 3600), dtype=np.complex)
+    for rec in range(len(wvfrm)):
         radargram[rec] = np.roll(wvfrm[rec],int(phase[rec]-tx0))
         #radargram[rec] = np.roll(wvfrm[rec], int(phase[rec + idx_start] - tx0))
 
+    logging.debug("Size of radargram: {:0.2f} MB".format(sys.getsizeof(radargram)/MB))
+    del wvfrm
     # Perform averaging in slow time. Pulse is averaged over the 1/4 the
     # distance of the first pulse-limited footprint and according to max
     # slope specification.
@@ -205,6 +214,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     max_window = max(coh_window, sar_window)
     radargram_ext = np.empty((len(radargram) + 2 * max_window, 3600),
                              dtype=np.complex)
+
     for i in range(3600):
         radargram_ext[:, i] = np.pad(radargram[:,i],
                                      (max_window, max_window), 'edge')
@@ -215,6 +225,9 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         avg_c = radargram_ext
 
+    del radargram_ext
+    logging.debug("Size of 'avg_c' data: {:0.2f} MB".format(sys.getsizeof(avg_c)/MB))
+
     avg = np.empty((len(radargram), 3600))
     if sar_window > 1:
         for i in range(3600):
@@ -222,13 +235,17 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     else:
         avg = abs(avg_c)
 
-    """
+    logging.debug("Size of 'avg' data: {:0.2f} MB".format(sys.getsizeof(avg)/MB))
+    del radargram
+
+    """ 
     import matplotlib.pyplot as plt
     fig,ax = plt.subplots(figsize=(300,4))
-    plt.imshow(np.transpose(10*np.log10(abs(avg[:,0:1500])**2)),aspect='auto', vmax=70)
+    plt.imshow(np.transpose(20*np.log10(abs(avg[:,0:1500]))),aspect='auto')
     cbar = plt.colorbar()
     cbar.set_label('[dB]')
     plt.show()
+    
     
     import cmp.plotting
     print('control')
@@ -286,6 +303,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     logging.debug("Coarse detection: {:0.2f} sec".format(time1-time0))
     time0 = time1
 
+    del deriv
     # Perform least-squares fit of waveform according to beta-5 re-tracking
     # model
     delta = np.zeros(len(avg))
