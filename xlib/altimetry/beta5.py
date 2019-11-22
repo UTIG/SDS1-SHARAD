@@ -132,6 +132,11 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         3: 1290E-6, 4: 2856E-6,
         5: 2984E-6, 6: 2580E-6
     }
+    # Get the shot frequency.
+    if fix_pri is None:
+        pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
+    else:
+        pri_code = np.full_like(sc, fix_pri)
     pri = np.array([pri_table.get(x, float('nan')) for x in pri_code])
 
     del data
@@ -147,11 +152,6 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     offset = int(max(phase) - tx0)
     shift_param = (phase-tx0) % 3600
 
-    # Get the shot frequency.
-    if fix_pri is None:
-        pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
-    else:
-        pri_code = np.full_like(sc, fix_pri)
 
 
     time1 = time.time()
