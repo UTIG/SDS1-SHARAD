@@ -133,10 +133,8 @@ def vector_interp_wrapped(vect):
 
 """
 def get_minimums(arr):
-    #"""
     #Find the minimum value in the array, and the indices of
     #all elements that match this value.
-    #"""
     minv = None
     minidx = None
     for i, x in enumerate(arr):
