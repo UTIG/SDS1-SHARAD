@@ -48,7 +48,7 @@ Processors = [
      ("Processor", "run_altimetry.py"),
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
      ("Outdir", "beta5"),
-     ("Output", ".h5")
+     ("Output", "_a.h5")
     ]
 ]
 
@@ -140,6 +140,7 @@ def main():
                 print('Up to date.')
             else:
                 print('Ready to process.')
+                print(output)
                 logging.debug("Adding " + infile)
                 process_list.append(infile)
         else:
