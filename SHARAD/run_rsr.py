@@ -316,14 +316,23 @@ def main():
     senv = SHARADEnv.SHARADEnv()
 
     if 'all' in args.orbits:
+        # Uses todo to define orbits to process
         assert len(args.orbits) == 1
         args.orbits = todo(delete=args.delete, senv=senv)
+
+    if '.' in args.orbits[0]:
+        # Use a file to define orbits to process
+        filenames = pd.read_csv(args.orbits[0], header=None)
+        orbitnames = [filename.split('/')[-1].split('.')[0] for filename in filenames[0]]
+        orbits_not_done = todo(delete=False)
+        args.orbits = list(set(orbitnames).intersection(orbits_not_done))
 
     if args.dryrun: # pragma: no cover
         logging.info("Process orbits: " + ' '.join(args.orbits))
         sys.exit(0)
 
     for orbit in args.orbits:
+        print(orbit)
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
                 bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
