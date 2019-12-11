@@ -86,7 +86,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
     surf_y = alty * 0
     surf_amp = alty * 0
     for i, val in enumerate(alty):
-        if (not np.isfinite(val)) or (val == 0):
+        if (not np.isfinite(val)) or (val <= 0):
             surf_y[i] = np.nan
             surf_amp[i] = np.nan
         else:
