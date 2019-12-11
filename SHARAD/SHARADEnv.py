@@ -285,7 +285,9 @@ class SHARADEnv:
         # TODO: assert glob only has one result
         if ext == 'h5':
             try:
-                data = h5.File(files[0], 'r')[typ]['orbit'+orbit]
+                data = h5.File(files[0], 'r')[typ]
+                orbit_key = list(data.keys())[0]
+                data = data[orbit_key]
             except (OSError, KeyError) as e:
                 logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
                 raise(e)
@@ -308,7 +310,7 @@ class SHARADEnv:
         """
         orbit_info = self.get_orbit_info(orbit, True)
 
-        tecpat = os.path.join(self.out['cmp_path'], 
+        tecpat = os.path.join(self.out['cmp_path'],
                  orbit_info['relpath'], typ, '*TECU.txt')
 
         fil = glob.glob('/'.join(tecpat)[0])
@@ -460,7 +462,7 @@ def test_orbit_info(senv):
         assert isinstance(oinfo[0],dict) # should be just a dict
         oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', True)
         assert isinstance(oinfo,dict) # should be just a dict
-        assert len(oinfo) == 0 
+        assert len(oinfo) == 0
     except AssertionError as e:
         raise e
 
