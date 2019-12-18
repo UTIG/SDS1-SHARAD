@@ -19,6 +19,7 @@ import pandas as pd
 import traceback
 
 sys.path.append('../xlib/altimetry')
+sys.path.append('../xlib')
 #import misc.prog as prog
 import misc.hdf as hdf
 import matplotlib.pyplot as plt
