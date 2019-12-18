@@ -7,7 +7,8 @@ To process a single orbit (0887601) and archive to the default location:
 
 ./run_rsr.py 0887601
 
-To process a single orbit (0887601), not archive to the default location (--ofmt none),
+To process a single orbit (0887601), not archive to the default location (--ofmt
+none),
 and output a numpy file into a debug directory:
 
 ./run_rsr.py 0887601 --ofmt none --output ./rsr_data
@@ -39,9 +40,11 @@ import subradar as sr
 class DataMissingException(Exception):
     pass
 
-def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, verbose=True, **kwargs):
+def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True,
+        verbose=True, **kwargs):
     """
-    Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the altimetry processor
+    Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
+    altimetry processor
 
     Input:
     -----
@@ -53,7 +56,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
         The type of radar data used to get the amplitude from
     gain: float
         Any gain to be added to the signal (power in dB)
-        For SHARAD, it includes the instrumental gain and theabsolute calibration value
+        For SHARAD, it includes the instrumental gain and theabsolute
+        calibration value
     save: boolean
         Whether to save the results in a txt file into the hierarchy
 
@@ -99,7 +103,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
             itv = prd[val+ywinwidth[0]:val+ywinwidth[1]]
             if len(itv):
                 maxprd = np.max(itv)
-                maxind = val + ywinwidth[0] + np.argmax(itv) # The value of the surface echo
+                maxind = val + ywinwidth[0] + np.argmax(itv) # The surface echo
                 maxvec = pls[maxind] # The y coordinate of the surface echo
             else:
                 maxprd = 0
@@ -131,7 +135,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
         orbit_info = list_orbit_info[0]
 
         if typ is 'cmp':
-            archive_path = os.path.join(senv.out['srf_path'], orbit_info['relpath'], typ)
+            archive_path = os.path.join(senv.out['srf_path'],
+                    orbit_info['relpath'], typ)
         else: # pragma: no cover
             assert False
         if not os.path.exists(archive_path):
@@ -146,8 +151,8 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True, 
 def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
     senv=None, **kwargs):
     """
-    Output the results from the Radar Statistical Reconnaissance Technique applied along
-    a SHARAD orbit
+    Output the results from the Radar Statistical Reconnaissance Technique
+    applied along a SHARAD orbit
 
     Inputs
     -----
@@ -159,7 +164,8 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
         the type of radar data used to get the amplitude from
     gain: float
         Any gain to be added to the signal (power in dB)
-        For SHARAD, it includes the instrumental gain and the absolute calibration value
+        For SHARAD, it includes the instrumental gain and the absolute
+        calibration value
     save: boolean
         Whether to save the results in a txt file into the hierarchy
     senv: SHARADEnv
@@ -205,7 +211,8 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
     surf = surface_amp(senv, orbit, gain=gain, **kwargs)
 
     # Surface coefficients (RSR)
-    logging.debug('PROCESSING: Surface Statistical Reconnaissance for ' + orbit_full)
+    logging.debug('PROCESSING: Surface Statistical Reconnaissance for '
+            + orbit_full)
     b = rsr.run.along(surf['surf_amp'].values , **kwargs)
 
     # Reformat results
@@ -228,7 +235,8 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
         if typ is 'cmp':
-            archive_path = os.path.join(senv.out['rsr_path'], orbit_info['relpath'], typ)
+            archive_path = os.path.join(senv.out['rsr_path'],
+                    orbit_info['relpath'], typ)
         else: # pragma: no cover
             assert False
         if not os.path.exists(archive_path):
@@ -241,8 +249,8 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
 
 
 def todo(delete=False, senv=None):
-    """List the orbits that are not already RSR-processed to be processed but for
-    which an altimetry file exists
+    """List the orbits that are not already RSR-processed to be
+    processed but for which an altimetry file exists
 
     Inputs
     ------
@@ -287,25 +295,41 @@ def main():
 
     #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
 
-    parser.add_argument('-o','--output', default=None, help="Debugging output data directory")
-    parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'), help="Output data format")
+    parser.add_argument('-o','--output', default=None,
+            help="Debugging output data directory")
+    parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'),
+            help="Output data format")
     parser.add_argument('orbits', metavar='orbit', nargs='+',
-                        help='Orbit IDs to process (including leading zeroes). If "all", processes all orbits')
-    parser.add_argument('-j','--jobs', type=int, default=8, help="Number of jobs (cores) to use for processing. -1 to disable multiprocessing")
-    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
-    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+            help='Orbit IDs to process (including leading zeroes). If "all",
+            processes all orbits')
+    parser.add_argument('-j','--jobs', type=int, default=8,
+            help="Number of jobs (cores) to use for processing. -1 to disable
+            multiprocessing")
+    parser.add_argument('-v','--verbose', action="store_true",
+            help="Display verbose output")
+    parser.add_argument('-n','--dryrun', action="store_true",
+            help="Dry run. Build task list but do not run")
     #parser.add_argument('--tracklist', default="elysium.txt",
     #    help="List of tracks to process")
-    #parser.add_argument('--maxtracks', default=None, type=int, help="Max number of tracks to process")
+    #parser.add_argument('--maxtracks', default=None, type=int,
+    #    help="Max number of tracks to process")
 
     # Algorithm options
 
-    parser.add_argument('-w', '--winsize', type=int, default=1000, help='Number of consecutive echoes within a window where statistics are determined')
-    parser.add_argument('-s', '--sampling', type=int, default=100, help='Step at which a window is repeated')
-    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100], help='2 numbers defining the fast-time relative boundaries around the altimetry surface return where the surface will be looked for')
-    parser.add_argument('-b', '--bins', type=str, default='fd', help='Method to compute the bin width (inherited from numpy.histogram)')
-    parser.add_argument('-f', '--fit_model', type=str, default='hk', help='Name of the function (in pdf module) to use for the fit')
-    parser.add_argument('-d', '--delete', action='store_true', help='Delete and reprocess files already processed, only if [orbit] is [all]')
+    parser.add_argument('-w', '--winsize', type=int, default=1000,
+            help='Number of consecutive echoes within a window where statistics
+            are determined')
+    parser.add_argument('-s', '--sampling', type=int, default=100,
+            help='Step at which a window is repeated')
+    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100],
+            help='2 numbers defining the fast-time relative boundaries around
+            the altimetry surface return where the surface will be looked for')
+    parser.add_argument('-b', '--bins', type=str, default='fd',
+            help='Method to compute the bin width (inherited from numpy.histogram)')
+    parser.add_argument('-f', '--fit_model', type=str, default='hk',
+            help='Name of the function (in pdf module) to use for the fit')
+    parser.add_argument('-d', '--delete', action='store_true',
+            help='Delete and reprocess files already processed, only if [orbit] is [all]')
 
     args = parser.parse_args()
 
