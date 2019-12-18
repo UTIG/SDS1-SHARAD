@@ -8,6 +8,12 @@ __history__ = {
          'author': 'Scott Kempf, UTIG',
          'info': 'First release.'}}
 
+# TODO: Call processors.
+# TODO: Make RSR more like the others.
+# TODO: Parameters for SAR processing (these change the output path).
+# TODO: Manual vs automatic pipeline
+# TODO: Parallelism
+
 import sys
 import os
 import time
@@ -17,6 +23,7 @@ import warnings
 import multiprocessing
 import traceback
 import importlib.util
+import re
 import numpy as np
 #from scipy.optimize import curve_fit
 import pandas as pd
@@ -49,7 +56,32 @@ Processors = [
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
      ("Outdir", "beta5"),
      ("Output", "_a.h5")
-    ]
+    ],
+    [("Name","Run RSR"),
+     ("Indir", "ion"),
+     ("Input", "_s.h5"),
+     ("Processor", "run_rsr.py"),
+     ("Library", "xlib/rsr/Classdef.py"), ("Library", "xlib/rsr/detect.py"),
+     ("Library", "xlib/rsr/fit.py"), ("Library", "xlib/rsr/invert.py"),
+     ("Library", "xlib/rsr/pdf.py"), ("Library", "xlib/rsr/run.py"),
+     ("Library", "xlib/rsr/utils.py"), ("Library", "xlib/subradar/Classdef.py"),
+     ("Library", "xlib/subradar/iem.py"),
+     ("Library", "xlib/subradar/invert.py"),
+     ("Library", "xlib/subradar/roughness.py"),
+     ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
+     ("Outdir", "beta5"),
+     ("Outrsr", "rsr_%s.npy")
+    ],
+    [("Name","Run SAR"),
+     ("Indir", "ion"),
+     ("Input", "_s.h5"),
+     ("Input", "_s_TECU.txt"),
+     ("Processor", "run_sar2.py"),
+     ("Library", "xlib/sar/sar.py"), ("Library", "xlib/sar/smooth.py"),
+     ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
+     ("Outdir", "5m/5 range lines/40km"),
+     ("Output", "_s.h5")
+    ],
 ]
 
 def getmtime(path):
@@ -75,6 +107,8 @@ def main():
                         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0,
                         help="Maximum number of tracks to process")
+    parser.add_argument('--ignorelibs', action='store_true',
+                        help="Do not check times on libraries")
 
     args = parser.parse_args()
 
@@ -107,6 +141,9 @@ def main():
             data_file = os.path.basename(path_file).replace('_a.dat', '')
             path_file = os.path.dirname(path_file)
             root_file,ext_file = os.path.splitext(data_file)
+            # FIXME error checking is needed here
+            m = re.search('edr(\d*)/', infile)
+            orbit = m.group(1)
             intimes = []
             outtimes = []
             for attr in prod:
@@ -125,14 +162,24 @@ def main():
                     proc = attr[1]
                     intimes.append(getmtime(attr[1]))
                 if (attr[0] == "Library"):
-                    libfile = os.path.join('../',attr[1])
-                    intimes.append(getmtime(libfile))
+                    if (not args.ignorelibs):
+                        libfile = os.path.join('../',attr[1])
+                        intimes.append(getmtime(libfile))
                 if (attr[0] == "Outdir"):
                     outdir = os.path.join(path_outroot, path_file, attr[1])
                 if (attr[0] == "Output"):
                     output = os.path.join(outdir, data_file+attr[1])
                     outtimes.append(getmtime((output)))
+                if (attr[0] == "Outrsr"):
+                    # Ugly special case for RSR
+                    # FIXME these should probably be in outdir not path_outroot
+                    output = os.path.join(path_outroot, attr[1] % orbit)
+                    outtimes.append(getmtime((output)))
+            if (len(intimes) == 0):
+                logging.error("No inputs for process")
             intimes.sort(key = lambda x: x[0])
+            if (len(outtimes) == 0):
+                logging.error("No outputs for process")
             outtimes.sort(key = lambda x: x[0])
             if (intimes[0][0] == -1):
                 print('Input missing.')
