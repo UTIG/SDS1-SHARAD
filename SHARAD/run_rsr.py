@@ -248,7 +248,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
     return b
 
 
-def todo(delete=False, senv=None):
+def todo(delete=False, senv=None, filename=None):
     """List the orbits that are not already RSR-processed to be
     processed but for which an altimetry file exists
 
@@ -259,6 +259,9 @@ def todo(delete=False, senv=None):
         If True, delete existing RSR products and re-process.
         If False, only generate RSR products that do not exist.
 
+    filename: string
+        specific list of orbits to process (optional)
+
     Output
     ------
 
@@ -268,6 +271,7 @@ def todo(delete=False, senv=None):
     if senv is None:
         senv = SHARADEnv.SHARADEnv()
 
+    # Existing orbits
     alt_orbits = []
     rsr_orbits = []
     for orbit in senv.orbitinfo:
@@ -280,11 +284,29 @@ def todo(delete=False, senv=None):
             except KeyError:
                 pass
 
-    if delete is True:
-        out = alt_orbits
+    # Available orbits
+    if filename is not None:
+        fil_orbits = list(np.genfromtxt(filename, dtype='str'))
+        available_orbits = [i for i in fil_orbits if i in alt_orbits]
     else:
-        out = list(set(alt_orbits) - set(rsr_orbits))
+        available_orbits = alt_orbits
+
+    # Unprocessed orbits
+    unprocessed_orbits = [i for i in available_orbits if i not in rsr_orbits]
+
+    if delete is True:
+        out = available_orbits
+    else:
+        out = unprocessed_orbits
     out.sort()
+
+    # Remove bad altimetry orbits
+    if os.path.isfile('bad_alt.txt'):
+        bad_orbits = list(np.genfromtxt('bad_alt.txt', dtype='str'))
+        out = [i for i in out if i not in bad_orbits]
+
+    print(str(len(out)) + ' orbits to processed')
+
     return out
 
 
@@ -300,10 +322,10 @@ def main():
     parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'),
             help="Output data format")
     parser.add_argument('orbits', metavar='orbit', nargs='+',
-            help='Orbit IDs to process (including leading zeroes). If "all",
+            help='Orbit IDs to process (including leading zeroes). If "all",\
             processes all orbits')
     parser.add_argument('-j','--jobs', type=int, default=8,
-            help="Number of jobs (cores) to use for processing. -1 to disable
+            help="Number of jobs (cores) to use for processing. -1 to disable\
             multiprocessing")
     parser.add_argument('-v','--verbose', action="store_true",
             help="Display verbose output")
@@ -317,12 +339,12 @@ def main():
     # Algorithm options
 
     parser.add_argument('-w', '--winsize', type=int, default=1000,
-            help='Number of consecutive echoes within a window where statistics
+            help='Number of consecutive echoes within a window where statistics\
             are determined')
-    parser.add_argument('-s', '--sampling', type=int, default=100,
+    parser.add_argument('-s', '--sampling', type=int, default=250,
             help='Step at which a window is repeated')
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100],
-            help='2 numbers defining the fast-time relative boundaries around
+            help='2 numbers defining the fast-time relative boundaries around\
             the altimetry surface return where the surface will be looked for')
     parser.add_argument('-b', '--bins', type=str, default='fd',
             help='Method to compute the bin width (inherited from numpy.histogram)')
@@ -346,10 +368,7 @@ def main():
 
     if '.' in args.orbits[0]:
         # Use a file to define orbits to process
-        filenames = pd.read_csv(args.orbits[0], header=None)
-        orbitnames = [filename.split('/')[-1].split('.')[0] for filename in filenames[0]]
-        orbits_not_done = todo(delete=False)
-        args.orbits = list(set(orbitnames).intersection(orbits_not_done))
+        args.orbits = todo(delete=args.delete, senv=senv, filename=args.orbits[0])
 
     if args.dryrun: # pragma: no cover
         logging.info("Process orbits: " + ' '.join(args.orbits))
