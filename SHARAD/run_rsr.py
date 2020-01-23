@@ -27,6 +27,7 @@ import argparse
 import multiprocessing
 import os
 import sys
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -148,7 +149,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True,
     return out
 
 
-def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
+def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
     senv=None, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique
@@ -213,7 +214,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
     # Surface coefficients (RSR)
     logging.debug('PROCESSING: Surface Statistical Reconnaissance for '
             + orbit_full)
-    b = rsr.run.along(surf['surf_amp'].values , **kwargs)
+    b = rsr.run.along(surf['surf_amp'].values, **kwargs)
 
     # Reformat results
     xo = b['xo'].values.astype(int)# along-track frame number
@@ -243,6 +244,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True, verbose=True,
             os.makedirs(archive_path)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
         b.to_csv(fil, index=None, sep=',')
+        #print("CREATED: " + fil)
         logging.debug("CREATED: " + fil )
 
     return b
@@ -305,7 +307,7 @@ def todo(delete=False, senv=None, filename=None):
         bad_orbits = list(np.genfromtxt('bad_alt.txt', dtype='str'))
         out = [i for i in out if i not in bad_orbits]
 
-    print(str(len(out)) + ' orbits to processed')
+    #print(str(len(out)) + ' orbits to processed')
 
     return out
 
@@ -374,8 +376,9 @@ def main():
         logging.info("Process orbits: " + ' '.join(args.orbits))
         sys.exit(0)
 
-    for orbit in args.orbits:
-        print(orbit)
+    for i, orbit in enumerate(args.orbits):
+        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
+        #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
                 bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
