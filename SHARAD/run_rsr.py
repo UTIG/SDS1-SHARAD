@@ -273,6 +273,12 @@ def todo(delete=False, senv=None, filename=None):
     if senv is None:
         senv = SHARADEnv.SHARADEnv()
 
+    # Numpy errors
+    if verbose is False:
+        np.seterr(all='ignore')
+    else:
+        np.seterr(all:'warn')
+
     # Existing orbits
     alt_orbits = []
     rsr_orbits = []
