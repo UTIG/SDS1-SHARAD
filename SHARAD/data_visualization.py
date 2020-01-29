@@ -6,7 +6,7 @@ __history__ = {
     '1.0':
         {'date': 'February 21 2019',
          'author': 'Kirk Scanlan, UTIG',
-         'info': 'data visualization function'}}
+         'info': 'data visualization GUI'}}
 
 import sys
 import os
@@ -47,27 +47,23 @@ def main():
 
     parser = argparse.ArgumentParser(description='Data Visualization')
     parser.add_argument('--maxsamp', type=int, default=3600, help='maximum fast-time sample to include in radargram plots')
-    parser.add_argument('-snr', '--snr', default='Yes', help='plot final radargrams in SNR?')
-    parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD', help='Output base directory')
-    parser.add_argument('--product', default='foc', help='Type of data product to be visualized')
+    parser.add_argument('--plotsnr', action='store_true', help='plot final radargrams in SNR?')
+    parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD', help='targ data base directory')
+    parser.add_argument('--product', default='foc', choices=('foc','cmp'), help='Type of data product to be visualized')
     parser.add_argument('--orbit', default='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat',
                         help='Path to auxiliary file for orbit of interest')
     
     args = parser.parse_args()
 
-    if args.snr == 'Yes':
-        SNR = True
-    else:
-        SNR = False
     inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
     pathfile = os.path.relpath(args.orbit, inputroot)
-    datapath = os.path.join(args.output, args.product, pathfile)
+    datapath = os.path.join(args.targ, args.product, pathfile)
     datafile = os.path.basename(datapath).replace('_a.dat', '_s.h5')
     datapath = os.path.dirname(datapath)
     auxpath = args.orbit
     scipath = args.orbit.replace('a.dat', 's.dat')
-    scifmtpath = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-    auxfmtpath = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+    scifmtpath = os.path.join(inputroot, 'mrosh_0004/label/science_ancillary.fmt')
+    auxfmtpath = os.path.join(inputroot, 'mrosh_0004/label/auxiliary.fmt')
 
     if args.product == 'foc':
         
@@ -82,7 +78,7 @@ def main():
             global foc_type
             foc_type = variable.get()
             master.quit()
-        button = Button(master, text='Ok', command=foc_choice)
+        button = Button(master, text='Select', command=foc_choice)
         button.pack()
         mainloop()
        
@@ -133,7 +129,7 @@ def main():
                 ddv2_pst = e2.get() 
                 ddv2_apt = e3.get()
             master = Tk()
-            Label(master, text='Delay Doppler v2 interpoaltion distance [m]').grid(row=0) 
+            Label(master, text='Delay Doppler v2 interpolation distance [m]').grid(row=0) 
             Label(master, text='Delay Doppler v2 posting interval [range lines]').grid(row=1)
             Label(master, text='Delay Doppler v2 aperture length [km]').grid(row=2)
             e1 = Entry(master); e1.grid(row=0, column=1)
@@ -146,7 +142,7 @@ def main():
             datapath = os.path.join(datapath, str(ddv2_int) + 'm', str(ddv2_pst) + ' range lines', str(ddv2_apt) + 'km', datafile)
        
         # load the relevant radargram
-        if SNR:
+        if args.plotsnr:
             data = snr(np.array(pd.read_hdf(datapath, 'sar')))
         else:
             data = np.abs(np.array(pd.read_hdf(datapath, 'sar')))
@@ -209,7 +205,7 @@ def main():
             del tempA
 
         # convert to SNR if desired
-        if SNR:
+        if args.plotsnr:
             data = snr(adata)
         else:
             data = np.abs(data)
