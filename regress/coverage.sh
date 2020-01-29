@@ -23,6 +23,35 @@ COV=coverage3
 rm -rf ./covdata/
  
 $COV run $FLAGS ../xlib/clutter/parse_channels.py
+
+######################################
+# Run placeholders
+# TODO: run_specularity
+for NAME in ../SHARAD/pipeline.py ../SHARAD/data_visualization.py ../SHARAD/run_ranging.py \
+../xlib/clutter/unfoc_KMS2.py
+do
+    $COV run $FLAGS -a $NAME -h > /dev/null
+done
+# TODO: These have import statements that I can't seem to make work.
+# TODO: ../xlib/sar/sar.py
+# TODO: ../xlib/subradar/iem.py
+# TODO: ../xlib/subradar/invert.py
+# TODO: ../subradar/utils.py
+# TODO: ../xlib/rsr/fit.py
+# TODO: ../xlib/rsr/run.py
+
+for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py ../xlib/archive/cmp.py ../xlib/archive/sar.py \
+../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
+../xlib/misc/coord.py ../xlib/misc/prog.py ../xlib/misc/hdf.py ../xlib/rot/mars.py ../xlib/rot/trafos.py  \
+../xlib/subradar/roughness.py  \
+../xlib/rsr/pdf.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
+do
+    $COV run $FLAGS -a $NAME
+done
+# end placeholders
+#########################################
+
+
 $COV run $FLAGS -a ../xlib/misc/hdf_test.py -o ./covdata/
 $COV run $FLAGS -a  ../xlib/rdr/solar_longitude.py
 echo $S0: CMD $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py

@@ -10,16 +10,24 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'Version 2 function library for SAR processing'}}
 
+import sys
+import os
 import glob
-import numpy as np
 import math
+import logging
+import numpy as np
 import pvl
 import pandas as pd
 import matplotlib.pyplot as plt
-import logging
 import scipy
 
-from sar import smooth
+#sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# import when running from xlib parent directory
+# TODO: fix this import system in parents?
+try:
+    from sar import smooth
+except ImportError:
+    import smooth
 
 def sar_posting(dpst, La, idx, tlp, et):
     '''
@@ -74,31 +82,32 @@ def sar_posting(dpst, La, idx, tlp, et):
 
     return pst_trc, pst_et
 
-def vector_interp(vect):
-    '''
-    Linear interpolation of a vector to smooth out steps. Values are plotted in
-    middle of any discretized zones.
-
-    Inputs:
-    -------------
-      vect: one-dimensional vector to be interpolated
-
-     Outputs:
-    -------------
-     out: interpolated vector
-    '''
-
-    # interpolate a vector
-    t1 = np.unique(vect)
-    unix = np.zeros((len(t1), 1), dtype=float)
-    for ii in range(len(t1)):
-        t2 = abs(vect - t1[ii])
-        t3 = np.argmin(t2)
-        t4 = abs(len(vect) - np.argmin(np.flipud(t2)))
-        unix[ii] = np.round(np.mean([t3, t4]))
-    out = np.interp(np.arange(0, len(vect), 1), unix[:, 0], t1)
-
-    return out
+# vector_interp moved to smooth.py
+#def vector_interp(vect):
+#    '''
+#    Linear interpolation of a vector to smooth out steps. Values are plotted in
+#    middle of any discretized zones.
+#
+#    Inputs:
+#    -------------
+#      vect: one-dimensional vector to be interpolated
+#
+#     Outputs:
+#    -------------
+#     out: interpolated vector
+#    '''
+#
+#    # interpolate a vector
+#    t1 = np.unique(vect)
+#    unix = np.zeros((len(t1), 1), dtype=float)
+#    for ii in range(len(t1)):
+#        t2 = abs(vect - t1[ii])
+#        t3 = np.argmin(t2)
+#        t4 = abs(len(vect) - np.argmin(np.flipud(t2)))
+#        unix[ii] = np.round(np.mean([t3, t4]))
+#    out = np.interp(np.arange(0, len(vect), 1), unix[:, 0], t1)
+#
+#    return out
 
 def twoD_filter(data, dt, rf0, rf1, af0, af1, dres, m, n):
     '''
@@ -709,7 +718,7 @@ def apertures(alongtrack, posting_interval, aperture_length, debug=False):
 
     Inputs:
     -------------
-              ephemeris: vector of along-track ephemeris times [s]
+             alongtrack: vector of along-track ephemeris times [s]
        posting_interval: slow-time sample interval at which to post sar columns
                          [samples]
         aperture_length: aperture length [km]
@@ -1393,3 +1402,6 @@ def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim,
     #    plt.figure(); plt.plot(np.abs(focused_data[ii, :])); plt.title('focused range line: Doppler bin index ' + str(centroid))
 
     return focused_data, interp_ephemeris, aperture
+
+
+
