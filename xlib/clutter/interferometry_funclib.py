@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 __authors__ = ['Kirk Scanlan, kirk.scanlan@utexas.edu']
 __version__ = '0.1'
 __history__ = {
@@ -204,7 +205,8 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
 
     # load the MARFA dataset
     mag, phs = load_marfa(line, channel, pth)
-    mag = mag[trim[0]:trim[1], :]
+    # GNG Downstream functions aren't expecting this to be trimmed yet
+    #mag = mag[trim[0]:trim[1], :]
     if trim is not None and trim[3] != 0:
         mag = mag[:, trim[2]:trim[3]]
     lim = np.size(mag, axis=1)
@@ -260,7 +262,7 @@ def convert_to_magphs(cmp, mag_dB=True, pwr_flag=True):
 
     Outputs:
     ------------
-        arrays of magntiude and phase [rad]
+        arrays of magnitude and phase [rad]
     '''
 
     # calculate magnitudes
@@ -664,18 +666,22 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
         output is the interpolated data vector
     '''
 
-    # GN -- this is a lot slower than frequency interpolation. Why
+    # GN -- this is a lot slower than frequency interpolation because of generating the
+    # gigantic sinc matrix
 
     # define sample vectors
     new_sample_interval = orig_sample_interval / subsample_factor
-    orig_t = np.arange(0, (len(data) - 1) * orig_sample_interval, orig_sample_interval)
-    new_t = np.arange(0, len(data) * orig_sample_interval, new_sample_interval)
+    orig_t = np.linspace(0, (len(data) - 1) * orig_sample_interval, len(data))
+    nsamples_new = len(data) * subsample_factor
+    new_t = np.linspace(0, (nsamples_new - 1) * new_sample_interval, nsamples_new)
 
     # perform the interpolation
+    # Generate shifted x values to input to sinc
     sincM = np.tile(new_t, (len(orig_t), 1)) - np.tile(orig_t[:, np.newaxis], (1, len(new_t)))
     output = np.dot(data, np.sinc(sincM / orig_sample_interval))
 
     return output
+
 
 def frequency_interpolate(data, subsample_factor):
     '''
@@ -691,7 +697,6 @@ def frequency_interpolate(data, subsample_factor):
     ------------
        interpolated data vector
     '''
-
     fft = np.fft.fft(data, norm='ortho')
     fft_shift = np.fft.fftshift(fft)
     x = int((len(data) * subsample_factor - len(data)) / 2)
@@ -702,31 +707,43 @@ def frequency_interpolate(data, subsample_factor):
     return np.sqrt(subsample_factor)*np.fft.ifft(fft_int_shift, norm='ortho')
 
 def test_interpolate():
-    # Series of step functions
-    sig = np.repeat([0., 1., 1., 0., 1., 0., 0., 1.], 128)
-    x = np.linspace(0, 100.0, len(sig))
+    """ Test equivalence of interpolation algorithms, and run with
+    a variety of input sizes """
+    bplot = True
     
-    # noisy signal
-    sig_noise = sig + 1e-3 * np.random.randn(len(sig))
-    osi = 1 / 50e6 # original signal interval
-    # TODO: interpolation doesn't work with ifactor=2 or ifactor=5
-    x = x[0:1000]
-    sig_noise = sig_noise[0:1000] # truncate, otherwise it doesn't seem to work with a signal of length 1023
-    for ifactor in (10,):
-        x2 = np.linspace(0, max(x), len(sig_noise)*ifactor) # get interpolated indices
-        sig_interp0 = np.interp(x2, x, sig_noise) # linear interpolation
-        sig_interp1 = sinc_interpolate(sig_noise, osi, ifactor)
-        sig_interp2 = frequency_interpolate(sig_noise, ifactor)
-
-        rms1 = np.sqrt(np.square(abs(sig_interp0 - sig_interp1)).mean())
-        rms2 = np.sqrt(np.square(abs(sig_interp0 - sig_interp2)).mean())
-        logging.info("interpolate: ifactor={:0.1f} RMS1={:0.3f} RMS2={:0.3f}".format(ifactor, rms1, rms2))
-        plt.plot(x2, sig_interp0)
-        plt.plot(x2, sig_interp1)
-        plt.plot(x2, sig_interp2)
-        plt.grid()
-        plt.legend(['linear', 'sinc', 'frequency'])
-        plt.show()
+    for repeatsize in (128, 255, 77):
+        logging.debug("repeatsize = {:d}".format(repeatsize))
+        # Series of step functions
+        sig = np.repeat([0.5, 0., 1., 1., 0., 1., 0., 0., 1., 0.5], repeatsize)
+        sig -= sig.mean()
+        x = np.linspace(0, 100.0, len(sig))
+        # noisy signal
+        sig_noise = sig + 1e-3 * np.random.randn(len(sig))
+        osi = 1 / 50e6 # original signal interval
+        for ifactor in (2,5, 10, 13, 21):
+            x2 = np.linspace(0, max(x), len(sig_noise)*ifactor) # get interpolated indices
+            sig_interp0 = np.interp(x2, x, sig_noise) # linear interpolation
+            sig_interp1 = np.real(sinc_interpolate(sig_noise, osi, ifactor))
+            sig_interp2 = np.real(frequency_interpolate(sig_noise, ifactor))
+    
+            rms1 = np.sqrt(np.square(abs(sig_interp0 - sig_interp1)).mean())
+            rms2 = np.sqrt(np.square(abs(sig_interp0 - sig_interp2)).mean())
+            rms3 = np.sqrt(np.square(abs(sig_interp1 - sig_interp2)).mean())
+            logging.info("interpolate: ifactor={:0.1f} RMS(lin-sinc)={:0.4g}"
+                         " RMS(lin-freq)={:0.4g} RMS(sinc-freq)={:0.4g}".format(ifactor, rms1, rms2, rms3))
+            try:
+                assert rms3 < 5e-4
+            except AssertionError:
+                bplot = True
+                
+            if bplot: # pragma: no-cover
+                plt.subplot(211)
+                plt.plot(x2, sig_interp0, x2, sig_interp1, x2, sig_interp2)
+                plt.legend(['linear', 'sinc', 'frequency'])
+                plt.subplot(212)
+                plt.plot(abs(sig_interp1-sig_interp2))
+                plt.title("Sinc vs Frequency Interpolation error")
+                plt.show()
 
 
 
@@ -1032,11 +1049,12 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
 
     assert bxdsA.shape == bxdsB.shape
 
-    # trim of the range lines if desired
-    logging.debug("bxds original shape="  + str(bxdsA.shape))
-    if sigwin[0] >= 0 and sigwin[1] > 0:
-        bxdsA = bxdsA[sigwin[0]:sigwin[1], :]
-        bxdsB = bxdsB[sigwin[0]:sigwin[1], :]
+    # trim of the range lines if desired. 
+    # TODO: some of the downstream functions aren't aware of this.
+    #logging.debug("bxds original shape="  + str(bxdsA.shape))
+    #if sigwin[0] >= 0 and sigwin[1] > 0:
+    #    bxdsA = bxdsA[sigwin[0]:sigwin[1], :]
+    #    bxdsB = bxdsB[sigwin[0]:sigwin[1], :]
 
     # Output shape needs to be the same as the input
     output_samples = bxdsA.shape[0]
