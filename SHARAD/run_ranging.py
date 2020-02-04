@@ -13,11 +13,11 @@ import multiprocessing
 import time
 import logging
 import argparse
+import traceback
 
 import numpy as np
 import spiceypy as spice
 import pandas as pd
-import traceback
 import matplotlib.pyplot as plt
 
 sys.path.append('../xlib')
@@ -28,20 +28,26 @@ import rng.icd as icd
 
 
 def main():
-    # TODO: improve description
+    global args
     parser = argparse.ArgumentParser(description='Run SHARAD ranging processing')
-    parser.add_argument('-o','--output', default='/disk/kea/SDS/targ/xtra/SHARAD/rng',
-                        help="Output base directory")
+    parser.add_argument('-o','--output', help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','csv','none'),
                         help="Output file format")
     parser.add_argument('--tracklist', default="xover_idx.dat",
         help="List of tracks with xover points to process")
+    parser.add_argument('--clutterpath', default=None, help="Cluttergram path")
+    parser.add_argument('--noprogress', action="store_true", help="don't show progress")
     parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
+    parser.add_argument('--SDS', default=os.getenv('SDS'), help="Override SDS environment variable")
     
     args = parser.parse_args()
+
+    if args.output is None:
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/rng')
+
 
     loglevel=logging.DEBUG if args.verbose else logging.INFO
  
@@ -53,36 +59,44 @@ def main():
 
     # Build list of processes
     logging.info('build task list')
-    process_list=[]
+    process_list = []
     path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
     path_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
     path_out = args.output
 
     ext = {'hdf5':'.h5','csv':'.csv', 'none':''}
 
-    with open(args.tracklist, 'r') as flist:        
-        for i,track in enumerate(flist):
-            track = track.split()
-            path = track[0]
-            idx_start = track[1]
-            idx_end = track[2]
+    tasknum = 1
+    b_noprogress = True if args.noprogress else False
+    with open(args.tracklist, 'r') as flist:
+        for line in flist:
+            if line.strip().startswith('#'):
+                continue
+            path, idx_start, idx_end = line.split()
             path = path.rstrip()
             relpath = os.path.dirname(os.path.relpath(path, path_edr))
             path_file = os.path.relpath(path, path_edr)
             data_file = os.path.basename(path)
             outfile = os.path.join(path_out, relpath, 'icd', data_file.replace('.dat', ext[args.ofmt]))
+            clutterfile = os.path.join(path_out, relpath, 'icd', data_file.replace('.dat', '.cluttergram.npy'))
 
             if not os.path.exists(outfile):
                 process_list.append({
                     'inpath' : path, 
-                    'outputfile' : outfile, 
+                    #'outputfile' : outfile, 
                     'idx_start' : idx_start,
                     'idx_end' : idx_end,
-                    'save_format' : args.ofmt})
-                logging.debug("[{:d}] {:s}".format(i+1,str(process_list[-1])))
+                    'save_format' : args.ofmt,
+                    'tasknum': tasknum,
+                    'clutterfile': clutterfile,
+                    'b_noprogress': b_noprogress,
+                    })
+                logging.debug("[{:d}] {:s}".format(tasknum, str(process_list[-1])))
+                tasknum += 1
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
+        logging.info("Limiting to first {:d} tracks".format(args.maxtracks))
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
@@ -93,16 +107,16 @@ def main():
     rlist = []
     if nb_cores <= 1:
         for i,t in enumerate(process_list):
-            result = rng_processor(**t)
+            result = process_rng(**t)
             rlist.append(result)
-            print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
+            logging.info("Finished task {:d} of {:d}".format(i+1, len(process_list)))
     else:
         pool = multiprocessing.Pool(nb_cores)
-        results = [pool.apply_async(rng_processor, [], t) for t in process_list]
+        results = [pool.apply_async(process_rng, [], t) for t in process_list]
         for i,result in enumerate(results):
             rlist.append(result.get())
-            print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
-    print('done')
+            logging.info("Finished task {:d} of {:d}".format(i+1, len(process_list)))
+    logging.info('done')
 
     rlist = np.array(rlist)
     out = np.zeros((len(rlist),2))
@@ -114,9 +128,9 @@ def main():
                     out[j] = rlist[i,1:3]
     else: out = rlist[:,1:3]
 
-    print(out)    
+    print(out)
     delta_ranges = out[0::2,1] - out[1::2,1] 
-    print('rms',np.sqrt(np.var(delta_ranges)))
+    print('rms', np.sqrt(np.var(delta_ranges)))
     import matplotlib
     font = {'family' : 'serif',
             'size'   : 24}
@@ -124,7 +138,7 @@ def main():
     
     fig, ax = plt.subplots(figsize=(10,10)) 
     rlist = np.array(rlist)
-    plt.scatter(np.arange(0,len(delta_ranges)),delta_ranges,s=30)
+    plt.scatter(np.arange(0,len(delta_ranges)), delta_ranges, s=30)
     ax.set_ylim(-150, 150)
     ax.set_xlabel('Xover Number')
     ax.set_ylabel('Ranging Residual [m]')
@@ -133,9 +147,10 @@ def main():
     plt.tight_layout()
     plt.show()
     
-    np.save('ranging_result.npy',rlist)
+    np.save('ranging_result.npy', rlist)
 
-def rng_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=''):
+def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0, clutterfile=None,
+                b_noprogress=False, bplot=False):
     try:
         # create cmp path
         path_root_rng = '/disk/kea/SDS/targ/xtra/SHARAD/rng/'
@@ -168,45 +183,42 @@ def rng_processor(inpath, outputfile, idx_start=None, idx_end=None, save_format=
         
         result = np.zeros((20,3))
         for co_sim in range(12,25):
+
+            if os.path.exists(clutterfile):
+                # Read from this file
+                clutter_save_path = None
+                clutter_load_path = clutterfile
+            else:
+                # Write to this file
+                clutter_load_path = None
+                clutter_save_path = clutterfile
+                clutter_save_dir = os.path.dirname(clutterfile)
+                if not os.path.exists(clutter_save_dir):
+                    os.makedirs(clutter_save_dir)
+
             result[co_sim-5] = icd.icd_ranging(cmp_path, dtm_path, science_path, label_path,
-                                 inpath,aux_label,
-                                 int(idx_start), int(idx_end), debug = True,
-                                 ipl = True, co_sim = co_sim, co_data = co_data,
-                                 window = 50)
+                                 inpath, aux_label,
+                                 int(idx_start), int(idx_end), debug=False,
+                                 ipl=True, co_sim=co_sim, co_data=co_data,
+                                 window=50, 
+                                 cluttergram_path=clutter_load_path, save_clutter_path=clutter_save_path,
+                                 do_progress=not b_noprogress)
 
-        if save_format == '':
-            return 0
 
-
-        plt.scatter(np.arange(1,25,1),result[:,0],s=30)
-        plt.show()
-        plt.scatter(np.arange(1,25,1),result[:,2],s=30)
-        plt.show()
+        if bplot:
+            plt.scatter(np.arange(1,25,1), result[:,0], s=30)
+            plt.show()
+            plt.scatter(np.arange(1,25,1), result[:,2], s=30)
+            plt.show()
 
         min_result = result[np.argmin(result[:,2])]
-        print(np.argmin(result[:,2]))
-        """
-        logging.info("Writing to " + outputfile)
-        outputdir = os.path.dirname(outputfile)
-        if not os.path.exists( outputdir ):
-            os.makedirs( outputdir )
-
-        if save_format == 'hdf5':
-            orbit_data = {obn: result}
-            with hdf.hdf(outputfile, mode='w') as h5:
-                h5.save_dict('beta5', orbit_data)
-        elif save_format == 'csv':
-            df.to_csv(outputfile)
-        else:
-            logging.warning("Unrecognized output format '{:s}'".format(save_format))
-            return 1
-        """
+        print(np.argmin(result[:, 2]))
         return [obn, min_result[0], min_result[1]]
 
-    except Exception as e:
-        taskname="error"
+    except Exception:
+        taskname = "task{:03d}".format(tasknum)
         for line in traceback.format_exc().split("\n"):
-            print('{:s}: {:s}'.format(taskname, line) )
+            logging.error('{:s}: {:s}'.format(taskname, line) )
         return 1
 
 if __name__ == "__main__":

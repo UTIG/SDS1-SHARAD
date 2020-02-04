@@ -254,7 +254,6 @@ class P_rot():
         par = (1,2,3) -> (φ_0, φ_1, φ_2)
         of the parametrization φ(t) = φ_0  + φ_1  t + φ_2  t^2.
         """
-        from scipy.constants import degree as deg
         scl = 1.0
         if (indeg):
             scl = deg
@@ -351,7 +350,6 @@ class P_rot():
         case and will be ignored). Using the keyword "indeg" the unit of the
         angles can be specified.
         """
-        from scipy.constants import degree as deg
         # coord = np.reshape(coord, (-1, 3))
         ntime = coord.shape[0]
         if (euler_angles is None):

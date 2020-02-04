@@ -17,7 +17,7 @@ To run this, I recommend setting up two repositories.
 1: a master repository from which to run this script, and
 2. a regression repository that gets updated to each revision
 
-./run_pylint_all $SDS/code/work/ngg/regress_master
+./run_pylint_all $SDS/code/work/ngg/sds_master_regress
 
 
 """

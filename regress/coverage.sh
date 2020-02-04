@@ -40,10 +40,10 @@ done
 # TODO: ../xlib/rsr/fit.py
 # TODO: ../xlib/rsr/run.py
 
-for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py ../xlib/archive/cmp.py ../xlib/archive/sar.py \
+for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py \
 ../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
 ../xlib/misc/coord.py ../xlib/misc/prog.py ../xlib/misc/hdf.py ../xlib/rot/mars.py ../xlib/rot/trafos.py  \
-../xlib/subradar/roughness.py  \
+../xlib/subradar/roughness.py ../xlib/rng/icsim.py \
 ../xlib/rsr/pdf.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
 do
     $COV run $FLAGS -a $NAME
@@ -105,6 +105,10 @@ $COV run $FLAGS -a ../SHARAD/run_rsr.py -n --delete all
 # Run an orbit
 nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --ofmt none --output ./covdata/rsr_data/ -s 2000 1920301
 
+
+echo "$S0: run_ranging"
+$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 1 --jobs 1 -n
+$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 1 --jobs 1
 
 
 $COV report -m

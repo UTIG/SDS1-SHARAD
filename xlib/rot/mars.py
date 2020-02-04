@@ -1,3 +1,7 @@
+
+import rot.trafos as rot_trafos
+
+
 def mars_rot_model(model):
     '''
     This routine contains three different rotation models for Mars.
@@ -51,7 +55,6 @@ def mars_rot_model(model):
 # change to bodyfixed in the new rotation model
 # new_bodyfixed = p499_K****.r_bf(iner, t=ets)
 #
-    import rot.trafos as rot_trafos
     if (model == 'IAU2000'):
         p499 = rot_trafos.P_rot([317.68143, -0.1061, 0],
                                 [52.88650, -0.0609, 0.],

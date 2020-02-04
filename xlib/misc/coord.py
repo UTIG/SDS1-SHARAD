@@ -90,7 +90,7 @@ def ellipsoid(sph, axes=(0, 0, 0), radius=0, indeg=True, unit=1, **kwargs):
 def sph2cart(coord, indeg=True,
              cols=('spot_lat', 'spot_lon', 'spot_radius'), **kwargs):
     """
-    Coverts spherical to catresian coordinates.
+    Coverts spherical to cartesian coordinates.
 
     Parameters
     ----------
@@ -256,4 +256,58 @@ def sph_dist(sph1, sph2, radius, indeg=True):
 
 def test():
     # Test that functions are inverses of each other
-    pass
+
+    # Run with a variety of dimensions
+    coords1 = []
+    coords2 = []
+    inc = 0.5
+    for lat1 in np.arange(-90.0, 90.0, inc):
+        for lon1 in np.arange(-180.0, 180.0, inc):
+            coords1.append((lat1, lon1, 0))
+            coords2.append((lat1, lon1))
+    print("calculating")
+
+    coords1.reverse()
+    coords3 = np.array(coords1)
+    coords1.reverse()
+    coords1 = np.array(coords1)
+    coords2 = np.array(coords2)
+
+    radius = 12345.0
+
+    edata = ellipsoid(coords2, radius=radius, unit=1.0)
+    edata = ellipsoid(coords2, radius=radius, unit=1000.0)
+
+
+    y = latlon_profiles(np.array([coords1,coords3]))
+
+    c1 = cart2sph(sph2cart(coords1))
+    #c2 = cart2sph(sph2cart(coords2))
+
+    #c1 = lsh2sph(sph2lsh(coords1))
+    #c2 = cart2sph(sph2lsh(coords2))
+
+    coords1_orig = coords1.copy()
+    assert np.array_equal(coords1_orig, coords1)
+    d1 = sph_dist(coords1, coords3, radius=radius, indeg=True)
+    d1 = sph_dist(coords1, coords3, radius=radius, indeg=False)
+    d1 = sph_dist(coords1, coords3, radius=radius, indeg=True)
+    d1 = sph_dist(coords1, coords3, radius=radius, indeg=False)
+    d1 = sph_dist(coords1, coords3, radius=radius, indeg=True)
+    assert np.array_equal(coords1_orig, coords1)
+
+def main():
+    test()            
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    import os
+    main()
+
+
+
+
+
+
+
