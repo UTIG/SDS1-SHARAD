@@ -8,15 +8,19 @@ __history__ = {
 
 import sys
 import math
+import pytest
+from tkinter import *
+import logging
+import os
+
 import pyfftw
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from tkinter import *
 from scipy import ndimage
 from scipy import integrate
 from scipy import signal
-from scipy.signal import detrend
+from scipy.signal import detrend, correlate
 import scipy.special
 
 import interface_picker as ip
@@ -40,20 +44,30 @@ def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
     '''
 
     # set path to the magnitude and phase files
-    mag_pth = pth + line + 'M1D' + channel
-    phs_pth = pth + line + 'P1D' + channel
+    mag_pth = os.path.join(pth, line, 'M1D' + channel)
+    phs_pth = os.path.join(pth, line, 'P1D' + channel)
 
     # load and organize the magnitude file
+    logging.debug("Loading " + mag_pth)
     mag = np.fromfile(mag_pth, dtype='>i4')
     ncol = int(len(mag) / nsamp)
     mag = np.transpose(np.reshape(mag, (ncol, nsamp))) / 10000
 
     # load and organize the phase file
+    logging.debug("Loading " + phs_pth)
     phs = np.fromfile(phs_pth, dtype='>i4')
     ncol = int(len(phs) / nsamp)
     phs = np.transpose(np.reshape(phs, (ncol, nsamp))) / 2**16
 
     return mag, phs
+
+def test_load_marfa():
+    line = 'DEV2/JKB2t/Y81a'
+    path = '/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S4_FOC'
+    mag, phs = load_marfa(line, '1', pth=path)
+
+    assert mag.shape == phs.shape
+
 
 def load_S2_bxds(pth, channel, nsamp=3200):
     '''
@@ -72,12 +86,39 @@ def load_S2_bxds(pth, channel, nsamp=3200):
         output is an array of bxds integers
     '''
 
-    fn = pth + 'bxds' + channel + '.i'
+    fn = os.path.join(pth, 'bxds' + channel + '.i')
     arr = np.fromfile(fn, dtype='<i2')
     ncol = int(len(arr) / nsamp)
     bxds = np.transpose(np.reshape(arr, (ncol, nsamp)))
 
     return bxds
+
+def find_S2_bxds(basepath, maxcount=None):
+    # basepath of the  form 
+    # /disk/kea/WAIS/targ/xtra
+    # /disk/kea/WAIS/targ/xtra/GOG2/FOC/Best_Versions/S2_FIL/GDS/JKB2f/X2a/bxds2.i
+    globpat = os.path.join(basepath, '*/FOC/Best_Versions/S2_FIL/*/*/*/bxds?.i')
+    outfiles = glob.glob(globpat)
+    outfiles.sort()
+    return outfiles
+
+def test_load_S2_bxds():
+    # TODO: randomize for random file testing
+    basepath = '/disk/kea/WAIS/targ/xtra'
+    files = list(find_S2_bxds(basepath))
+    logging.debug("Found {:d} files".format(len(files)))
+    for i, filepath in enumerate(files):
+        logging.debug("[{:2d}] Loading {:s}".format(i+1, filepath))
+        dirpath = os.path.dirname(filepath)
+        channel = filepath[-3]
+        bxds = load_S2_bxds(dirpath, channel)
+        assert len(bxds)
+        if i >= 9: # only process the first 10 files
+            break
+        
+
+
+
 
 def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
     '''
@@ -88,19 +129,24 @@ def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
           line: string specifying the line of interest
        channel: string specifying MARFA channel
            pth: path to line of interest
-         nsamp: number of fast-time samples
-            IQ: in-phase or quadrature
+         nsamp: number of fast-time samples per trace
+            IQ: 'mag' to return magnitude, 'phs' to return phase data
 
     Outputs:
     ------------
         outputs are arrays of the magnitude and phase
     '''
 
+    assert pth.endswith('/') # must have trailing slash.
+    assert line.endswith('/') # expecting a trailing slash
+
     # set path to the magnitude and phase files
     if IQ == 'mag':
         pth = pth + line + 'MagLoResInco' + channel
     elif IQ == 'phs':
         pth = pth + line + 'PhsLoResInco' + channel
+    else:
+        raise ValueError('Invalid option specified for parameter IQ')
 
     # load and organize the data
     data = np.fromfile(pth, dtype='>i4')
@@ -109,8 +155,32 @@ def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
         data = np.transpose(np.reshape(data, (ncol, nsamp))) / 10000
     elif IQ == 'phs':
         data = np.transpose(np.reshape(data, (ncol, nsamp))) / 2**24
+    else:
+        raise ValueError("Invalid value for IQ: '{:s}'".format(IQ))
 
     return data
+
+
+def test_load_pik1():
+    # TODO: test some RADnh5
+    # /disk/kea/WAIS/targ/xped/ICP6/quality/xlob/pyk1.RADnh3/ICP6/JKB2k/F01T04a/MagLoResInco1
+    # /disk/kea/WAIS/targ/xped/ICP6/quality/xlob/pyk1.RADnh3/ICP6/JKB2l/F02T01a/MagLoResInco1
+
+    pth = os.path.join(os.getenv('WAIS', '/disk/kea/WAIS'), 'targ/xped/ICP6/quality/xlob/pyk1.RADnh3') + '/'
+    line = 'DVG/MKB2l/Y06a/'
+
+    logging.debug("pth=" + pth)
+    logging.debug("line=" + line)
+
+    list_channels = ['1', '2', '5', '6', '7', '8']
+
+    for channel in list_channels:
+        for IQ in ('mag','phs'):
+            load_pik1(line, channel, pth=pth, IQ='mag')
+
+        with pytest.raises(ValueError):
+            load_pik1(line, channel, pth=pth, IQ='invalidtype')
+
 
 def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/'):
     '''
@@ -135,7 +205,7 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
     # load the MARFA dataset
     mag, phs = load_marfa(line, channel, pth)
     mag = mag[trim[0]:trim[1], :]
-    if trim[3] != 0:
+    if trim is not None and trim[3] != 0:
         mag = mag[:, trim[2]:trim[3]]
     lim = np.size(mag, axis=1)
 
@@ -577,6 +647,8 @@ def empirical_sample_mean(N, Nf, iphi, gamma, phi_m=0):
 
     return sigma_m
 
+
+
 def sinc_interpolate(data, orig_sample_interval, subsample_factor):
     '''
     function for interpolating a vector using a sinc interpolation kernel
@@ -591,6 +663,8 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
     ------------
         output is the interpolated data vector
     '''
+
+    # GN -- this is a lot slower than frequency interpolation. Why
 
     # define sample vectors
     new_sample_interval = orig_sample_interval / subsample_factor
@@ -623,13 +697,44 @@ def frequency_interpolate(data, subsample_factor):
     x = int((len(data) * subsample_factor - len(data)) / 2)
     fft_int = np.pad(fft_shift, (x, x), 'constant', constant_values=(0, 0))
     fft_int_shift = np.fft.fftshift(fft_int)
+    # Without the np.sqrt(subsample_factor), this is an energy-preserving function.
+    # But we want to preserve value, not total signal energy
+    return np.sqrt(subsample_factor)*np.fft.ifft(fft_int_shift, norm='ortho')
 
-    return np.fft.ifft(fft_int_shift, norm='ortho')
+def test_interpolate():
+    # Series of step functions
+    sig = np.repeat([0., 1., 1., 0., 1., 0., 0., 1.], 128)
+    x = np.linspace(0, 100.0, len(sig))
+    
+    # noisy signal
+    sig_noise = sig + 1e-3 * np.random.randn(len(sig))
+    osi = 1 / 50e6 # original signal interval
+    # TODO: interpolation doesn't work with ifactor=2 or ifactor=5
+    x = x[0:1000]
+    sig_noise = sig_noise[0:1000] # truncate, otherwise it doesn't seem to work with a signal of length 1023
+    for ifactor in (10,):
+        x2 = np.linspace(0, max(x), len(sig_noise)*ifactor) # get interpolated indices
+        sig_interp0 = np.interp(x2, x, sig_noise) # linear interpolation
+        sig_interp1 = sinc_interpolate(sig_noise, osi, ifactor)
+        sig_interp2 = frequency_interpolate(sig_noise, ifactor)
+
+        rms1 = np.sqrt(np.square(abs(sig_interp0 - sig_interp1)).mean())
+        rms2 = np.sqrt(np.square(abs(sig_interp0 - sig_interp2)).mean())
+        logging.info("interpolate: ifactor={:0.1f} RMS1={:0.3f} RMS2={:0.3f}".format(ifactor, rms1, rms2))
+        plt.plot(x2, sig_interp0)
+        plt.plot(x2, sig_interp1)
+        plt.plot(x2, sig_interp2)
+        plt.grid()
+        plt.legend(['linear', 'sinc', 'frequency'])
+        plt.show()
+
+
 
 def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30):
     '''
     function for sub-sampling and coregistering complex-valued range lines
-    from two radargrams as requried to perform interferometry. Follows the
+        tempB = np.mean(np.square(np.abs(subsampA))) # GNG: move this out?
+    from two radargrams as required to perform interferometry. Follows the
     steps outlines in Castelletti et al. (2018)
 
     Inputs:
@@ -650,12 +755,16 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
     coregA = np.zeros((len(cmpA), np.size(cmpA, axis=1)), dtype=complex)
     coregB = np.zeros((len(cmpB), np.size(cmpB, axis=1)), dtype=complex)
 
-    for ii in range(np.size(cmpA, axis=1)):
+    shift_array = np.zeros(cmpA.shape[1])
+
+    for ii in range(cmpA.shape[1]): #range(np.size(cmpA, axis=1)):
         # subsample
         subsampA = sinc_interpolate(cmpA[:, ii], orig_sample_interval, subsample_factor)
         subsampB = sinc_interpolate(cmpB[:, ii], orig_sample_interval, subsample_factor)
         #subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
         #subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+        #logging.debug("subsampA.shape = " + str(subsampA.shape))
+
 
         #if ii == 0:
         #    plt.figure()
@@ -669,19 +778,29 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
         # co-register and shift
         shifts = np.arange(-1 * shift, shift, 1)
         rho = np.zeros((len(shifts), ), dtype=float)
+
+        # TODO: calculate using a fourier cross-correlation (scipy.signal.correlate)
+        
+
         for jj in range(len(shifts)):
             tempA = np.abs(np.mean(np.multiply(subsampA, np.conj(np.roll(subsampB, shifts[jj])))))
-            tempB = np.mean(np.square(np.abs(subsampA)))
+            tempB = np.mean(np.square(np.abs(subsampA))) # GNG: move this out?
             tempC = np.mean(np.square(np.abs(np.roll(subsampB, shifts[jj]))))
-            tempD = np.sqrt(np.multiply(tempB, tempC))
+            tempD = np.sqrt(np.multiply(tempB, tempC)) # GNG: sqrt is un-necessary for this relative compare
             rho[jj] = np.divide(tempA, tempD)
         to_shift = shifts[np.argwhere(rho == np.max(rho))][0][0]
         subsampB = np.roll(subsampB, to_shift)
+        shift_array[ii] = to_shift
         # remove subsampling
+        # GNG: coregA should be exactly equal to coregB.
         coregA[:, ii] = subsampA[np.arange(0, len(subsampA), subsample_factor)]
         coregB[:, ii] = subsampB[np.arange(0, len(subsampB), subsample_factor)]
 
-    return coregA, coregB
+    return coregA, coregB, shift_array
+
+
+def test_coregistration():
+    pass
 
 def read_ztim(filename, field_names=None):
     '''
@@ -805,6 +924,7 @@ def roll_correction(l, B, trim, norm_path, s1_path, roll_shift=0):
 def cinterp(sweep_fft, index):
     '''
     Function called during the denoise and dechirp of HiCARS/MARFA airborne data
+    interpolation in the complex domain to remove some coherent noise
 
     Inputs:
     -------------
@@ -843,8 +963,13 @@ def get_ref_chirp(path, bandpass=True, nsamp=3200):
        frequency-domain representation of the HiCARS reference chirp
     '''
 
-    I = np.fromfile(path + 'I.bin', '>i4')
-    Q = np.fromfile(path + 'Q.bin', '>i4')
+    I = np.fromfile(os.path.join(path, 'I.bin'), '>i4')
+    Q = np.fromfile(os.path.join(path, 'Q.bin'), '>i4')
+
+    if len(I) < nsamp:
+        I = I[0:nsamp]
+        Q = Q[0:nsamp]
+
     if not bandpass:
         rchirp = np.flipud(I + np.multiply(1j, Q))
     else:
@@ -905,10 +1030,21 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
         bxdsA = raw_bxds_load(raw_path, geo_path, '6', sigwin)
         bxdsB = raw_bxds_load(raw_path, geo_path, '8', sigwin)
 
+    assert bxdsA.shape == bxdsB.shape
+
     # trim of the range lines if desired
+    logging.debug("bxds original shape="  + str(bxdsA.shape))
+    if sigwin[0] >= 0 and sigwin[1] > 0:
+        bxdsA = bxdsA[sigwin[0]:sigwin[1], :]
+        bxdsB = bxdsB[sigwin[0]:sigwin[1], :]
+
+    # Output shape needs to be the same as the input
+    output_samples = bxdsA.shape[0]
+
     if sigwin[3] != 0:
         bxdsA = bxdsA[:, sigwin[2]:sigwin[3]]
         bxdsB = bxdsB[:, sigwin[2]:sigwin[3]]
+    logging.debug("bxds trimmed  shape="  + str(bxdsA.shape))
 
     # prepare the reference chirp
     hamm = hamming(output_samples)
@@ -928,8 +1064,10 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     #plt.show()
 
     # prepare the outputs
-    dechirpA = np.zeros((len(bxdsA), np.size(bxdsA, axis=1)), dtype=complex)
-    dechirpB = np.zeros((len(bxdsB), np.size(bxdsB, axis=1)), dtype=complex)
+    #dechirpA = np.zeros((len(bxdsA), np.size(bxdsA, axis=1)), dtype=complex)
+    #dechirpB = np.zeros((len(bxdsB), np.size(bxdsB, axis=1)), dtype=complex)
+    dechirpA = np.empty_like(bxdsA, dtype=complex)
+    dechirpB = np.empty_like(bxdsB, dtype=complex)
 
     # dechirp
     for ii in range(np.size(bxdsA, axis=1)):
@@ -939,6 +1077,46 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
 
     return dechirpA, dechirpB
 
+def test_denoise_and_dechirp():
+    gain = 'low'
+    trim_default = [0, 1000, 0, 0]
+
+    # Test with a RADnh3 line
+    snms = {'SRH1': 'RADnh5'}
+
+    inputs = [
+        {'prj': 'SRH1', 'line': 'DEV2/JKB2t/Y81a', 'trim': trim_default },
+        {'prj': 'GOG3', 'line': 'NAQLK/JKB2j/ZY1b', 'trim': [0, 1000, 0, 12000] },
+        {'prj': 'GOG3', 'line': 'GOG3/JKB2j/BWN01a/', 'trim': [0, 1000, 15000, 27294] },
+        {'prj': 'GOG3', 'line': 'GOG3/JKB2j/BWN01b/', 'trim': [0, 1000, 0, 15000] },
+    ]
+
+    for rec in inputs:
+        logging.debug("Processing line " + rec['line'])
+        snm = snms.get(rec['prj'], 'RADnh3') # get stream name
+        path = os.path.join('/disk/kea/WAIS/targ/xtra', rec['prj'], 'FOC/Best_Versions/')
+        rawpath = os.path.join('/disk/kea/WAIS/orig/xlob', rec['line'], snm)
+        geopath = os.path.join(path, 'S2_FIL', rec['line'])
+        chirppath = os.path.join(path, 'S4_FOC', rec['line'])
+        chirp_bp = snm == 'RADnh5' # not strictly true, but pretty close
+        #(gain, sigwin, raw_path, geo_path, chirp_path,
+        #                    output_samples=3200, do_cinterp=True, bp=True):
+        da, db = denoise_and_dechirp(gain, rec['trim'], rawpath, geopath, chirppath, do_cinterp=False, bp=chirp_bp)
+
+
+def test_load_power_image():
+    logging.info("test_load_power_image()")
+    path = '/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S4_FOC/'
+
+    # default value for trim
+    trim = [0, 1000, 0, 0]
+    #chirpwin = [0, 200]
+    fresnel_stack = 15
+
+    for line in ('DEV2/JKB2t/Y81a/', 'DEV2/JKB2t/Y81a'): # allow either
+        for method in ('averaged','summed'):
+            img = load_power_image(line, '1', trim, fresnel_stack, method, pth=path)
+
 def dechirp(trace, refchirp, do_cinterp, output_samples=3200):
     '''
     Range line dechirp processor
@@ -947,7 +1125,8 @@ def dechirp(trace, refchirp, do_cinterp, output_samples=3200):
     -----------
             trace: radar range line
          refchirp: reference chirp
-       do_cinterp: (does something for HiCARS/MARFA data)
+       do_cinterp: do frequency domain interpolation (coherent noise
+                   removal) for HiCARS/MARFA data
 
     Outputs:
     -----------
@@ -980,7 +1159,7 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
     '''
     Assessing the phase stability of the loop-back chirp. Will analyze
     the stability in the loopback chirps for alongtrack variations. I
-    think the varibility between antennas shoudl be handled correctly
+    think the varibility between antennas should be handled correctly
     by the co-regesitration step later on.
 
     Inputs:
@@ -1016,14 +1195,27 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
                                       np.angle(data[:, ii]), fs,
                                       nperseg=len(reference))
     elif method == 'xcorr':
+
         C = np.zeros((np.size(data, axis=1))) + -99999
-        for ii in range(np.size(data, axis=1)):
+        # See https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.correlate.html
+        # for definitions of k, N
+        N = max(data.shape[0], reference.shape[0])
+        for ii in range(np.size(data, axis=1)): # for ii in range(data.shape[1]):
+            # Use standard scipy correlation, which can be faster
+            # R = correlate(data, reference)
+            # k = int(np.argwhere(R == np.max(R)))
+            # C[ii] = k - N + 1
+
             R = np.zeros((2 * rollval))
             rolls = np.arange(-rollval, rollval)
             for jj in range(len(rolls)):
+                # is np.corrcoef supposed to be the same as complex_correlation_coefficient?
                 CC = np.corrcoef(reference, np.roll(data[:, ii], rolls[jj]))
                 R[jj] = np.abs(CC[0, 1])
             C[ii] = rolls[int(np.argwhere(R == np.max(R)))]
+
+    else:
+        raise ValueError('Unrecognized method {:s}'.format(method))
 
     return C
 
@@ -1074,7 +1266,7 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
         InPath: Path to the raw radar files
        GeoPath: Path to the raw geometry files required to perform interpolation
        channel: desired MARFA channel to load
-          trim: range lines of interest
+          trim: range lines of interest. None to use entire range
             DX: alongtrack range line spacing after interpolation
             MS: number of fast-time samples in the output
             NR: block size to load data
@@ -1085,7 +1277,7 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
        output is an array of raw MARFA data for the line and channel in question
     '''
 
-    RadName = RadPath + 'bxds'
+    RadName = os.path.join(RadPath, 'bxds')
     out = 0
     HiCARS = 2
     undersamp = True
@@ -1093,9 +1285,9 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
     channel = int(channel)
 
     # load metadata
-    Nc = np.fromfile(GeoPath + "Nc", dtype=int, sep=" ")
-    Xo = np.fromfile(GeoPath + "Xo", sep=" ")
-    NRt = np.fromfile(GeoPath + "NRt", dtype=int, sep=" ")
+    Nc = np.fromfile(os.path.join(GeoPath, "Nc"), dtype=int, sep=" ")
+    Xo = np.fromfile(os.path.join(GeoPath, "Xo"), sep=" ")
+    NRt = np.fromfile(os.path.join(GeoPath, "NRt"), dtype=int, sep=" ")
 
     # define number of tears
     NumTears = len(NRt)
@@ -1269,7 +1461,13 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
                 signal[:, NRr + 1 - 1:NRr + NumRead] = S
 
             if (NB > 1) and (NB == NumNBlocks):
-                signal.resize((MS, NRb))
+                signal = np.resize(signal, (MS, NRb))
+                # This gives a warning when running profile or coverage
+                #ValueError: cannot resize an array that references or is referenced
+                #by another array in this way.
+                #Use the np.resize function or refcheck=False
+
+                #signal.resize((MS, NRb))
                 for N in range(NRr + NumRead + 1, NRb + 1):
                     signal[:, N - 1] = S[:, NumRead - 1]
 
@@ -1353,7 +1551,7 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
     if ifd is not None:
         ifd.close()
 
-    if trim[3] != 0:
+    if trim is not None and trim[3] != 0:
         signalout = signalout[:, trim[2]:trim[3]]
 
     return signalout
@@ -1665,3 +1863,19 @@ def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
     #plt.show()
 
     return iphase
+
+
+def main():
+    logging.basicConfig(level=logging.DEBUG)
+
+    test_interpolate(); sys.exit(1)
+    test_load_pik1()
+    test_load_S2_bxds()
+    test_load_marfa()
+    test_load_power_image()
+    test_denoise_and_dechirp()
+
+
+if __name__ == "__main__":
+    import glob
+    main()

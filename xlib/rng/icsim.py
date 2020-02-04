@@ -9,11 +9,21 @@ __history__ = {
          'info': 'First release.'}}
 
 import subprocess
+import logging
+import sys
+import gdal
+import json
+import re
+
 from scipy.constants import c, pi
 import numpy as np
 import matplotlib.pyplot as plt
-import gdal
-import cmp.pds3lbl as pds3
+
+# Add the parent directory of icsim.py  so we can import the below
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+#import cmp.pds3lbl as pds3
 import misc.coord as crd
 import misc.prog as prg
 
@@ -21,7 +31,7 @@ import misc.prog as prg
 def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
                    r_sphere=3396000,B=10E+6, trx=135E-6, fs=26.67E+6,
                    r_circle=27E+3,sigmas=0.02, of=8,
-                   save_path=None, plot=False):
+                   save_path=None, plot=False, do_progress=True, maxechoes=None):
 
     """
     Incoherent Clutter Simulator for ranging based on code by R. Orosei [1],
@@ -57,6 +67,8 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     dem = band.ReadAsArray()
     CornerLats, CornerLons = GetCornerCoordinates(dtm_path)
 
+    # TODO: can we just load sections of the ROI?
+
     # Number of Rangelines
     Necho = ROIstop-ROIstart
     # Derive pulse repetition frequency
@@ -87,7 +99,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     dist = np.hstack((0, dist))
     dist = np.cumsum(dist)
 
-    # Relsease memory
+    # Release memory
     del sph, gt, gtx, gty, gtz
 
     # Compute quantities used in echo simulation computations
@@ -105,19 +117,21 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     pulse = np.fft.ifft(pulsesp)
     pulse = pulse**2
     pulsesp = np.fft.fft(pulse)
+    pulsesp_c = np.conj(pulsesp)
 
     # Extract topography and simulate scattering
     # Create array to store result. echosp will contain the fourrier transform
     # of each rangeline.
     echosp = np.zeros((Nsample, Necho), dtype=complex)
 
-    p = prg.Prog(Necho)
+    p = prg.Prog(Necho) if do_progress else None
+
     for pos in range(0, Necho):
         # Extract DTM topography
-        [lon_w, lon_e, lat_s, lat_n] = lonlatbox(lonsc[pos], latsc[pos],
-                                                 r_circle, r_sphere)
-        [hrsc, lon, lat] = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
-                                   CornerLats, CornerLons)
+        lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
+                                               r_circle, r_sphere)
+        hrsc, lon, lat = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
+                                 CornerLats, CornerLons)
 
         hrsc = hrsc+r_sphere
         DEMshp = hrsc.shape
@@ -134,7 +148,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         [la, lb, Ux, Uy, Uz, R] = surfaspect(X, Y, Z,
                                              state[0, pos],
                                              state[1, pos],
-                                              state[2, pos])
+                                             state[2, pos])
 
         # Compute reflected power and distance from radar for every surface
         # element.
@@ -158,16 +172,21 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         reflections = np.zeros(Nosample)
 
         # Remove 1/5 if you want all the echo, not just the top 20% brightest
-        thresh = np.rint(len(P)/5)
-        thresh = int(thresh)
-        for j in range(0, thresh):
-            reflections[idelay[j]] = reflections[idelay[j]] + P[j]
+        thresh = int(np.rint(len(P)/5))
+        for j in range(thresh):
+            #reflections[idelay[j]] = reflections[idelay[j]] + P[j]
+            reflections[idelay[j]] += P[j]
 
-        spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
+        #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
+        spectrum = pulsesp_c*np.fft.fft(reflections)
         echosp[:, pos] = spectrum[np.abs(fo) <= fs/2]
-
-        p.print_Prog(pos)
-
+        if p:
+            p.print_Prog(pos)
+        if maxechoes is not None and pos > maxechoes:
+            print(" ")
+            sys.exit(0)
+    if p:
+        print(" ")
 
     # Align to a common reference, convert power to voltage, apply a window
     # Align echoes to a common reference point in time
@@ -185,13 +204,15 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # TODO: Change this to a Hamming Window to be consistent with cmp!
     w = 0.5*(1+np.cos(2*pi*f/B))
     w[np.abs(f) > B/2] = 0
+    w_c = np.conj(w)
     for pos in range(0, Necho):
-        echo[:, pos] = np.fft.ifft(np.conj(w) * echosp[:, pos])
+        echo[:, pos] = np.fft.ifft(w_c * echosp[:, pos])
 
     rdrgr = 20*np.log10(np.abs(echo))
 
     # Save results in an output file
     if save_path is not None:
+        logging.debug("incoherent_sim: Saving radargram to " + save_path)
         np.save(save_path, rdrgr)
 
     # Plot radargram
@@ -256,7 +277,7 @@ def lonlatbox(lon_0, lat_0, r_circle, r_sphere):
     lon_w: Longitude of western edge
     lon_e: Longitude of eastern edge
     lat_n: Latitude of northern edge
-    lat_s:Latitude of southern edge
+    lat_s: Latitude of southern edge
     """
 
     # Pathologies
@@ -307,7 +328,7 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
 
     Output:
     --------------
-    hrsc: Terrein heights
+    hrsc: Terrain heights
     lon: Longitude of pixels
     lat: Latitude of pixels
 
@@ -336,8 +357,7 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     # select DEM portion
     start1 = np.array(I_g)[0, 0]; end1 = np.array(I_g)[0, -1]
     start2 = np.array(J_g)[0, 0]; end2 = np.array(J_g)[0, -1]
-    hrsc = DEM[start1:end1+1, start2:end2+1]
-    hrsc = hrsc.astype(float)
+    hrsc = DEM[start1:end1+1, start2:end2+1].astype(float)
 
     # gather and return
     return (hrsc, lon, lat)
@@ -390,10 +410,10 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Yb = Yu-Yd
     Zb = Zu-Zd
 
-    del Xu; del Yu; del Zu
-    del Xd; del Yd; del Zd
-    del Xl; del Yl; del Zl
-    del Xr; del Yr; del Zr
+    del Xu, Yu, Zu, \
+        Xd, Yd, Zd, \
+        Xl, Yl, Zl, \
+        Xr, Yr, Zr
 
     Xn = Ya*Zb-Za*Yb
     Yn = Za*Xb-Xa*Zb
@@ -405,28 +425,28 @@ def surfaspect(X, Y, Z, x0, y0, z0):
 
     # horizontal facet sizes
     la = np.sqrt(Xa**2+Ya**2+Za**2)
-    Xa = Xa/la
-    Ya = Ya/la
-    Za = Za/la
+    Xa /= la
+    Ya /= la
+    Za /= la
     la = la/2
 
     # vertical facet sizes
     lb = np.sqrt(Xb**2+Yb**2+Zb**2)
-    Xb = Xb/lb
-    Yb = Yb/lb
-    Zb = Zb/lb
-    lb = lb/2
+    Xb /= lb
+    Yb /= lb
+    Zb /= lb
+    lb /= 2
 
     n = np.sqrt(Xn**2+Yn**2+Zn**2)
-    Xn = Xn/n
-    Yn = Yn/n
-    Zn = Zn/n
+    Xn /= n
+    Yn /= n
+    Zn /= n
 
     # distances
     R = np.sqrt(XR**2+YR**2+ZR**2)
-    XR = XR/R
-    YR = YR/R
-    ZR = ZR/R
+    XR /= R
+    YR /= R
+    ZR /= R
 
     # angles
     Ux = XR*Xa + YR*Ya + ZR*Za
@@ -435,13 +455,39 @@ def surfaspect(X, Y, Z, x0, y0, z0):
 
     return (la, lb, Ux, Uy, Uz, R)
 
+def GetCornerCoordinates2(FileName):
+    """ Use gdalinfo to get corner coordinates, but use json format """
+    cmd = ['gdalinfo', '-json', FileName]
+    logging.debug("GetCornerCoordinates: CMD: " + " ".join(cmd))
+    resp = subprocess.check_output(cmd)
+    try:
+        gdal_info = json.loads(resp.decode())
+    except json.decoder.JSONDecodeError:
+        logging.error("Could not decode json: " + resp.decode())
+        raise
+    # How do we get center?
+    # print(resp.decode())
+
+    print(gdal_info['extent']['coordinates'][0])
+
+    list_lon, list_lat = zip(*gdal_info['extent']['coordinates'][0])
+    return np.array([list_lat[0], list_lat[1], list_lat[3], list_lat[2], list_lat[4]]), \
+           np.array([list_lon[0], list_lon[1], list_lon[3], list_lon[2], list_lon[4]])
+
+
+
+
 def GetCornerCoordinates(FileName):
-    GdalInfo = subprocess.check_output('gdalinfo {}'.format(FileName),
+    # TODO: convert this to not use gdalinfo, but to do things natively?
+    cmd = 'gdalinfo {}'.format(FileName)
+    logging.debug("GetCornerCoordinates: CMD:  " + cmd)
+    GdalInfo = subprocess.check_output(cmd,
                                        shell=True)
     GdalInfo = GdalInfo.splitlines() # Creates a line by line list.
     CornerLats, CornerLons = np.zeros(5), np.zeros(5)
     GotUL, GotUR, GotLL, GotLR, GotC = False, False, False, False, False
     for line in GdalInfo:
+        #print(line)
         if line[:10] == b'Upper Left':
             CornerLats[0], CornerLons[0] = GetLatLon(line)
             GotUL = True
@@ -461,29 +507,141 @@ def GetCornerCoordinates(FileName):
             break
     return CornerLats, CornerLons
 
+def test_GetCornerCoordinates1():
+    import os
+    dtm = os.path.join(os.getenv('SDS'), 'orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff') # example DTM file
+    x1 = GetCornerCoordinates(dtm)
+    print("x1=" + str(x1))
+    x2 = GetCornerCoordinates2(dtm)
+    print("x2=" + str(x2))
+    for idx in range(4):
+        assert abs(x1[0][idx] - x2[0][idx]) < 1e-1 # lat
+        assert abs(x1[1][idx] - x2[1][idx]) < 1e-1 # lon
+
+
+latlonpat = re.compile(r"""
+    (?P<name>.+?)
+    \((?P<x>[\-\d\.\s]+),(?P<y>[\-\d\.\s]+)\)\s+
+    \(\s*(?P<lond>\d+)d
+    \s*(?P<lonm>\d+)'
+    \s*(?P<lons>[\d\.]+)"(?P<lonew>\w)
+    ,\s+
+    \s*(?P<latd>\d+)d
+    \s*(?P<latm>\d+)'
+    \s*(?P<lats>[\d\.]+)"(?P<latns>\w)
+
+    """
+    , re.X) 
 def GetLatLon(line):
-    coords = str(line).split(') (')[1]
-    coords = coords[:-1]
-    LonStr, LatStr = coords.split(',')
-    # Longitude
-    LonStr = LonStr.replace('\\', '').split('d')   # Get the degrees, and the rest
-    LonD = int(LonStr[0])
-    LonStr = LonStr[1].split('\'')# Get the arc-m, and the rest
-    LonM = int(LonStr[0])
-    LonStr = LonStr[1].split('"') # Get the arc-s, and the rest
-    LonS = float(LonStr[0])
-    Lon = LonD + LonM/60. + LonS/3600.
-    if LonStr[1] in ['W', 'w']:
-        Lon = -1*Lon
-    # Same for Latitude
-    LatStr = LatStr.replace('\\', '').split('d')
-    LatD = int(LatStr[0])
-    LatStr = LatStr[1].split('\'')
-    LatM = int(LatStr[0])
-    LatStr = LatStr[1].split('"')
-    LatS = float(LatStr[0])
-    Lat = LatD + LatM/60. + LatS/3600.
-    if LatStr[1] in ['S', 's']:
-        Lat = -1*Lat
-    return Lat, Lon
+    """ Parse latitude and longitude from gdalinfo line 
+Corner Coordinates:
+Upper Left  (-1333625.000, 1778175.000) ( 22d30' 1.15"W, 30d 0' 2.04"N)
+Lower Left  (-1333625.000,     -25.000) ( 22d30' 1.15"W,  0d 0' 1.52"S)
+Upper Right (      25.000, 1778175.000) (  0d 0' 1.52"E, 30d 0' 2.04"N)
+Lower Right (  25.0000000, -25.0000000) (  0d 0' 1.52"E,  0d 0' 1.52"S)
+Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)
+    
+    """
+
+    m = latlonpat.match(line.decode())
+    if not m:
+        return None, None
+
+    lon = int(m.group('lond')) + int(m.group('lonm')) / 60.0 + float(m.group('lons')) / 3600.0
+    lat = int(m.group('latd')) + int(m.group('latm')) / 60.0 + float(m.group('lats')) / 3600.0
+
+    if m.group('lonew').lower() == 'w':
+        lon *= -1
+    if m.group('latns').lower() == 's':
+        lat *= -1
+
+    return lat, lon
+
+
+def test_latlon():
+    
+    data = b"""Upper Left  (-1333625.000, 1778175.000) ( 22d30' 1.15"W, 30d 0' 2.04"N)
+Lower Left  (-1333625.000,     -25.000) ( 22d30' 1.15"W,  0d 0' 1.52"S)
+Upper Right (      25.000, 1778175.000) (  0d 0' 1.52"E, 30d 0' 2.04"N)
+Lower Right (  25.0000000, -25.0000000) (  0d 0' 1.52"E,  0d 0' 1.52"S)
+Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)""".split(b"\n")
+    for line in data:
+        lat1, lon1 = GetLatLon(line)
+        print(lat1,lon1)
+
+
+def test_icsim1():
+    """ Run icsim using parameters from run_ranging.py and icd.py """
+    logging.debug("test_icsim1()")
+
+    #------------------------
+    # input parameters 
+    inpath='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm271/edr4992001/e_4992001_001_ss19_700_a_a.dat'
+    idx_start = 53243
+    idx_end = 63243
+    #------------------------
+
+    # create cmp path
+    path_root_rng = '/disk/kea/SDS/targ/xtra/SHARAD/rng/'
+    path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
+    path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    dtm_path = '/disk/daedalus/sds/orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff'
+    # Relative path to this file
+    fname = os.path.basename(inpath)
+
+    # Relative directory of this file
+    reldir = os.path.dirname(os.path.relpath(inpath, path_root_edr))
+    logging.debug("inpath: " + inpath)
+    logging.debug("reldir: " + reldir)
+    logging.debug("path_root_edr: " + path_root_edr)
+    cmp_path = os.path.join(path_root_cmp, reldir, 'ion', fname.replace('_a.dat','_s.h5') )
+    label_science = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
+    label_aux  = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+
+
+    science_path = inpath.replace('_a.dat','_s.dat')
+    
+    if not os.path.exists(cmp_path):
+        logging.warning(cmp_path + " does not exist")
+        return 0
+
+    aux_path = inpath
+
+    # Number of range lines
+    Necho = idx_end - idx_start
+
+    # Data for RXWOTs
+    data = pds3.read_science(science_path, label_science, science=True,
+                              bc=False)
+    # Range window starts
+    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
+
+    aux = pds3.read_science(aux_path, label_aux, science=False, bc=False)
+    pri_code = np.ones(Necho)
+    p_scx = aux['X_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+    p_scy = aux['Y_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+    p_scz = aux['Z_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+    v_scx = aux['X_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+    v_scy = aux['Y_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+    v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+    state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
+    # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
+    sim = incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end, maxechoes=1000).transpose()
+    assert sim.shape == data.shape
+
+
+
+def main():
+    test_latlon()
+    test_GetCornerCoordinates1()
+    test_icsim1()
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    import os
+    import cmp.pds3lbl as pds3
+    main()
+
+
 
