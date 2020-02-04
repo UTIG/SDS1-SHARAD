@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 __authors__ = ['Gregor Steinbruegge, gregor@ig.utexas.edu']
 
 __version__ = '1.0'
@@ -12,6 +13,8 @@ __history__ = {
                  'for surface picking. It calculates the derivative of the '
                  'waveform and picks the first peak exceeding a threshold'}}
 
+import sys
+import os
 import numpy as np
 import spiceypy as spice
 import pandas as pd
@@ -19,6 +22,7 @@ from scipy.constants import c
 from scipy.ndimage.interpolation import shift
 #import matplotlib.pyplot as plt
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import cmp.pds3lbl as pds3
 from cmp.plotting import plot_radargram
 from rot import mars

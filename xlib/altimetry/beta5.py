@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 __authors__ = ['Gregor Steinbruegge (UTIG), gregor@ig.utexas.edu']
 
 __version__ = '1.0'
@@ -11,12 +12,14 @@ import time
 from math import tan, pi, erf, sqrt
 import logging
 import sys
+import os
 import numpy as np
 from scipy.constants import c
 from scipy.ndimage.interpolation import shift
 import spiceypy as spice
 import pandas as pd
 from scipy.optimize import least_squares
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from misc import prog as prg
 from misc import coord as crd
 import cmp.pds3lbl as pds3
