@@ -12,8 +12,8 @@ import numpy as np
 bplot = True
 # Compare coregistration
 
-post_coreg1 = 'GOG3_NAQLK_JKB2j_ZY1b_0to12000_AfterCoregistration_ric_0.npz'
-post_coreg2 = 'GOG3_NAQLK_JKB2j_ZY1b_0to12000_AfterCoregistration_ric_1.npz'
+post_coreg1 = 'GOG3_NAQLK_JKB2j_ZY1b_0to12000_AfterCoregistration_ric_1.npz'
+post_coreg2 = 'GOG3_NAQLK_JKB2j_ZY1b_0to12000_AfterCoregistration_ric.npz'
 
 print(post_coreg1)
 print(post_coreg2)
@@ -33,7 +33,11 @@ with np.load(post_coreg1) as data1, np.load(post_coreg2) as data2:
     print('size cmpA = {:s}'.format(str(cmpA1.shape)))
     print('size cmpB = {:s}'.format(str(cmpB1.shape)))
 
+    shift1 = data1['shift_array']
     shift2 = data2['shift_array']
+
+    shiftdiff= abs(shift1 - shift2).mean()
+    print('Average shift error = {:0.1f}'.format(shiftdiff))
 
 if bplot:
     import matplotlib.pyplot as plt

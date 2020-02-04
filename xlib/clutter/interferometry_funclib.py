@@ -776,10 +776,11 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
 
     for ii in range(cmpA.shape[1]): #range(np.size(cmpA, axis=1)):
         # subsample
-        subsampA = sinc_interpolate(cmpA[:, ii], orig_sample_interval, subsample_factor)
-        subsampB = sinc_interpolate(cmpB[:, ii], orig_sample_interval, subsample_factor)
-        #subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
-        #subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+        # Older sinc interpolation method, determined equivalent nto frequency_interpolate
+        #subsampA = sinc_interpolate(cmpA[:, ii], orig_sample_interval, subsample_factor)
+        #subsampB = sinc_interpolate(cmpB[:, ii], orig_sample_interval, subsample_factor)
+        subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
+        subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
         #logging.debug("subsampA.shape = " + str(subsampA.shape))
 
 
