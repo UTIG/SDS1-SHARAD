@@ -769,8 +769,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
     '''
 
     # define the output
-    coregA = np.zeros((len(cmpA), np.size(cmpA, axis=1)), dtype=complex)
-    coregB = np.zeros((len(cmpB), np.size(cmpB, axis=1)), dtype=complex)
+    coregB = np.empty_like(cmpB, dtype=complex)
 
     shift_array = np.zeros(cmpA.shape[1])
 
@@ -796,25 +795,25 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
         # co-register and shift
         shifts = np.arange(-1 * shift, shift, 1)
         rho = np.zeros((len(shifts), ), dtype=float)
-
-        # TODO: calculate using a fourier cross-correlation (scipy.signal.correlate)
-        
-
-        for jj in range(len(shifts)):
-            tempA = np.abs(np.mean(np.multiply(subsampA, np.conj(np.roll(subsampB, shifts[jj])))))
-            tempB = np.mean(np.square(np.abs(subsampA))) # GNG: move this out?
-            tempC = np.mean(np.square(np.abs(np.roll(subsampB, shifts[jj]))))
-            tempD = np.sqrt(np.multiply(tempB, tempC)) # GNG: sqrt is un-necessary for this relative compare
-            rho[jj] = np.divide(tempA, tempD)
+        b_do_scipy = True
+        if b_do_scipy:
+            # calculate using a fourier cross-correlation (scipy.signal.correlate)
+            rho = np.abs(correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
+        else:
+            tempB = np.mean(np.square(np.abs(subsampA))) 
+            for jj in range(len(shifts)):
+                tempA = np.abs(np.mean(np.multiply(subsampA, np.conj(np.roll(subsampB, shifts[jj])))))
+                tempC = np.mean(np.square(np.abs(np.roll(subsampB, shifts[jj]))))
+                #tempD = np.sqrt(np.multiply(tempB, tempC)) # GNG: sqrt is un-necessary for this relative compare
+                tempD = np.multiply(tempB, tempC)
+                rho[jj] = np.divide(tempA, tempD)
         to_shift = shifts[np.argwhere(rho == np.max(rho))][0][0]
         subsampB = np.roll(subsampB, to_shift)
         shift_array[ii] = to_shift
         # remove subsampling
-        # GNG: coregA should be exactly equal to coregB.
-        coregA[:, ii] = subsampA[np.arange(0, len(subsampA), subsample_factor)]
         coregB[:, ii] = subsampB[np.arange(0, len(subsampB), subsample_factor)]
 
-    return coregA, coregB, shift_array
+    return cmpA, coregB, shift_array
 
 
 def test_coregistration():

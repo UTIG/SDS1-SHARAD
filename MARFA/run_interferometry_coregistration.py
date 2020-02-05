@@ -224,4 +224,4 @@ if not coreg_test:
     cmpA3, cmpB3, shift_array = fl.coregistration(cmpA, cmpB, (1 / 50E6), 10)
     print('Saving to ' + post_coreg)
     if bsave:
-        np.savez_compressed(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3, shift_array=shift_array)
+        np.savez(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3, shift_array=shift_array)
