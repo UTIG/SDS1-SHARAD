@@ -1587,13 +1587,16 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
 
 
 
-def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
+def raw_bxds_size(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
     '''
     function to calculate the number of records to read, and sizes of output blocks, but
-    don't actually do any reading.
+    don't actually do any reading or filtering
 
     Inputs:
     ----------------
+            Nc: Geometry metadata
+            Xo: Geometry metadata
+           NRt: array of tear record numbers
             DX: alongtrack range line spacing after interpolation
             MS: number of fast-time samples in the output
             NR: block size to load data (input bxds records per output record)
@@ -1603,11 +1606,8 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
     ----------------
        output is an array of raw MARFA data for the line and channel in question
     '''
-    logging.debug("raw_bxds_readplan() start")
+    logging.debug("raw_bxds_size() start")
     out = 0 # number of output records
-    #HiCARS = 2
-    #undersamp = True
-    #combined = True
 
     # define number of tears
     NumTears = len(NRt)
@@ -1625,6 +1625,7 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
     NRb = NR + NRr
 
     NumRead = None
+    signalim = None
 
     # start processing
 
@@ -1660,6 +1661,7 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
             #       "global" refers to the full set of records.
             # These variables are not used anywhere else in this code,
             # but they are output here for progress reporting.
+            """ 
             if NT == 1:
                 NGPri = ((NB - 1) * NR) - (NRr / 2) + 1
                 NGPrf = (NB * NR) + (NRr / 2)
@@ -1674,6 +1676,7 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
                     NGPri = NRt[NT - 1 - 1] + 1
                 if NB == NumNBlocks:
                     NGPrf = NRt[NT - 1 - 1] + NRs
+            """
 
             # NGWri = Number of initial (start) record for controlling output on this processed block
             # NGWrf = Number of  final  (stop)  record for controlling output on this processed block
@@ -1695,12 +1698,9 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
             # Pad (NRr/2) overlap region with first/last records on first/last blocks.
             S = np.empty((MS, NumRead))
             if NB == 1:
-                #S = np.empty((MS, NumRead))
                 signal = np.empty((MS, int(NRr / 2 + NumRead)))
-                #signal[:, int((NRr / 2) + 1 - 1):int((NRr / 2) + NumRead)] = S
             else:
                 signal = np.empty((MS, int(NRr + NumRead)))
-                #S = np.empty((MS, NumRead))
 
             if (NB > 1) and (NB == NumNBlocks):
                 signal = np.resize(signal, (MS, NRb))
@@ -1716,7 +1716,6 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
 
             # Part 1: Generate missing data at start of data tear segment.
             if (NT > 1) and (NB == 1):
-                """ 
                 D1 = Xo[NRt[NT - 1 - 1] - 1]
                 D2 = Xo[NRt[NT - 1 - 1] + 1 - 1]
                 N1 = int(math.floor(D1 / DX)) + 1
@@ -1730,12 +1729,10 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
                 range_end = N2 + 1
                 for Ni in range(range_start, range_end):
                     Wt = 0  #0.5 - 0.5 * math.cos((math.pi / 10.0) * (Ni - (N2 - 9)))
-                    signalim = Wt * signali[:, 1 - 1]
+                    signalim = Wt * signali[:, 0]
 
                 out += range_len + (range_end - range_start)
                 assert signali.shape[1] == (range_len + (range_end - range_start))
-                """
-                out += signalim.shape[1]
 
                 signalout = signalim
 
@@ -1744,7 +1741,6 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
 
             # Part 3: Generate missing data at end of data tear.
             if (NT < NumTears) and (NB == NumNBlocks):
-                """ 
                 D1 = Xo[NRt[NT - 1] - 1]
                 D2 = Xo[NRt[NT - 1] + 1 - 1]
                 N1 = int(math.floor(D1 / DX)) + 1
@@ -1759,13 +1755,11 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
                 range_len1 = max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1
                 for Ni in range(range_start, range_start + range_len1):
                     signalim[0:MS - 1] = 0.0
-                out += range_len0 + range_len1
+                out += range_len0 + range_len1 #signalout = np.concatenate((signalout, signalim), axis=1)
                 assert range_len0 + range_len1 == signalim.shape[1]
-                """
-                out += signalim.shape[1]
-                #signalout = np.concatenate((signalout, signalim), axis=1)
+                assert signalim is not None
 
-    logging.debug("bxds_load_readplan() = {:d}".format(out))
+    logging.debug("bxds_load_size() = {:d}".format(out))
     return out
 
 
@@ -1851,9 +1845,8 @@ def raw_bxds_load2(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=
     Xo = np.fromfile(os.path.join(GeoPath, "Xo"), sep=" ")
     NRt = np.fromfile(os.path.join(GeoPath, "NRt"), dtype=int, sep=" ")
 
-    out_predicted = raw_bxds_readplan(Nc, Xo, NRt, DX, MS, NR, NRr)
+    out_predicted = raw_bxds_size(Nc, Xo, NRt, DX, MS, NR, NRr)
     signalout = np.empty((MS, out_predicted), dtype=complex)
-    #sys.exit(0)
 
     # define number of tears
     NumTears = len(NRt)
@@ -2111,26 +2104,30 @@ def raw_bxds_load2(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=
     return signalout
 
 def test_raw_bxds_load():
-    #raw_path = "/disk/kea/WAIS/orig/xlob/DEV2/JKB2t/Y81a/RADnh5"
-    #geo_path = "/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S2_FIL/DEV2/JKB2t/Y81a"
-    #sigwin = [0, 1000, 0, 0]
 
-    raw_path = "/disk/kea/WAIS/orig/xlob/NAQLK/JKB2j/ZY1b/RADnh3/"
-    geo_path = "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/NAQLK/JKB2j/ZY1b/"
-    sigwin = [0, 1000, 0, 12000]
-
-
-
+    testcases = [
+        {
+        'raw_path': "/disk/kea/WAIS/orig/xlob/DEV2/JKB2t/Y81a/RADnh5",
+        'geo_path': "/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S2_FIL/DEV2/JKB2t/Y81a",
+        'sigwin': [0, 1000, 0, 0],
+        } , {
+        'raw_path': "/disk/kea/WAIS/orig/xlob/NAQLK/JKB2j/ZY1b/RADnh3/"
+        'geo_path': "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/NAQLK/JKB2j/ZY1b/"
+        'sigwin': [0, 1000, 0, 12000]
+        }
+    ]
     chan = '5'
-    logging.debug("raw_bxds_load2()")
-    bxds2 = raw_bxds_load2(raw_path, geo_path, chan, sigwin)
+    testcases = (testcases[0],)
+    for rec in testcases:
+        logging.debug("raw_bxds_load2()")
+        bxds2 = raw_bxds_load2(rec['raw_path', rec['geo_path'], chan, rec['sigwin'])
 
-    logging.debug("raw_bxds_load()")
-    bxds1 = raw_bxds_load(raw_path, geo_path, chan, sigwin)
+        logging.debug("raw_bxds_load()")
+        bxds2 = raw_bxds_load(rec['raw_path', rec['geo_path'], chan, rec['sigwin'])
 
-    rmse = np.sqrt(np.square(abs(bxds2 - bxds1)).mean())
-    logging.debug("RMSE(raw_bxds_load - raw_bxds_load2) = {:0.3g}".format(rmse))
-    assert rmse < 1e-9
+        rmse = np.sqrt(np.square(abs(bxds2 - bxds1)).mean())
+        logging.debug("RMSE(raw_bxds_load - raw_bxds_load2) = {:0.3g}".format(rmse))
+        assert rmse < 1e-9
 
 
 
