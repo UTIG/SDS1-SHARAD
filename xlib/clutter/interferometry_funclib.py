@@ -1617,8 +1617,8 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
         NRr += 1
 
     # Check for single block case and force variables accordingly.
-    if (NumTears == 1) and (NR > NRt[1-1]):
-        NR = NRt[1-1]
+    if (NumTears == 1) and (NR > NRt[0]): # NRt[1-1]
+        NR = NRt[0] #NRt[1-1]
         NRr = 0
 
     # NRb = Number of records included in each along-track filtering block
@@ -1693,13 +1693,14 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
 
             # Read Data and define signal.
             # Pad (NRr/2) overlap region with first/last records on first/last blocks.
+            S = np.empty((MS, NumRead))
             if NB == 1:
-                S = np.empty((MS, NumRead))
+                #S = np.empty((MS, NumRead))
                 signal = np.empty((MS, int(NRr / 2 + NumRead)))
-                signal[:, int((NRr / 2) + 1 - 1):int((NRr / 2) + NumRead)] = S
+                #signal[:, int((NRr / 2) + 1 - 1):int((NRr / 2) + NumRead)] = S
             else:
                 signal = np.empty((MS, int(NRr + NumRead)))
-                S = np.empty((MS, NumRead))
+                #S = np.empty((MS, NumRead))
 
             if (NB > 1) and (NB == NumNBlocks):
                 signal = np.resize(signal, (MS, NRb))
@@ -1713,27 +1714,29 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
             # Interpolate filtered signal to resampling points
             signali = np.empty((MS, Nif - Nii + 1), complex)
 
-            # GNG: Part 1 and Part 2 are basically mutually exclusive conditions. Refactor?
             # Part 1: Generate missing data at start of data tear segment.
             if (NT > 1) and (NB == 1):
+                """ 
                 D1 = Xo[NRt[NT - 1 - 1] - 1]
                 D2 = Xo[NRt[NT - 1 - 1] + 1 - 1]
                 N1 = int(math.floor(D1 / DX)) + 1
                 N2 = int(math.floor(D2 / DX)) + 1
                 range_start = N1 + int(math.floor((N2 - N1 + 2) / 2))
                 range_len = max(0, int(math.floor((N2 - N1 - 19) / 2))) - 1 + 1
-                for Ni in range(range_start, range_start + range_len):
-                    signalim[1 - 1:MS - 1] = 0.0
-                    out += 1
+                #for Ni in range(range_start, range_start + range_len):
+                #    signalim[0:MS - 1] = 0.0
                 range_start = N1 + int(math.floor((N2 - N1 + 2) / 2)) \
-                            + max(0, int(math.floor((N2 - N1 - 19) / 2))), N2 + 1
+                            + max(0, int(math.floor((N2 - N1 - 19) / 2)))
                 range_end = N2 + 1
                 for Ni in range(range_start, range_end):
                     Wt = 0  #0.5 - 0.5 * math.cos((math.pi / 10.0) * (Ni - (N2 - 9)))
                     signalim = Wt * signali[:, 1 - 1]
-                    out += 1
 
+                out += range_len + (range_end - range_start)
                 assert signali.shape[1] == (range_len + (range_end - range_start))
+                """
+                out += signalim.shape[1]
+
                 signalout = signalim
 
             # Part 2: Output good resampled points.
@@ -1741,22 +1744,25 @@ def raw_bxds_readplan(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
 
             # Part 3: Generate missing data at end of data tear.
             if (NT < NumTears) and (NB == NumNBlocks):
+                """ 
                 D1 = Xo[NRt[NT - 1] - 1]
                 D2 = Xo[NRt[NT - 1] + 1 - 1]
                 N1 = int(math.floor(D1 / DX)) + 1
                 N2 = int(math.floor(D2 / DX)) + 1
                 range_start = N1 + 1
                 range_len0 = min(9, int(math.floor((N2 - N1) / 2))) - 1 + 1
+                out += range_len0
                 for Ni in range(range_start, range_start + range_len0):
                     Wt = 0 # 0.5 + 0.5 * math.cos((math.pi / 10.0) * (Ni - N1))
                     signalim = Wt * signali[:, Nif - Nii + 1 - 1]
-                    out += 1
                 range_start = N1 + min(10, int(math.floor((N2 - N1 + 2) / 2)))
                 range_len1 = max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1
                 for Ni in range(range_start, range_start + range_len1):
-                    signalim[1 - 1:MS - 1] = 0.0
-                    out += 1
+                    signalim[0:MS - 1] = 0.0
+                out += range_len0 + range_len1
                 assert range_len0 + range_len1 == signalim.shape[1]
+                """
+                out += signalim.shape[1]
                 #signalout = np.concatenate((signalout, signalim), axis=1)
 
     logging.debug("bxds_load_readplan() = {:d}".format(out))
@@ -1783,7 +1789,7 @@ def raw_bxds_load__read_stackgen_block(stackgen, MS, num_read, NB):
         try:
             trace = next(stackgen)
         except StopIteration:
-            raise Exception("Short read (stackgen failed at NB={:d} i={:d})\n".format(int(NB), i))
+            raise Exception("Short stackgen read at NB={:d} i={:d}\n".format(int(NB), i))
         s[:, i] = trace.data[0:MS]
 
     return s
@@ -1807,7 +1813,7 @@ def raw_bxds_load__read_file_block(ifd, MS, num_read, NB):
     for i in range(num_read):   
         data = np.fromfile(ifd, "<i2", MS)
         if data.size < MS:
-            raise Exception("Short read at NB={:d} i={:d} ({:d} of {:d})\n".format(NB, i, S.size, MS))
+            raise Exception("Short file read at NB={:d} i={:d} ({:d} of {:d})\n".format(NB, i, S.size, MS))
         s[:, i] = data
     return s
 
@@ -1910,16 +1916,16 @@ def raw_bxds_load2(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=
 
     NumRead = None
 
+    tear_idx_prev = 0
     # start processing each segment
     for NT in range(1, NumTears + 1):
 
-        # NRs = Number of records to process up to the next data tear
-        if NT == 1:
-            NRs = NRt[0] #NRt[1 - 1]
-        else:
-            NRs = NRt[NT - 1] - NRt[NT - 2] #NRt[NT - 1] - NRt[NT - 1 - 1]
+        # NRs = Number of records to process in this segment (up to the next data tear)
+        tear_idx = NRt[NT - 1]
+        NRs = tear_idx - tear_idx_prev
+        tear_idx_prev = tear_idx
 
-        # NumNBlocks = Number of along-track blocks
+        # NumNBlocks = Number of along-track blocks in this segment
         NumNBlocks = max(1, int(math.floor((NRs + NR - 1 - NRr / 2) / NR)))
 
         # Process each block in this segment
@@ -2094,7 +2100,6 @@ def raw_bxds_load2(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=
                     out += 1
                 #signalout = np.concatenate((signalout, signalim), axis=1)
                 signalout[:, out0:out] = signalim
-
     assert out_predicted == out
 
     if ifd is not None:
