@@ -30,8 +30,8 @@ from scipy.signal import detrend, correlate
 import scipy.special
 
 import interface_picker as ip
-import unfoc_KMS2 as unfoc
 from parse_channels import parse_channels
+import filter_ra
 
 def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
     '''
@@ -741,7 +741,7 @@ def test_interpolate():
             except AssertionError:
                 bplot = True
                 
-            if bplot: # pragma: no-cover
+            if bplot: #pragma: no cover
                 plt.subplot(211)
                 plt.plot(x2, sig_interp0, x2, sig_interp1, x2, sig_interp2)
                 plt.legend(['linear', 'sinc', 'frequency'])
@@ -1268,31 +1268,16 @@ def phase_stability_adjustment(data, stability):
 
     return out
 
-def quad3(X, X1, X2, X3, P1, P2, P3):
-    '''
-    function required in MARFA raw data load algorithm
-    '''
 
-    XX1 = X-X1
-    XX2 = X-X2
-    XX3 = X-X3
-    X1X2 = X1-X2
-    X2X3 = X2-X3
-    X3X1 = X3-X1
-    A = - (XX2*XX3)/(X1X2*X3X1)
-    B = - (XX1*XX3)/(X1X2*X2X3)
-    C = - (XX1*XX2)/(X3X1*X2X3)
 
-    return A*P1 + B*P2 + C*P3
-
-def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=100):
+def raw_bxds_load(rad_path, geo_path, channel, trim, DX=1, MS=3200, NR=1000, NRr=100):
     '''
     function to load raw MARFA bxds with the loopback chirp preserved.
 
     Inputs:
     ----------------
-        InPath: Path to the raw radar files
-       GeoPath: Path to the raw geometry files required to perform interpolation
+      rad_path: Path to the raw radar files
+      geo_path: Path to the raw geometry files required to perform interpolation
        channel: desired MARFA channel to load
           trim: vector of values with trim[2]:trim[3] is range lines of interest.
                 None to use entire range
@@ -1303,282 +1288,18 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
 
     Outputs:
     ----------------
-       output is an array of raw MARFA data for the line and channel in question
+       signalout is an array of raw MARFA data for the line and channel in question
     '''
 
-    RadName = os.path.join(RadPath, 'bxds')
-    out = 0
-    HiCARS = 2
+    rad_name = os.path.join(rad_path, 'bxds')
     undersamp = True
     combined = True
     channel = int(channel)
+    snm = None #'RADnh5' # either RADnh3 or RADnh5
+    
+    signalout = filter_ra.filter_ra(rad_name, geo_path, DX, MS, NR, NRr, channel, snm=snm,
+              undersamp=undersamp, combined=combined)
 
-    # load metadata
-    Nc = np.fromfile(os.path.join(GeoPath, "Nc"), dtype=int, sep=" ")
-    Xo = np.fromfile(os.path.join(GeoPath, "Xo"), sep=" ")
-    NRt = np.fromfile(os.path.join(GeoPath, "NRt"), dtype=int, sep=" ")
-
-    # define number of tears
-    NumTears = len(NRt)
-
-    # Make certain that NRr is an even number.
-    if NRr % 2 == 1:
-        NRr = NRr + 1
-
-    # Check for single block case and force variables accordingly.
-    if (NumTears == 1) and (NR > NRt[1-1]):
-        NR = NRt[1-1]
-        NRr = 0
-
-    # NRb = Number of records included in each along-track filtering block
-    NRb = NR + NRr
-
-    ifd = None
-#    OFD = open(OutName, "wb")
-
-    # Define Range Filtering.
-    # Tr = Range sampling time (0.02 microseconds; 50 MHz sampling)
-    Tr = 0.02
-    FilterR = np.zeros([MS, 1], complex)
-    Freq1 = 02.5
-    Freq2 = 17.5
-    M1 = int(math.floor((Freq1 * Tr * MS) + 0.5)) + 1
-    M2 = int(math.floor((Freq2 * Tr * MS) + 0.5)) + 1
-    BW = M2 - M1
-    #pcheck.pcheck(np.linspace(0.0,1.0,BW+1) * np.pi, 'Range')
-    Hanning = np.reshape(np.sin(np.linspace(0.0, 1.0, BW+1) * np.pi), (-1, 1))
-    FilterR[M1 - 1:M2] = Hanning
-    FilterR[MS + 2 - M2 - 1:MS + 2 - M1] = Hanning
-
-    # Define Along-Track Filtering.
-    # Ta = Along-track sampling time (0.0025 s; 400 Hz sampling)
-    Ta = 0.0025
-    FilterA = np.zeros([NRb, 1], complex)
-    Freq1 = 35.0
-    Freq2 = 40.0
-    N1 = int(math.floor((Freq1 * Ta * NRb) + 0.5)) + 1
-    N2 = int(math.floor((Freq2 * Ta * NRb) + 0.5)) + 1
-    BW = N2 - N1
-    #pcheck.pcheck(np.linspace(0.0,1.0,BW+1) * np.pi, 'Range')
-    Hanning = np.reshape(0.5 + 0.5 * np.cos(np.linspace(0.0, 1.0, BW + 1) * np.pi), (-1, 1))
-    FilterA[N1-1:N2] = Hanning
-    FilterA[NRb + 2 - N2 - 1:NRb + 2 - N1] = 1.0 - Hanning
-    FilterA[0:N1 - 1] = 1.0
-    FilterA[NRb + 3 - N1 - 1:NRb] = 1.0
-
-    # Combine into 2D Filter
-    Filter = FilterR * FilterA.conj().transpose()
-
-    if channel in (5, 6, 7, 8):
-        channel_specs = parse_channels('[1,%d,1,0,0]' % (int(channel)-4))
-    else:
-        raise Exception('filterRA: illegal channel number requested')
-    tracegen = unfoc.read_RADnhx_gen(RadName, channel_specs)
-    stackgen = unfoc.stacks_gen(tracegen, channel_specs, 1)
-
-    NumRead = []
-
-    # start processing
-
-    for NT in range(1, NumTears + 1):
-
-        # NRs = Number of records to process up to the next data tear
-        if NT == 1:
-            NRs = NRt[1 - 1]
-        else:
-            NRs = NRt[NT - 1] - NRt[NT - 1 - 1]
-
-        # NumNBlocks = Number of along-track blocks
-        NumNBlocks = max(1, int(math.floor((NRs + NR - 1 - NRr / 2) / NR)))
-
-    #    NB = 1
-    #    if NB == 1:
-    #    for NB in range(1, 3):
-        for NB in range(1, NumNBlocks + 1):
-
-            if NB > 1:
-                NRp = NumRead
-
-            # NumRead = Number of new records to read
-            NumRead = NR
-            if NB == 1:
-                NumRead = int(NR + (NRr/2))
-            if NB == NumNBlocks:
-                NumRead = int(NRs - ((NB-1)*NR) - (NRr/2))
-            if (NB == 1) and (NB == NumNBlocks):
-                NumRead = int(NRs)
-
-            # NGPri = Number of initial (start) record being processed this block
-            # NGPrf = Number of  final  (stop)  record being processed this block
-            # NOTE: NGPri and NGPrf are in the global index system, where
-            #       "global" refers to the full set of records.
-            # These variables are not used anywhere else in this code,
-            # but they are output here for progress reporting.
-            if NT == 1:
-                NGPri = ((NB - 1) * NR) - (NRr / 2) + 1
-                NGPrf = (NB * NR) + (NRr / 2)
-                if NB == 1:
-                    NGPri = 1
-                if NB == NumNBlocks:
-                    NGPrf = NRs
-            else:
-                NGPri = NRt[NT - 1 - 1] + ((NB - 1) * NR) - (NRr / 2) + 1
-                NGPrf = NRt[NT - 1 - 1] + (NB * NR) + (NRr / 2)
-                if NB == 1:
-                    NGPri = NRt[NT - 1 - 1] + 1
-                if NB == NumNBlocks:
-                    NGPrf = NRt[NT - 1 - 1] + NRs
-
-            # NGWri = Number of initial (start) record for controlling output on this processed block
-            # NGWrf = Number of  final  (stop)  record for controlling output on this processed block
-            # NOTE: NGWri and NGWrf are in the global index system, where
-            #       "global" refers to the full set of records.
-            # These variables are output for progress reporting.
-            if NT == 1:
-                NGWri = ((NB - 1) * NR) + 1
-                NGWrf = (NB * NR)
-                if NB == NumNBlocks:
-                    NGWrf = NRs
-            else:
-                NGWri = NRt[NT - 1 - 1] + ((NB - 1) * NR) + 1
-                NGWrf = NRt[NT - 1 - 1] + (NB * NR)
-                if (NB == NumNBlocks):
-                    NGWrf = NRt[NT - 1 - 1] + NRs
-
-            # Read Data and define signal.
-            # Pad (NRr/2) overlap region with first/last records on first/last blocks.
-            if NB == 1:
-                S = np.empty((MS, NumRead))
-                if ifd is None:
-                    for i in range(1, NumRead + 1):
-                        try:
-                            trace = next(stackgen)
-                        except StopIteration:
-                            sys.exit("Short read (stackgen failed at NB {} {})\n".format(NB, i))
-                        S[:, i-1] = trace.data[0:MS]
-                else:
-                    for i in range(1, NumRead + 1):
-                        data = np.fromfile(ifd, "<i2", MS)
-                        if S.size < MS:
-                            sys.exit("Short read (%d of %d)\n" % (S.size, MS))
-                        S[:, i-1] = data
-
-                signal = np.empty((MS, int(NRr / 2 + NumRead)))
-                for N in range(1, int(NRr / 2 + 1)):
-                    signal[:, N - 1] = S[:, 1 - 1]
-                signal[:, int((NRr / 2) + 1 - 1):int((NRr / 2) + NumRead)] = S
-            else:
-                signal = np.empty((MS, int(NRr + NumRead)))
-                signal[:, 1 - 1:NRr] = S[:, int(NRp - NRr + 1 - 1):NRp]
-                if ifd is None:
-                    S = np.empty((MS, NumRead))
-                    for i in range(1, NumRead+1):
-                        #print('Working:', NB, i)
-                        try:
-                            trace = next(stackgen)
-                        except StopIteration:
-                            #sys.exit("Short read (\n")
-                            test = 1
-                        S[:, i - 1] = trace.data[0:MS]
-                else:
-                    S = np.empty((MS, NumRead))
-                    for i in range(1, NumRead + 1):
-                        data = np.fromfile(ifd, "<i2", MS)
-                        if S.size < MS:
-                            sys.exit("Short read (%d of %d)\n" % (S.size, MS))
-                        S[:, i - 1] = data
-                signal[:, NRr + 1 - 1:NRr + NumRead] = S
-
-            if (NB > 1) and (NB == NumNBlocks):
-                signal = np.resize(signal, (MS, NRb))
-                # This gives a warning when running profile or coverage
-                #ValueError: cannot resize an array that references or is referenced
-                #by another array in this way.
-                #Use the np.resize function or refcheck=False
-
-                #signal.resize((MS, NRb))
-                for N in range(NRr + NumRead + 1, NRb + 1):
-                    signal[:, N - 1] = S[:, NumRead - 1]
-
-            F = pyfftw.interfaces.numpy_fft.fft2(detrend(signal, 0), [MS, NRb])
-
-            ### Clear top samples
-            #if (ifd == -1):
-            #    # HiCARS2
-            #    signal[0:250,:] = 0
-
-            if undersamp == 0:
-                Fs = pyfftw.interfaces.numpy_fft.fft2(signal[MS - 800 - 1:MS - 1], [800 - 1, NRb])
-                F[2561-1, :] = F[2561-1, :] - 4 * Fs[641 - 1, :]
-
-            F = Filter * F
-            signal = pyfftw.interfaces.numpy_fft.ifft2(F, [MS, NRb])
-
-            if NB == 1:
-                Nii = int(math.floor((Xo[NGWri - 1] / DX) + 0.99999)) + 1
-            else:
-                Nii = Nif + 1
-            Nif = int(math.floor(Xo[NGWrf - 1] / DX)) + 1
-
-            # Interpolate filtered signal to resampling points
-            signali = np.empty((MS, Nif - Nii + 1), complex)
-            for Ni in range(Nii, Nif + 1):
-                Nci = Nc[Ni - 1]
-                Nci = max(Nci, 2)
-                Nci = min(Nci, len(Xo) - 1)
-                X = (Ni - 1) * DX
-                X1 = Xo[Nci - 1 - 1]
-                X2 = Xo[Nci - 1]
-                X3 = Xo[Nci + 1 - 1]
-                P1 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) - 1 - 1)]
-                P2 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) - 1)]
-                P3 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) + 1 - 1)]
-                signali[:, Ni - Nii + 1 - 1] = quad3(X, X1, X2, X3, P1, P2, P3)
-
-            # Part 1: Generate missing data at start of data tear.
-            if (NT > 1) and (NB == 1):
-                D1 = Xo[NRt[NT - 1 - 1] - 1]
-                D2 = Xo[NRt[NT - 1 - 1] + 1 - 1]
-                N1 = int(math.floor(D1 / DX)) + 1
-                N2 = int(math.floor(D2 / DX)) + 1
-                for Ni in range(N1 + int(math.floor((N2 - N1 + 2) / 2)),
-                                N1 + int(math.floor((N2 - N1 + 2) / 2))
-                                   + max(0, int(math.floor((N2 - N1 - 19) / 2))) - 1 + 1):
-                    signalim[1 - 1:MS - 1] = 0.0
-                    out = out + 1
-                for Ni in range(N1 + int(math.floor((N2 - N1 + 2) / 2))
-                                   + max(0, int(math.floor((N2 - N1 - 19) / 2))), N2 + 1):
-                    Wt = 0.5 - 0.5 * math.cos((math.pi / 10.0) * (Ni - (N2 - 9)))
-                    signalim = Wt * signali[:, 1 - 1]
-                    out = out + 1
-                signalout = signalim
-
-            # Part 2: Output good resampled points.
-            if (NT <= 1) and (NB == 1):
-                signalout = signali
-            else:
-                signalout = np.concatenate((signalout, signali), axis=1)
-            out = out + signali.shape[1]
-
-            # Part 3: Generate missing data at end of data tear.
-            if (NT < NumTears) and (NB == NumNBlocks):
-                D1 = Xo[NRt[NT - 1] - 1]
-                D2 = Xo[NRt[NT - 1] + 1 - 1]
-                N1 = int(math.floor(D1 / DX)) + 1
-                N2 = int(math.floor(D2 / DX)) + 1
-                for Ni in range(N1 + 1, N1 + 1 + min(9, int(math.floor((N2 - N1) / 2))) - 1 + 1):
-                    Wt = 0.5 + 0.5 * math.cos((math.pi / 10.0) * (Ni - N1))
-                    signalim = Wt * signali[:, Nif - Nii + 1 - 1]
-                    out = out + 1
-                for Ni in range(N1 + min(10, int(math.floor((N2 - N1 + 2) / 2))),
-                                N1 + min(10, int(math.floor((N2 - N1 + 2) / 2)))
-                                   + max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1):
-                    signalim[1 - 1:MS - 1] = 0.0
-                    out = out + 1
-                signalout = np.concatenate((signalout, signalim), axis=1)
-
-    if ifd is not None:
-        ifd.close()
 
     if trim is not None and trim[3] != 0:
         signalout = signalout[:, trim[2]:trim[3]]
@@ -1587,548 +1308,53 @@ def raw_bxds_load(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=1
 
 
 
-def raw_bxds_size(Nc, Xo, NRt, DX=1, MS=3200, NR=1000, NRr=100):
-    '''
-    function to calculate the number of records to read, and sizes of output blocks, but
-    don't actually do any reading or filtering
 
-    Inputs:
-    ----------------
-            Nc: Geometry metadata
-            Xo: Geometry metadata
-           NRt: array of tear record numbers
-            DX: alongtrack range line spacing after interpolation
-            MS: number of fast-time samples in the output
-            NR: block size to load data (input bxds records per output record)
-           NRr: overlap between blocks(?)
-
-    Outputs:
-    ----------------
-       output is an array of raw MARFA data for the line and channel in question
-    '''
-    logging.debug("raw_bxds_size() start")
-    out = 0 # number of output records
-
-    # define number of tears
-    NumTears = len(NRt)
-
-    # Make certain that NRr is an even number.
-    if NRr % 2 == 1:
-        NRr += 1
-
-    # Check for single block case and force variables accordingly.
-    if (NumTears == 1) and (NR > NRt[0]): # NRt[1-1]
-        NR = NRt[0] #NRt[1-1]
-        NRr = 0
-
-    # NRb = Number of records included in each along-track filtering block
-    NRb = NR + NRr
-
-    NumRead = None
-    signalim = None
-
-    # start processing
-
-    for NT in range(1, NumTears + 1):
-
-        # NRs = Number of records to process up to the next data tear
-        if NT == 1:
-            NRs = NRt[0] #NRt[1 - 1]
-        else:
-            NRs = NRt[NT - 1] - NRt[NT - 2] #NRt[NT - 1] - NRt[NT - 1 - 1]
-
-        # NumNBlocks = Number of along-track blocks
-        NumNBlocks = max(1, int(math.floor((NRs + NR - 1 - NRr / 2) / NR)))
-
-        for NB in range(1, NumNBlocks + 1):
-
-            if NB > 1:
-                NRp = NumRead
-
-            # TODO: GNG -- this structure is peculiar.
-            # NumRead = Number of new records to read
-            NumRead = NR
-            if NB == 1:
-                NumRead = int(NR + (NRr/2))
-            if NB == NumNBlocks:
-                NumRead = int(NRs - ((NB-1)*NR) - (NRr/2))
-            if (NB == 1) and (NB == NumNBlocks):
-                NumRead = int(NRs)
-
-            # NGPri = Number of initial (start) record being processed this block
-            # NGPrf = Number of  final  (stop)  record being processed this block
-            # NOTE: NGPri and NGPrf are in the global index system, where
-            #       "global" refers to the full set of records.
-            # These variables are not used anywhere else in this code,
-            # but they are output here for progress reporting.
-            """ 
-            if NT == 1:
-                NGPri = ((NB - 1) * NR) - (NRr / 2) + 1
-                NGPrf = (NB * NR) + (NRr / 2)
-                if NB == 1:
-                    NGPri = 1
-                if NB == NumNBlocks:
-                    NGPrf = NRs
-            else:
-                NGPri = NRt[NT - 1 - 1] + ((NB - 1) * NR) - (NRr / 2) + 1
-                NGPrf = NRt[NT - 1 - 1] + (NB * NR) + (NRr / 2)
-                if NB == 1:
-                    NGPri = NRt[NT - 1 - 1] + 1
-                if NB == NumNBlocks:
-                    NGPrf = NRt[NT - 1 - 1] + NRs
-            """
-
-            # NGWri = Number of initial (start) record for controlling output on this processed block
-            # NGWrf = Number of  final  (stop)  record for controlling output on this processed block
-            # NOTE: NGWri and NGWrf are in the global index system, where
-            #       "global" refers to the full set of records.
-            # These variables are output for progress reporting.
-            if NT == 1:
-                NGWri = ((NB - 1) * NR) + 1
-                NGWrf = (NB * NR)
-                if NB == NumNBlocks:
-                    NGWrf = NRs
-            else:
-                NGWri = NRt[NT - 1 - 1] + ((NB - 1) * NR) + 1
-                NGWrf = NRt[NT - 1 - 1] + (NB * NR)
-                if (NB == NumNBlocks):
-                    NGWrf = NRt[NT - 1 - 1] + NRs
-
-            # Read Data and define signal.
-            # Pad (NRr/2) overlap region with first/last records on first/last blocks.
-            S = np.empty((MS, NumRead))
-            if NB == 1:
-                signal = np.empty((MS, int(NRr / 2 + NumRead)))
-            else:
-                signal = np.empty((MS, int(NRr + NumRead)))
-
-            if (NB > 1) and (NB == NumNBlocks):
-                signal = np.resize(signal, (MS, NRb))
-
-            if NB == 1:
-                Nii = int(math.floor((Xo[NGWri - 1] / DX) + 0.99999)) + 1
-            else:
-                Nii = Nif + 1
-            Nif = int(math.floor(Xo[NGWrf - 1] / DX)) + 1
-
-            # Interpolate filtered signal to resampling points
-            signali = np.empty((MS, Nif - Nii + 1), complex)
-
-            # Part 1: Generate missing data at start of data tear segment.
-            if (NT > 1) and (NB == 1):
-                D1 = Xo[NRt[NT - 1 - 1] - 1]
-                D2 = Xo[NRt[NT - 1 - 1] + 1 - 1]
-                N1 = int(math.floor(D1 / DX)) + 1
-                N2 = int(math.floor(D2 / DX)) + 1
-                range_start = N1 + int(math.floor((N2 - N1 + 2) / 2))
-                range_len = max(0, int(math.floor((N2 - N1 - 19) / 2))) - 1 + 1
-                #for Ni in range(range_start, range_start + range_len):
-                #    signalim[0:MS - 1] = 0.0
-                range_start = N1 + int(math.floor((N2 - N1 + 2) / 2)) \
-                            + max(0, int(math.floor((N2 - N1 - 19) / 2)))
-                range_end = N2 + 1
-                for Ni in range(range_start, range_end):
-                    Wt = 0  #0.5 - 0.5 * math.cos((math.pi / 10.0) * (Ni - (N2 - 9)))
-                    signalim = Wt * signali[:, 0]
-
-                out += range_len + (range_end - range_start)
-                assert signali.shape[1] == (range_len + (range_end - range_start))
-
-                signalout = signalim
-
-            # Part 2: Output good resampled points.
-            out += signali.shape[1]
-
-            # Part 3: Generate missing data at end of data tear.
-            if (NT < NumTears) and (NB == NumNBlocks):
-                D1 = Xo[NRt[NT - 1] - 1]
-                D2 = Xo[NRt[NT - 1] + 1 - 1]
-                N1 = int(math.floor(D1 / DX)) + 1
-                N2 = int(math.floor(D2 / DX)) + 1
-                range_start = N1 + 1
-                range_len0 = min(9, int(math.floor((N2 - N1) / 2))) - 1 + 1
-                out += range_len0
-                for Ni in range(range_start, range_start + range_len0):
-                    Wt = 0 # 0.5 + 0.5 * math.cos((math.pi / 10.0) * (Ni - N1))
-                    signalim = Wt * signali[:, Nif - Nii + 1 - 1]
-                range_start = N1 + min(10, int(math.floor((N2 - N1 + 2) / 2)))
-                range_len1 = max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1
-                for Ni in range(range_start, range_start + range_len1):
-                    signalim[0:MS - 1] = 0.0
-                out += range_len0 + range_len1 #signalout = np.concatenate((signalout, signalim), axis=1)
-                assert range_len0 + range_len1 == signalim.shape[1]
-                assert signalim is not None
-
-    logging.debug("bxds_load_size() = {:d}".format(out))
-    return out
-
-
-def raw_bxds_load__read_stackgen_block(stackgen, MS, num_read, NB):
-    """ 
-    Read a block of NumRead traces with trace length == MS from a stack generator
-    Inputs:
-    ---------------
-    stackgen: stack generator
-    MS: number of samples per trace
-    num_read: Number of traces to read
-    NB: block number
-    
-    Outputs:
-    -------
-    s: array of traces
-    """
-
-    s = np.empty((MS, num_read))
-    for i in range(num_read):
-        try:
-            trace = next(stackgen)
-        except StopIteration:
-            raise Exception("Short stackgen read at NB={:d} i={:d}\n".format(int(NB), i))
-        s[:, i] = trace.data[0:MS]
-
-    return s
-
-def raw_bxds_load__read_file_block(ifd, MS, num_read, NB):
-    """ 
-    Read a block of NumRead traces with trace length == MS from a file
-    Inputs:
-    ---------------
-         ifd: input file descriptor
-          MS: number of samples per trace
-    num_read: Number of traces to read
-          NB: block number
-    
-    Outputs:
-    -------
-    s: array of traces
-    """
-
-    s = np.empty((MS, num_read))
-    for i in range(num_read):   
-        data = np.fromfile(ifd, "<i2", MS)
-        if data.size < MS:
-            raise Exception("Short file read at NB={:d} i={:d} ({:d} of {:d})\n".format(NB, i, S.size, MS))
-        s[:, i] = data
-    return s
-
-def raw_bxds_load2(RadPath, GeoPath, channel, trim, DX=1, MS=3200, NR=1000, NRr=100):
-    '''
-    function to load raw MARFA bxds with the loopback chirp preserved.
-    being optimized for speed, and to remove idiosyncracies from the matlab conversion. ngg
-
-    Inputs:
-    ----------------
-        InPath: Path to the raw radar files
-       GeoPath: Path to the raw geometry files required to perform interpolation
-       channel: desired MARFA channel to load
-          trim: vector of values with trim[2]:trim[3] is range lines of interest.
-                None to use entire range
-            DX: alongtrack range line spacing after interpolation
-            MS: number of fast-time samples in the output
-            NR: block size to load data (input bxds records per output record)
-           NRr: overlap between blocks(?)
-
-    Outputs:
-    ----------------
-       output is an array of raw MARFA data for the line and channel in question
-    '''
-
-    RadName = os.path.join(RadPath, 'bxds')
-    out = 0 # number of output records
-    HiCARS = 2
-    undersamp = True
-    combined = True
-    channel = int(channel)
-
-    # load metadata
-    Nc = np.fromfile(os.path.join(GeoPath, "Nc"), dtype=int, sep=" ")
-    Xo = np.fromfile(os.path.join(GeoPath, "Xo"), sep=" ")
-    NRt = np.fromfile(os.path.join(GeoPath, "NRt"), dtype=int, sep=" ")
-
-    out_predicted = raw_bxds_size(Nc, Xo, NRt, DX, MS, NR, NRr)
-    signalout = np.empty((MS, out_predicted), dtype=complex)
-
-    # define number of tears
-    NumTears = len(NRt)
-
-    # Make certain that NRr is an even number.
-    if NRr % 2 == 1:
-        NRr += 1
-
-    # Check for single block case and force variables accordingly.
-    if (NumTears == 1) and (NR > NRt[1-1]):
-        NR = NRt[1-1]
-        NRr = 0
-
-    # NRb = Number of records included in each along-track filtering block
-    NRb = NR + NRr
-
-    # File descriptor for debugging
-    ifd = None
-#    OFD = open(OutName, "wb")
-
-    # Define Range Filtering.
-    # Tr = Range sampling time (0.02 microseconds; 50 MHz sampling)
-    Tr = 0.02
-    FilterR = np.zeros([MS, 1], complex)
-    Freq1 = 02.5
-    Freq2 = 17.5
-    M1 = int(math.floor((Freq1 * Tr * MS) + 0.5)) + 1
-    M2 = int(math.floor((Freq2 * Tr * MS) + 0.5)) + 1
-    BW = M2 - M1
-    #pcheck.pcheck(np.linspace(0.0,1.0,BW+1) * np.pi, 'Range')
-    Hanning = np.reshape(np.sin(np.linspace(0.0, 1.0, BW+1) * np.pi), (-1, 1))
-    FilterR[M1 - 1:M2] = Hanning
-    FilterR[MS + 2 - M2 - 1:MS + 2 - M1] = Hanning
-
-    # Define Along-Track Filtering.
-    # Ta = Along-track sampling time (0.0025 s; 400 Hz sampling)
-    Ta = 0.0025
-    FilterA = np.zeros([NRb, 1], complex)
-    Freq1 = 35.0
-    Freq2 = 40.0
-    N1 = int(math.floor((Freq1 * Ta * NRb) + 0.5)) + 1
-    N2 = int(math.floor((Freq2 * Ta * NRb) + 0.5)) + 1
-    BW = N2 - N1
-    #pcheck.pcheck(np.linspace(0.0,1.0,BW+1) * np.pi, 'Range')
-    Hanning = np.reshape(0.5 + 0.5 * np.cos(np.linspace(0.0, 1.0, BW + 1) * np.pi), (-1, 1))
-    FilterA[N1-1:N2] = Hanning
-    FilterA[NRb + 2 - N2 - 1:NRb + 2 - N1] = 1.0 - Hanning
-    FilterA[0:N1 - 1] = 1.0
-    FilterA[NRb + 3 - N1 - 1:NRb] = 1.0
-
-    # Combine into 2D Filter
-    Filter = FilterR * FilterA.conj().transpose()
-
-    if channel in (5, 6, 7, 8):
-        channel_specs = parse_channels('[1,%d,1,0,0]' % (int(channel)-4))
-    else:
-        raise ValueError('filterRA: illegal channel number requested')
-    tracegen = unfoc.read_RADnhx_gen(RadName, channel_specs)
-    stackgen = unfoc.stacks_gen(tracegen, channel_specs, 1)
-
-    NumRead = None
-
-    tear_idx_prev = 0
-    # start processing each segment
-    for NT in range(1, NumTears + 1):
-
-        # NRs = Number of records to process in this segment (up to the next data tear)
-        tear_idx = NRt[NT - 1]
-        NRs = tear_idx - tear_idx_prev
-        tear_idx_prev = tear_idx
-
-        # NumNBlocks = Number of along-track blocks in this segment
-        NumNBlocks = max(1, int(math.floor((NRs + NR - 1 - NRr / 2) / NR)))
-
-        # Process each block in this segment
-        for NB in range(1, NumNBlocks + 1):
-
-            if NB > 1:
-                NRp = NumRead
-
-            # TODO: GNG -- this structure is peculiar.
-            # NumRead = Number of new records to read
-            NumRead = NR
-            if NB == 1:
-                NumRead = int(NR + (NRr/2))
-            if NB == NumNBlocks:
-                NumRead = int(NRs - ((NB-1)*NR) - (NRr/2))
-            if (NB == 1) and (NB == NumNBlocks):
-                NumRead = int(NRs)
-
-            # NGPri = Number of initial (start) record being processed this block
-            # NGPrf = Number of  final  (stop)  record being processed this block
-            # NOTE: NGPri and NGPrf are in the global index system, where
-            #       "global" refers to the full set of records.
-            # These variables are not used anywhere else in this code,
-            # but they are output here for progress reporting.
-            if NT == 1:
-                NGPri = ((NB - 1) * NR) - (NRr / 2) + 1
-                NGPrf = (NB * NR) + (NRr / 2)
-                if NB == 1:
-                    NGPri = 1
-                if NB == NumNBlocks:
-                    NGPrf = NRs
-            else:
-                NGPri = NRt[NT - 1 - 1] + ((NB - 1) * NR) - (NRr / 2) + 1
-                NGPrf = NRt[NT - 1 - 1] + (NB * NR) + (NRr / 2)
-                if NB == 1:
-                    NGPri = NRt[NT - 1 - 1] + 1
-                if NB == NumNBlocks:
-                    NGPrf = NRt[NT - 1 - 1] + NRs
-
-            # NGWri = Number of initial (start) record for controlling output on this processed block
-            # NGWrf = Number of  final  (stop)  record for controlling output on this processed block
-            # NOTE: NGWri and NGWrf are in the global index system, where
-            #       "global" refers to the full set of records.
-            # These variables are output for progress reporting.
-            if NT == 1:
-                NGWri = ((NB - 1) * NR) + 1
-                NGWrf = (NB * NR)
-                if NB == NumNBlocks:
-                    NGWrf = NRs
-            else:
-                NGWri = NRt[NT - 1 - 1] + ((NB - 1) * NR) + 1
-                NGWrf = NRt[NT - 1 - 1] + (NB * NR)
-                if (NB == NumNBlocks):
-                    NGWrf = NRt[NT - 1 - 1] + NRs
-
-            # Read Data and define signal.
-            # Pad (NRr/2) overlap region with first/last records on first/last blocks.
-            if NB == 1:
-                #S = np.empty((MS, NumRead))
-                if ifd is None:
-                    S = raw_bxds_load__read_stackgen_block(stackgen, MS=MS, num_read=NumRead, NB=NB)
-                else:
-                    S = raw_bxds_load__read_file_block(ifd, MS=MS, num_read=NumRead, NB=NB)
-
-                signal = np.empty((MS, int(NRr / 2 + NumRead)))
-                for N in range(1, int(NRr / 2 + 1)):
-                    signal[:, N - 1] = S[:, 1 - 1]
-                signal[:, int((NRr / 2) + 1 - 1):int((NRr / 2) + NumRead)] = S
-            else:
-                signal = np.empty((MS, int(NRr + NumRead)))
-                signal[:, 1 - 1:NRr] = S[:, int(NRp - NRr + 1 - 1):NRp]
-                if ifd is None:
-                    S = raw_bxds_load__read_stackgen_block(stackgen, MS=MS, num_read=NumRead, NB=NB)
-                else:
-                    S = raw_bxds_load__read_file_block(ifd, MS=MS, num_read=NumRead, NB=NB)
-
-                signal[:, NRr + 1 - 1:NRr + NumRead] = S
-
-            if (NB > 1) and (NB == NumNBlocks):
-                signal = np.resize(signal, (MS, NRb))
-                # This gives a warning when running profile or coverage
-                #ValueError: cannot resize an array that references or is referenced
-                #by another array in this way.
-                #Use the np.resize function or refcheck=False
-
-                #signal.resize((MS, NRb))
-                # pad with the last value
-                for N in range(NRr + NumRead + 1, NRb + 1):
-                    signal[:, N - 1] = S[:, NumRead - 1]
-
-            F = pyfftw.interfaces.numpy_fft.fft2(detrend(signal, 0), [MS, NRb])
-
-            ### Clear top samples
-            #if (ifd == -1):
-            #    # HiCARS2
-            #    signal[0:250,:] = 0
-
-            if undersamp == 0:
-                Fs = pyfftw.interfaces.numpy_fft.fft2(signal[MS - 800 - 1:MS - 1], [800 - 1, NRb])
-                F[2561-1, :] = F[2561-1, :] - 4 * Fs[641 - 1, :]
-
-            F = Filter * F
-            signal = pyfftw.interfaces.numpy_fft.ifft2(F, [MS, NRb])
-
-            if NB == 1:
-                Nii = int(math.floor((Xo[NGWri - 1] / DX) + 0.99999)) + 1
-            else:
-                Nii = Nif + 1
-            Nif = int(math.floor(Xo[NGWrf - 1] / DX)) + 1
-
-            # Interpolate filtered signal to resampling points
-            signali = np.empty((MS, Nif - Nii + 1), complex)
-            for Ni in range(Nii, Nif + 1):
-                Nci = Nc[Ni - 1]
-                Nci = max(Nci, 2)
-                Nci = min(Nci, len(Xo) - 1)
-                X = (Ni - 1) * DX
-                X1 = Xo[Nci - 1 - 1]
-                X2 = Xo[Nci - 1]
-                X3 = Xo[Nci + 1 - 1]
-                P1 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) - 1 - 1)]
-                P2 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) - 1)]
-                P3 = signal[:, int((Nci - NGWri + (NRr / 2) + 1) + 1 - 1)]
-                signali[:, Ni - Nii + 1 - 1] = quad3(X, X1, X2, X3, P1, P2, P3)
-
-            # GNG: Part 1 and Part 2 are basically mutually exclusive conditions. Refactor?
-            # Part 1: Generate missing data at start of data tear.
-            if (NT > 1) and (NB == 1):
-                D1 = Xo[NRt[NT - 1 - 1] - 1]
-                D2 = Xo[NRt[NT - 1 - 1] + 1 - 1]
-                N1 = int(math.floor(D1 / DX)) + 1
-                N2 = int(math.floor(D2 / DX)) + 1
-                range_start = N1 + int(math.floor((N2 - N1 + 2) / 2))
-                range_len = max(0, int(math.floor((N2 - N1 - 19) / 2))) - 1 + 1
-                for Ni in range(range_start, range_start + range_len):
-                    signalim[1 - 1:MS - 1] = 0.0
-                    out += 1
-                for Ni in range(range_start + range_len, N2 + 1):
-                    Wt = 0.5 - 0.5 * math.cos((math.pi / 10.0) * (Ni - (N2 - 9)))
-                    signalim = Wt * signali[:, 1 - 1]
-                    out += 1
-                #signalout = signalim
-                signalout[:, 0:out] = signalim
-
-            # Part 2: Output good resampled points.
-            if (NT <= 1) and (NB == 1):
-                #signalout = signali
-                assert out == 0
-                signalout[:, out:(out + signali.shape[1])] = signali
-            else:
-                #signalout = np.concatenate((signalout, signali), axis=1)
-                signalout[:, out:(out + signali.shape[1])] = signali
-            out += signali.shape[1]
-
-            # Part 3: Generate missing data at end of data tear.
-            if (NT < NumTears) and (NB == NumNBlocks):
-                D1 = Xo[NRt[NT - 1] - 1]
-                D2 = Xo[NRt[NT - 1] + 1 - 1]
-                N1 = int(math.floor(D1 / DX)) + 1
-                N2 = int(math.floor(D2 / DX)) + 1
-                range_start = N1 + 1
-                range_len = min(9, int(math.floor((N2 - N1) / 2))) - 1 + 1
-                out0 = out
-                for Ni in range(range_start, range_start + range_len):
-                    Wt = 0.5 + 0.5 * math.cos((math.pi / 10.0) * (Ni - N1))
-                    signalim = Wt * signali[:, Nif - Nii + 1 - 1]
-                    out += 1
-                range_start = N1 + min(10, int(math.floor((N2 - N1 + 2) / 2)))
-                range_len = max(0, int(math.floor((N2 - N1 - 18) / 2))) - 1 + 1
-                for Ni in range(range_start, range_start + range_len):
-                    signalim[1 - 1:MS - 1] = 0.0
-                    out += 1
-                #signalout = np.concatenate((signalout, signalim), axis=1)
-                signalout[:, out0:out] = signalim
-    assert out_predicted == out
-
-    if ifd is not None:
-        ifd.close()
-
-    if trim is not None and trim[3] != 0:
-        signalout = signalout[:, trim[2]:trim[3]]
-
-    return signalout
 
 def test_raw_bxds_load():
 
+    # /disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/AGAE/JKB2i/X5Aa/Xo
     testcases = [
         {
         'raw_path': "/disk/kea/WAIS/orig/xlob/DEV2/JKB2t/Y81a/RADnh5",
         'geo_path': "/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S2_FIL/DEV2/JKB2t/Y81a",
         'sigwin': [0, 1000, 0, 0],
-        } , {
-        'raw_path': "/disk/kea/WAIS/orig/xlob/NAQLK/JKB2j/ZY1b/RADnh3/"
-        'geo_path': "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/NAQLK/JKB2j/ZY1b/"
+        #}, { # 1 tear
+        #'raw_path': "/disk/kea/WAIS/orig/xlob/NAQLK/JKB2j/ZY1a/RADnh3/",
+        #'geo_path': "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/NAQLK/JKB2j/ZY1a/",
+        #'sigwin': [0, 1000, 0, 0]
+        }, { # 1 tear
+        'raw_path': "/disk/kea/WAIS/orig/xlob/NAQLK/JKB2j/ZY1b/RADnh3/",
+        'geo_path': "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/NAQLK/JKB2j/ZY1b/",
         'sigwin': [0, 1000, 0, 12000]
-        }
+        #}, { # 0 tears -- no metadata.
+        #'raw_path': "/disk/kea/WAIS/orig/xlob/CLEM/JKB2j/COL01a",
+        #'geo_path': "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/CLEM/JKB2j/COL01a",
+        #'sigwin': [0, 1000, 0, 0]
+        #}, { # 49 tears and a short read at the end
+        ##/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S2_FIL/DEV/JKB2t/Y49a/NRt
+        #'raw_path': "/disk/kea/WAIS/orig/xlob/DEV/JKB2t/Y49a/RADnh5",
+        #'geo_path': "/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S2_FIL/DEV/JKB2t/Y49a",
+        #'sigwin': [0, 1000, 0, 0]
+
+        },
     ]
     chan = '5'
-    testcases = (testcases[0],)
-    for rec in testcases:
-        logging.debug("raw_bxds_load2()")
-        bxds2 = raw_bxds_load2(rec['raw_path', rec['geo_path'], chan, rec['sigwin'])
+    #testcases = (testcases[0],)
+    for i, rec in enumerate(testcases):
+        logging.info("[{:d} of {:d}] Testing raw_bxds_load with {:s}".format(i+1, len(testcases), rec['raw_path']))
 
         logging.debug("raw_bxds_load()")
-        bxds2 = raw_bxds_load(rec['raw_path', rec['geo_path'], chan, rec['sigwin'])
+        bxds1 = raw_bxds_load(rec['raw_path'], rec['geo_path'], chan, rec['sigwin'])
 
+        """
+        logging.debug("raw_bxds_load2()")
+        bxds2 = raw_bxds_load2(rec['raw_path'], rec['geo_path'], chan, rec['sigwin'])
+
+        assert bxds2.shape == bxds1.shape
         rmse = np.sqrt(np.square(abs(bxds2 - bxds1)).mean())
         logging.debug("RMSE(raw_bxds_load - raw_bxds_load2) = {:0.3g}".format(rmse))
         assert rmse < 1e-9
-
+        """
 
 
 def complex_correlation_coefficient(cmp1, cmp2):
