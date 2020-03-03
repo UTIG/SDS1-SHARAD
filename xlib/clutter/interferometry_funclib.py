@@ -18,6 +18,7 @@ import pytest
 from tkinter import *
 import logging
 import os
+import csv
 
 import pyfftw
 import numpy as np
@@ -407,23 +408,25 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
         # predefine the correlation map
         corrmap = np.zeros((np.size(cmpA, axis=0), col), dtype=float)
         # calculate correlation map
+
+
         for ii in range(col):
             num = np.floor((fresnel / 2) / az_step)
             val = np.multiply(az_step, np.arange(-num, num + 0.1))
-            val = indices[ii] + val
-            #start_ind = int(indices[ii] - np.floor(fresnel / 2))
-            #end_ind = int(indices[ii] + np.floor(fresnel / 2))
+            val = (indices[ii] + val).astype(int)
+            ttop = np.multiply(cmpA[:, val], np.conj(cmpB[:, val]))
+            tbot_a = np.square(np.abs(cmpA[:, val]))
+            tbot_b = np.square(np.abs(cmpB[:, val]))
             for jj in range(len(cmpA)):
-                ywindow = np.arange(jj, jj + n, 1)
-                viable = np.argwhere(ywindow <= len(cmpA) - 1)
-                ywindow = ywindow[viable]
-                #S1 = cmpA[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
-                #S2 = cmpB[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
-                S1 = cmpA[ywindow.astype(int), val.astype(int)]
-                S2 = cmpB[ywindow.astype(int), val.astype(int)]
-                top = np.mean(np.multiply(S1, np.conj(S2)))
-                bottomA = np.mean(np.square(np.abs(S1)))
-                bottomB = np.mean(np.square(np.abs(S2)))
+                ymax = min(jj + n, len(cmpA))
+                S1 = cmpA[jj:ymax, val]
+                S2 = cmpB[jj:ymax, val]
+                #top = np.mean(np.multiply(S1, np.conj(S2)))
+                #bottomA = np.mean(np.square(np.abs(S1)))
+                #bottomB = np.mean(np.square(np.abs(S2)))
+                top = np.mean(ttop[jj:ymax])
+                bottomA = np.mean(tbot_a[jj:ymax])
+                bottomB = np.mean(tbot_b[jj:ymax])
                 bottom = np.sqrt(np.multiply(bottomA, bottomB))
                 corrmap[jj, ii] = np.abs(np.divide(top, bottom))
     else:
@@ -488,15 +491,23 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
             val = np.multiply(az_step, np.arange(-num, num + 0.1))
             val = (indices[ii] + val).astype(int)
 
-            for jj in range(len(cmpA)):
-                ymax = min(jj + n, len(cmpA))
-                temp = np.mean( corr[jj:ymax, val] )
-                output[jj, ii] = np.angle(temp)
+            # running mean method
+            temp = np.empty((corr.shape[0] - 1, len(val)), dtype=np.complex)
+            for jj in range(len(val)):
+                temp[:, jj] = running_mean(corr[:, val[jj]], n)
+            output[0:-1, ii] = np.angle(np.mean(temp, axis=1))
 
             if roll:
                 output[:, ii] += np.mean(rollphase[val])
 
     return output
+
+def running_mean(x, N):
+    """ This one is not centered """
+    cumsum = np.cumsum(np.insert(x, 0, 0), dtype=x.dtype)
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+
 
 def FOI_extraction(image, FOI):
     '''
@@ -862,13 +873,14 @@ def load_roll(treg_path, s1_path):
 
     # load the timing and alongtrack position associated with each range line
     # from the S1_POS folder
-    temp = pd.read_csv(s1_path + 'ztim_xyhd', header=None, delimiter=' ')
-    S1_ztim = np.zeros((len(temp), ), dtype=float)
-    S1_dist = np.zeros((len(temp), ), dtype=float)
-    for ii in range(len(S1_ztim)):
-        S1_ztim[ii] = float(temp[2][ii].replace(')', ''))
-        S1_dist[ii] = float(temp[6][ii])
-    del temp
+    fn = s1_path + 'ztim_xyhd'
+    logging.debug("Reading " + fn)
+    S1_ztim = []
+    S1_dist = []
+    with open(fn, 'r') as fin:
+        for rec in csv.reader(fin, delimiter=' '):
+            S1_ztim.append(float(rec[2].replace(')', ''))) # seconds
+            S1_dist.append(float(rec[6])) # distance (meters)
 
     # interpolate norm_roll to S1_ztim
     S1_roll = np.interp(S1_ztim, norm_ztim, norm_roll)
