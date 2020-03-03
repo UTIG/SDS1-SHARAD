@@ -409,7 +409,8 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
         corrmap = np.zeros((np.size(cmpA, axis=0), col), dtype=float)
         # calculate correlation map
 
-
+        # Correlation with windowed moving average
+        # mean(A*conj(B)) / mean(A)*mean(B)
         for ii in range(col):
             num = np.floor((fresnel / 2) / az_step)
             val = np.multiply(az_step, np.arange(-num, num + 0.1))
@@ -417,18 +418,33 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
             ttop = np.multiply(cmpA[:, val], np.conj(cmpB[:, val]))
             tbot_a = np.square(np.abs(cmpA[:, val]))
             tbot_b = np.square(np.abs(cmpB[:, val]))
-            for jj in range(len(cmpA)):
-                ymax = min(jj + n, len(cmpA))
-                S1 = cmpA[jj:ymax, val]
-                S2 = cmpB[jj:ymax, val]
-                #top = np.mean(np.multiply(S1, np.conj(S2)))
-                #bottomA = np.mean(np.square(np.abs(S1)))
-                #bottomB = np.mean(np.square(np.abs(S2)))
-                top = np.mean(ttop[jj:ymax])
-                bottomA = np.mean(tbot_a[jj:ymax])
-                bottomB = np.mean(tbot_b[jj:ymax])
-                bottom = np.sqrt(np.multiply(bottomA, bottomB))
-                corrmap[jj, ii] = np.abs(np.divide(top, bottom))
+            if False:
+                for jj in range(len(cmpA)):
+                    ymax = min(jj + n, len(cmpA))
+                    #S1 = cmpA[jj:ymax, val]
+                    #S2 = cmpB[jj:ymax, val]
+                    #top = np.mean(np.multiply(S1, np.conj(S2)))
+                    #bottomA = np.mean(np.square(np.abs(S1)))
+                    #bottomB = np.mean(np.square(np.abs(S2)))
+                    top = np.mean(ttop[jj:ymax])
+                    bottomA = np.mean(tbot_a[jj:ymax])
+                    bottomB = np.mean(tbot_b[jj:ymax])
+                    bottom = np.sqrt(np.multiply(bottomA, bottomB))
+                    corrmap[jj, ii] = np.abs(np.divide(top, bottom))
+            else:
+                # running mean method of windowed average
+                ttopm = np.empty((ttop.shape[0] - 1, len(val)), dtype=np.complex)
+                tbot_am = np.empty((tbot_a.shape[0] - 1, len(val)))
+                tbot_bm = np.empty((tbot_b.shape[0] - 1, len(val)))
+                for jj in range(len(val)):
+                    ttopm[:, jj] = running_mean(ttop[:, jj], n)
+                    tbot_am[:, jj] = running_mean(tbot_a[:, jj], n)
+                    tbot_bm[:, jj] = running_mean(tbot_b[:, jj], n)
+
+                bottom = np.sqrt(np.multiply(tbot_am, tbot_bm))
+                corrmap[0:-1, ii] = np.mean(np.abs(np.divide(ttopm, bottom)), axis=1)
+                del ttopm, tbot_am, tbot_bm, bottom
+                
     else:
         top = np.multiply(cmpA, np.conj(cmpB))
         bottomA = np.square(np.abs(cmpA))
