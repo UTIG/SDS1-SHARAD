@@ -49,11 +49,9 @@ def read_ztim(filename, field_names=None):
 
         num_fields = len(zformat.lstrip(b'zfil1z').rstrip())
         zformat = ztim_format + num_fields * field_format
-        print(zformat)
 
         if field_names is None:
             field_names = ['d'+str(elem) for elem in range(num_fields)]
-        print(field_names)
 
         if len(field_names) != num_fields: # pragma: no cover
             logging.warning("read_ztim: Input field names of wrong length! "
@@ -191,6 +189,29 @@ def test_read_one_zfile(filename): # pragma: no cover
             logging.error(line)
 
 
+def test_read_ztim_write():
+    """ Read a ztim file and write it out as a text file
+
+    """
+    logging.info("test_read_ztim_write()")
+    fields = 'LON LAT GRV AC_ELEVATION'.split()
+    filename = '/disk/kea/CHA/targ/tpro/PEL/GCX0d/R42a/p_grvfld/ztim_llgz_grvfld.bin'
+    data = read_ztim(filename, fields)
+
+    # TODO: can we do this without copying?
+    dfmts = [ ('YEAR','i4'),('DOY','i4'),('itim','i4'),('LON','float64'),('LAT','float64'),('AC_ELEVATION','float64')]
+    data2=np.zeros(data.shape[0],dtype=dfmts)
+    for name, dfmt in dfmts:
+        data2[name] = data[name]
+
+    fmt = "%d\t%d\t%d\t%f\t%f\t%f"
+
+    outfile = os.path.join(os.path.dirname(__file__), 'zfile_test_read_ztim_write.txt')
+    logging.info("Writing " + outfile)
+
+    np.savetxt(outfile, data2 , delimiter="\t", fmt=fmt)
+
+
 def test_att_zfile(filename):
     # Read a zfile formatted with attitude data
     logging.debug("test_att_zfile('{:s}')".format((filename)))
@@ -245,6 +266,7 @@ def main():
 
     test_read_ztim_bin(limit=5)
 
+    test_read_ztim_write()
     filename = '/disk/kea/WAIS/targ/treg/NAQLK/JKB2j/ZY1b/TRJ_JKB0/ztim_llzrphsaaa.bin'
     test_att_zfile(filename)
     test_read_ztim_text(limit=10)
