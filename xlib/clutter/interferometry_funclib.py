@@ -481,49 +481,20 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
         # predefine the interferogram
         output = np.zeros((np.size(cmpA, axis=0), col), dtype=float)
         # calculate interferogram
+        corr = np.multiply(cmpA, np.conj(cmpB))
+        # Calculate windowed average
         for ii in range(col):
             num = np.floor((fresnel / 2) / az_step)
             val = np.multiply(az_step, np.arange(-num, num + 0.1))
-            val = indices[ii] + val
-            #start_ind = int(indices[ii] - np.floor(fresnel / 2))
-            #end_ind = int(indices[ii] + np.floor(fresnel / 2))
-            for jj in range(len(cmpA)):
-                ywindow = np.arange(jj, jj + n, 1)
-                viable = np.argwhere(ywindow <= len(cmpA) - 1)
-                ywindow = ywindow[viable]
-                #S1 = cmpA[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
-                #S2 = cmpB[ywindow.astype(int), np.arange(start_ind, end_ind, az_step)]
-                S1 = cmpA[ywindow.astype(int), val.astype(int)]
-                S2 = cmpB[ywindow.astype(int), val.astype(int)]
-                temp = np.mean(np.multiply(S1, np.conj(S2)))
-                output[jj, ii] = np.angle(temp)
-            if roll:
-                #output[:, ii] = output[:, ii] - np.mean(rollphase[start_ind:end_ind])
-                output[:, ii] = output[:, ii] + np.mean(rollphase[val.astype(int)])
-        #inter = np.zeros((len(cmpA), np.size(cmpA, axis=1)), dtype=float)
-        #for ii in range(np.size(cmpA, axis=1)):
-        #    #if ii % 500 == 0:
-        #    #    print(str(ii), 'of', str(np.size(cmpA, axis=1)))
-        #    xwindow = np.arange(ii - (fresnel - 1) / 2, ii + 1 +(fresnel - 1) / 2, 1)
-        #    if ii < fresnel:
-        #        viable = np.argwhere(xwindow >= 0)
-        #        xwindow = np.transpose(xwindow[viable])
-        #    if np.size(cmpA, axis=1) - ii < fresnel:
-        #        viable = np.argwhere(xwindow < np.size(cmpA, axis=1) - 1)
-        #        xwindow = np.transpose(xwindow[viable])
-        #    for jj in range(len(cmpA)):
-        #        ywindow = np.arange(jj, jj + n, 1)
-        #        viable = np.argwhere(ywindow <= len(cmpA) - 1)
-        #        ywindow = ywindow[viable]
-        #        temp = np.mean(np.multiply(cmpA[ywindow.astype(int), xwindow.astype(int)], np.conj(cmpB[ywindow.astype(int), xwindow.astype(int)])))
-        #        inter[jj, ii] = np.angle(temp)
-        #    if roll:
-        #        inter[:, ii] = inter[:, ii] - np.mean(rollphase[xwindow.astype(int)])
+            val = (indices[ii] + val).astype(int)
 
-    #if fresnel != 1:
-    #    output = np.divide(stack(inter, fresnel), fresnel)
-    #else:
-    #    output = inter
+            for jj in range(len(cmpA)):
+                ymax = min(jj + n, len(cmpA))
+                temp = np.mean( corr[jj:ymax, val] )
+                output[jj, ii] = np.angle(temp)
+
+            if roll:
+                output[:, ii] += np.mean(rollphase[val])
 
     return output
 
