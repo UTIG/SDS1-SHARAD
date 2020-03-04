@@ -40,7 +40,8 @@ WAIS=os.getenv('WAIS', '/disk/kea/WAIS')
 
 import unfoc_KMS2 as unfoc
 
-from parse_channels import parse_channels
+# Issue a warning if we attempt to create a gap of length 0 
+WARN_GAP0 = False
 
 def quad3(X,X1,X2,X3,P1,P2,P3):
     """ Quadratic interpolation with three input points 
@@ -117,28 +118,31 @@ def main():
 
     with open(OutName, "wb") as OFD:
         for signalim in filter_ra_gen(InName, geo_path, DX, MS, NR, NRr, channel, 
-                                  undersamp, combined, filter2d=(not args.nofilter2d)):
+                                  undersamp=undersamp, combined=combined, filter2d=(not args.nofilter2d)):
             np.real(signalim).astype('<i2').T.tofile(OFD)
 
-def read_stackgen_block(stackgen, MS, NumRead, NB, filename="?"):
-    block = np.empty((MS,NumRead))
+def read_stackgen_block(stackgen, MS, NumRead, NB, filename="?", short_read_severity=logging.INFO):
+    block = np.empty((MS, NumRead))
     for i in range(NumRead):
         try:
             trace = next(stackgen)
         except StopIteration:
+            # It's fine to have a StopIteration here,
+            # because we won't always have an even number of stacks.
+            # TODO: check that we have fully-formed traces.
             msg = "Short read (stackgen NB={:d} i={:d} bytes={:d} of {:d})".format(NB, i, MS, MS)
-            logging.warning(msg)
-            raise StopIteration(msg)
+            logging.log(short_read_severity, msg)
+            break #raise StopIteration(msg)
         block[:, i] = trace.data[0:MS]
     return block
     
-def read_file_block(IFD, MS, NumRead, NB, filename="?"):
-    block = np.empty((MS,NumRead))
+def read_file_block(IFD, MS, NumRead, NB, filename="?", short_read_severity=logging.WARNING):
+    block = np.empty((MS, NumRead))
     for i in range(NumRead):
         data = np.fromfile(IFD, "<i2", MS)
         if (data.size < MS):
             msg = "Short read (filegen NB={:d} i={:d} bytes={:d} of {:d})".format(NB, i, data.size, MS)
-            logging.warning(msg)
+            logging.log(short_read_severity, msg)
             raise StopIteration(msg)
         block[:,i] = data
     return block
@@ -166,19 +170,25 @@ def filter_ra_length(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None, d
         return len_output
 
 def filter_ra(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
-              undersamp=False, combined=False, filter2d=True, resample=True):
+              undersamp=False, combined=False, filter2d=True, resample=True, trim=None):
     """ Generate a filtered data file and output to a numpy array
     See filter_ra_gen for parameter information.
     """
 
+    if trim is not None and trim[1] is not None:
+        MS1 = trim[1] - trim[0]
+    else:
+        MS1 = MS
+        trim = (0, MS)
+
     len_output = filter_ra_length(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=snm)
-    signalout = np.empty((MS, len_output), dtype=complex)
+    signalout = np.empty((MS1, len_output), dtype=complex)
 
     idx = 0
     for signalim in filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm,
-                              undersamp, combined, filter2d, resample):
+                              undersamp, combined, filter2d, resample, trim=trim):
         assert len(signalim.shape) >= 2
-        signalout[:, idx:(idx + signalim.shape[1])] = signalim
+        signalout[trim[0]:trim[1], idx:(idx + signalim.shape[1])] = signalim
         idx += signalim.shape[1]
     assert idx == len_output
     return signalout
@@ -202,7 +212,8 @@ def test():
     assert x.shape[0] == 3200 and x.shape[1] > 0
     del x
 
-    logging.info("Processing " + bxds_input)
+    logging.info("Processing bxds    " + bxds_input)
+    logging.info("Processing geopath " + geopath)
     x = filter_ra(bxds_input, geopath, 1, 3200, 1000, 100, 5, filter2d=False)
     assert x is not None
     del x
@@ -211,10 +222,20 @@ def test():
     bxds_input = "/disk/kea/WAIS/orig/xlob/DEV/JKB2t/Y49a/RADnh5/bxds"
     geopath = '/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S2_FIL/DEV/JKB2t/Y49a'
 
-    logging.info("Processing " + bxds_input)
+    logging.info("Processing bxds    " + bxds_input)
+    logging.info("Processing geopath " + geopath)
     for x in filter_ra_gen(bxds_input, geopath, 1, 3200, 1000, 100, 5, filter2d=False):
         assert x is not None
         assert x.shape[0] == 3200 and x.shape[1] > 0
+
+    # Run self-tests with a trim length
+    logging.info("Processing trim bxds    " + bxds_input)
+    logging.info("Processing trim geopath " + geopath)
+    trim = (10, 58)
+    for x in filter_ra_gen(bxds_input, geopath, 1, 3200, 1000, 100, 5, filter2d=False, trim=trim):
+        assert x is not None
+        assert x.shape[0] == trim[1] - trim[0]
+        assert x.shape[1] > 0
 
 
     return 0
@@ -290,7 +311,7 @@ def fill_gap_gen(rec0_idx, rec0, rec1_idx, rec1, winsize, blocksize=None):
 
     blocksize: Blocksize limits the size of the max array to be generated.
                For now, blocksize==None is the only supported value, which 
-               generates the entire gap as one numpy array.  
+               generates the entire gap as one numpy array.
     """
 
     assert rec0_idx < rec1_idx
@@ -302,7 +323,8 @@ def fill_gap_gen(rec0_idx, rec0, rec1_idx, rec1, winsize, blocksize=None):
     nrecs = rec1_idx - rec0_idx - 1
 
     if nrecs == 0:
-        logging.warning("Gap length of 0: previous segment ended at {:d}, "
+        if WARN_GAP0:
+            logging.log(level, "Gap length of 0: previous segment ended at {:d}, "
                         "next segment begins at {:d}".format(rec0_idx, rec1_idx))
         # Yield no records
         return
@@ -356,6 +378,7 @@ def fill_gap_gen(rec0_idx, rec0, rec1_idx, rec1, winsize, blocksize=None):
 
 
 def test_fill_gap(b_run_timing=False):
+    global WARN_GAP0
     # MS = 3200
     # data1 = np.ones((MS,))
     # data2 = 2*np.ones((MS,))
@@ -364,11 +387,12 @@ def test_fill_gap(b_run_timing=False):
     
     for arr in fill_gap_gen(999, data_a, 1015, data_b, 5):
         for i, rec in enumerate(arr.transpose()):
-            print(i, i+999+1, rec.transpose())
+            pass #print(i, i+999+1, rec.transpose())
 
     for data1, data2 in ((data_a, data_b), (data_a, data_a)):
         # Short gaps
         for gaplen in (0, 1, 2, 3, 5, 10, 100):
+            WARN_GAP0 = not gaplen == 0
             for windowsize in (1, 2, 3, 5, 7, 11, 13):
                 x0 = 1
                 x1 = x0 + gaplen + 1
@@ -420,7 +444,8 @@ def test_fill_gap(b_run_timing=False):
                         assert idx == 0
                     else:
                         assert idx == arr1.shape[1] # all entries were filled
-    
+    # Reset gap warning
+    WARN_GAP0 = True
 
     ##############################################
     #data1 = np.array([1, 2, 0, 3, 4, 5])
@@ -465,7 +490,7 @@ def test_fill_gap(b_run_timing=False):
 
               
 def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
-                  undersamp=False, combined=False, filter2d=True, resample=True):
+                  undersamp=False, combined=False, filter2d=True, resample=True, trim=[None, None, None, None]):
     """ Filter a bxds file to doppler filtering and resampling to equal distances
     (with spacing DX).  
     
@@ -546,11 +571,21 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
     NRb = NR + NRr
 
 
-    Filter = make_range_filter(MS, NRb)
+    if trim is not None and trim[1] is not None:
+        MS1 = trim[1] - trim[0]
+        ftrim = trim[0:2]
+    else:
+        MS1 = MS
+        ftrim = (0, MS)
+
+
+    Filter = make_range_filter(MS1, NRb)
 
 
     # Detect if Hicars by stream name, getting directory name.
     # Find filename, HiCARS1 has bxds[C], HiCARS2 is just bxds
+    logging.debug("bxds_input={:s}".format(bxds_input))
+    logging.debug("snm={:s}".format(str(snm)))
     if snm is None:
         snm = os.path.basename(os.path.dirname(bxds_input))
     if snm == 'RADjh1':
@@ -573,12 +608,12 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
         if (channel in [1, 2]):
             if args.combined:
                 logging.debug("filter: Combining channels to make channel {:d}".format(channel))
-                channel_specs = parse_channels('[1,%d,1,%d,1]' % (channel, channel+2))
+                channel_specs = unfoc.parse_channels('[1,%d,1,%d,1]' % (channel, channel+2))
             else:
                 logging.debug("filter: Single channel {:d}".format(channel))
-                channel_specs = parse_channels('[1,%d,1,0,0]' % channel)
+                channel_specs = unfoc.parse_channels('[1,%d,1,0,0]' % channel)
         elif (channel in [5, 6, 7, 8]):
-            channel_specs = parse_channels('[1,%d,1,0,0]' % (channel-4))
+            channel_specs = unfoc.parse_channels('[1,%d,1,0,0]' % (channel-4))
         else: #pragma: no cover
             raise ValueError("filterRA: illegal channel number requested")
         tracegen = unfoc.read_RADnhx_gen(bxds_input, channel_specs)
@@ -592,9 +627,22 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
     # NT0 is the zero-based NT index
     for NT0 in range(NumTears):
 
-        # NRs = Number of records to process up to the next data tear
-        NRs = NRt[NT0 + 1] - NRt[NT0]
-  
+        # NRs = Number of records to process up to the next data tear,
+        # or to the last position available
+        assert NRt[NT0 + 1] > NRt[NT0]
+        NRs = min(len(Xo), NRt[NT0 + 1]) - min(len(Xo), NRt[NT0])
+        # The positions end before the end of this segment. This is
+        # unexpected and probably means some bxds data is missing.
+        if len(Xo) < NRt[NT0 + 1]:
+            msg = "Not enough positions for segment {:d} of {:d} (radar records {:d} to {:d}): " \
+                  "Xo has {:d} positions.".format(NT0, NumTears, NRt[NT0], NRt[NT0 + 1], len(Xo))
+            if len(Xo) < NRt[NT0]:
+                logging.warning(msg)
+                break # quit. Will quitting cause problems?
+            else:
+                logging.info(msg)
+
+
         # NumNBlocks = Number of along-track blocks
         NumNBlocks = max(1, int(math.floor((NRs+NR-1-NRr//2)/NR)))
         if (NumNBlocks == 0):
@@ -647,7 +695,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
             # NOTE: NGWri and NGWrf are in the global index system, where "global" refers
             #       to the full set of records.
             # These variables are output for progress reporting.
-            
+
             NGWri = NRt[NT0] + (NB0*NR) + 1
             NGWrf = NRt[NT0] + ((NB0+1)*NR)
             if (NB0+1) == NumNBlocks:
@@ -668,29 +716,29 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 S = f_read_block(block_source, MS, NumRead, (NB0+1), bxds_input)
                 # Initialize enough space for number of blocks to read (NumRead), 
                 # plus overlap at the beginning (NRr//2).
-                signal = np.empty((MS,int(NRr//2+NumRead)))
+                signal = np.empty((MS1,int(NRr//2+NumRead)))
                 # Pad the beginning of the block with the first block read
                 for N in range(NRr//2):
-                    signal[:, N] = S[:, 0]
+                    signal[:, N] = S[ftrim[0]:ftrim[1], 0]
                 # Insert the rest of the signal into the block
-                signal[:, (NRr//2):(NRr//2)+NumRead] = S
+                signal[:, (NRr//2):(NRr//2)+NumRead] = S[ftrim[0]:ftrim[1], :]
             else:
                 # If not the first block in the segment, then
                 # Initialize enough space for number of blocks to read (NumRead)
                 # plus overlap at beginning (NRr//2) and at end (NRr//2)
-                signal = np.empty((MS, NRr+NumRead))
+                signal = np.empty((MS1, NRr+NumRead))
                 # Copy previous overlap
-                signal[:, 0:NRr] = S[:, NRp-NRr:NRp]
+                signal[:, 0:NRr] = S[ftrim[0]:ftrim[1], NRp-NRr:NRp]
                 S = f_read_block(block_source, MS, NumRead, (NB0+1), bxds_input)
-                signal[:, NRr:NRr+NumRead] = S
+                signal[:, NRr:NRr+NumRead] = S[ftrim[0]:ftrim[1], :]
 
             if ((NB0 > 0) and ((NB0+1) == NumNBlocks)):
                 # If this is the last block of a multi-block segment
                 # then resize for padding (why is resize necessary?)
-                signal = np.resize(signal, (MS, NRb))
+                signal = np.resize(signal, (MS1, NRb))
                 # and fill these records with the last record.
                 for N in range(NRr+NumRead, NRb):
-                    signal[:, N] = S[:, NumRead-1]
+                    signal[:, N] = S[ftrim[0]:ftrim[1], NumRead-1]
 
             #pcheck.pcheck(signal, "signal")
   
@@ -714,18 +762,18 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 #      Interpolate on sampling frequency and harmonic
                 #      Filter as a Dot-Product
                 #      2D IFFT
-                F = pyfftw.interfaces.numpy_fft.fft2(detrend(signal, 0),[MS, NRb])
+                F = pyfftw.interfaces.numpy_fft.fft2(detrend(signal, 0),[MS1, NRb])
 
                 if not undersamp:
                     # Don't cinterp downcoverted radars
                     # New LO leakage removal code (measure on bottom 1/4 of the data)
                     # This probably only works on 3200 sample data and a 10 MHz leak
-                    Fs = pyfftw.interfaces.numpy_fft.fft2(signal[MS-800-1:MS-1],[800-1,NRb])
+                    Fs = pyfftw.interfaces.numpy_fft.fft2(signal[MS1-800-1:MS1-1],[800-1,NRb])
                     #FIXME I think Matlab dfts and python dfts look different
                     F[2561-1,:] = F[2561-1,:] - 4*Fs[641-1,:]
 
                 F = Filter * F
-                signal = pyfftw.interfaces.numpy_fft.ifft2(F,[MS,NRb]) # .astype(int)
+                signal = pyfftw.interfaces.numpy_fft.ifft2(F,[MS1,NRb]) # .astype(int)
 
                 # No more shifting
                 #signal = shift(signal,shifter);
@@ -774,7 +822,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
 
 
 
-            signali = np.empty((MS, Nif-Nii+1), complex)
+            signali = np.empty((MS1, Nif-Nii+1), complex)
             if resample:
                 # gotta have at least 3 samples.
                 # assert signal.shape[1] >= 3
@@ -794,7 +842,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                     X3 = Xo[Nci+1-1]
                     # Get signal values at these positions
                     # Note: there appears to be nothing to guarantee that
-                    #signal = np.empty((MS, NRr+NumRead))
+                    #signal = np.empty((MS1, NRr+NumRead))
                     # the right thing to do is to read forward so you can access it.
                     # i1+1 < signal.shape[1]
                     # NGWri = NRt[NT-1-1] + ((NB-1)*NR) + 1
