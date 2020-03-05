@@ -15,6 +15,15 @@ on what has been presented in Haynes et al. (2018). As we can't actually test
 with REASON measurments, the goal is to use MARFA.
 # GNG: there seems to be some trouble with the Quit Picking dialog getting frozen.
 # Maybe it's not getting closed?
+
+Usage example
+
+./run_interferometry.py --project GOG3 --line NAQLK/JKB2j/ZY1b/ --plot
+
+
+# TODO: save and load picks in a standard format
+# Save intermediate products to named intermediate files
+
 """
 
 import sys
@@ -141,12 +150,13 @@ def main():
     parser = argparse.ArgumentParser(description='Interferometry')
     parser.add_argument('--fresnelstack', type=int, default=15, help='fresnel_stack')
     parser.add_argument('--plot', action='store_true', help='Plot debugging graphs')
+    parser.add_argument('--save', action='store_true', help='Save intermediate files')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
     parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD', help='targ data base directory')
     parser.add_argument('--mode', default='Roll', choices=('Roll','Reference', 'none'), help='Interferogram Correction Mode')
     parser.add_argument('-p', '--project', default='GOG3',
                         help='Project name')
-    parser.add_argument('--line', default='NAQLK/JKB2j/ZY1b',
+    parser.add_argument('--line', default='NAQLK/JKB2j/ZY1b/',
                         help='Line name: project/set/transect')
 
     args = parser.parse_args()
@@ -154,13 +164,13 @@ def main():
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
 
-    project = 'GOG3'
-    line = 'NAQLK/JKB2j/ZY1b/'
+    project = args.project #'GOG3'
+    line = args.line #'NAQLK/JKB2j/ZY1b/'
     #line = 'GOG3/JKB2j/BWN01a/'
     #project = 'SRH1'
     #line = 'DEV2/JKB2t/Y81a/'
-    bplot = False
-    bsave = True
+    bplot = args.plot
+    bsave = args.save
     debug = True
     gain = 'low'
     fresnel_stack = args.fresnelstack #15
@@ -169,7 +179,7 @@ def main():
     fs = 50E6
     roll_shift = 0
     FOI_selection_method = 'maximum'
-    interferogram_correction_mode = 'Roll'
+    interferogram_correction_mode = args.mode
     roll_correction = True
 
     path = '/disk/kea/WAIS/targ/xtra/' + project + '/FOC/Best_Versions/'
@@ -179,7 +189,7 @@ def main():
     else:
         rawpath = '/disk/kea/WAIS/orig/xlob/' + line + 'RADnh3/'
         chirp_bp = False
-    tregpath = '/disk/kea/WAIS/targ/treg/' + line + 'TRJ_JKB0/'
+    tregpath = os.path.join('/disk/kea/WAIS/targ/treg', line,  'TRJ_JKB0/')
     chirppath = path + 'S4_FOC/'
     print('chirppath = ' + chirppath)
     print('tregpath = ' + tregpath)
@@ -231,16 +241,16 @@ def main():
     post_coreg = "{0:s}_{1[0]:s}_{1[1]:s}_{1[2]:s}_{2[2]:d}to{2[3]:d}_AfterCoregistration" \
                  ".npz".format(project, A, trim)
 
-    if os.path.exists(post_coreg):
+    if not os.path.exists(post_coreg):
 
         # Load and range compress the interpolated 1m data products
         print('-- load and range compress raw radar data')
         print('chirpwin: ' + str(chirpwin))
         trimchirp = list(trim)
-        trimchirp[0] = None # no fast-time trimming
-        trimchirp[1] = None
-        #trimchirp[0] = 0 #trimchirp[0] = 4
-        #trimchirp[1] = max(1000, chirpwin[1]) # limit to 1000 to allow plots to plot.
+        #trimchirp[0] = None # no fast-time trimming
+        #trimchirp[1] = None
+        trimchirp[0] = 0 #trimchirp[0] = 4
+        trimchirp[1] = max(1000, chirpwin[1]) # limit to 1000 to allow plots to plot.
         dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trimchirp, rawpath, path + 'S2_FIL/' + line, chirppath + line, do_cinterp=False, bp=chirp_bp)
         if bplot and debug:
             plt.figure()
@@ -405,7 +415,7 @@ def main():
         # Roll correction 
         print('-- derive roll correction')
         roll_phase, roll_ang = fl.roll_correction(np.divide(299792458, fc), B, trim, tregpath, path + 'S1_POS/' + line, roll_shift=roll_shift)
-        if debug:
+        if bplot and debug:
             plt.figure()
             plt.subplot(211)
             plt.plot(np.linspace(0, 1, len(roll_ang)), np.rad2deg(roll_ang))
@@ -418,7 +428,7 @@ def main():
         # Interferogram
         print('-- producing interferogram')
         int_image = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, roll_phase, roll_correction, az_step=az_step)
-        if debug:
+        if bplot and debug:
             int_image_noroll = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, roll_phase, False, az_step=az_step)
             plt.figure()
             plt.subplot(313); plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='hsv'); plt.colorbar()
@@ -441,7 +451,7 @@ def main():
         reference = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
         #np.save('SRH_Y81a_referencepicks_15Stack.npy', reference)
         reference = np.transpose(reference)
-        if debug:
+        if bplot and debug:
             plt.figure()
             plt.imshow(pwr_image, aspect='auto', cmap='gray')
             plt.title('power image with picked reference surface')
@@ -452,7 +462,7 @@ def main():
         # Create uncorrected interferogram
         print('-- producing interferogram')
         uncorr_interferogram = fl.stacked_interferogram(cmpA3, cmpB3, fresnel_stack, np.zeros((np.size(cmpA3, axis=1)), dtype=float), False, az_step=az_step)
-        if debug:
+        if bplot and debug:
             plt.figure()
             plt.imshow(np.rad2deg(uncorr_interferogram), aspect='auto', cmap='hsv')
             plt.title('uncorrected interferogram [deg]'); plt.clim([-180, 180]); plt.colorbar()
@@ -463,7 +473,7 @@ def main():
         # Normalize uncorrected interferogram
         print('-- normalizing interferogram')
         int_image, reference_phase, reference = fl.interferogram_normalization(uncorr_interferogram, reference)
-        if debug:
+        if bplot and debug:
             plt.figure()
             plt.subplot(311); plt.imshow(np.rad2deg(uncorr_interferogram), aspect='auto', cmap='hsv')
             plt.title('uncorrected interferogram [deg]'); plt.clim([-180, 180]); plt.colorbar()
@@ -489,7 +499,7 @@ def main():
     # Correlation map
     print('-- producing correlation map')
     corrmap = fl.stacked_correlation_map(cmpA3, cmpB3, fresnel_stack, az_step=az_step)
-    if True:
+    if bplot:
         RGB = np.zeros((len(corrmap), np.size(corrmap, axis=1), 3), dtype=float)
         RGB[:, :, 2] = np.divide(np.abs(corrmap), np.max(np.max(np.abs(corrmap))))
         RGB[:, :, 1] = 1
@@ -505,7 +515,7 @@ def main():
         plt.imshow(col.hsv_to_rgb(RGB), aspect='auto', cmap='hsv'); plt.colorbar()
         plt.imshow(FOI, aspect='auto'); plt.imshow(SRF, aspect='auto')
         plt.title('HSV image with interferogram in Hue and correlation in Values\n Saturation set to 1')
-        #plt.show()
+        plt.show()
 
     # save correlation map
     if bsave:
@@ -522,7 +532,7 @@ def main():
     FOI_phs = fl.FOI_extraction(int_image, FOI)
     FOI_cor = fl.FOI_extraction(np.abs(corrmap), FOI)
     SRF_phs = fl.offnadir_clutter(FOI, SRF, roll_ang, fresnel_stack, B, mb_offset, np.divide(299792458, fc), np.divide(1, fs))
-    if debug:
+    if bplot and debug:
         plt.figure()
         plt.subplot(211); plt.hist(np.rad2deg(FOI_phs), bins=20)
         plt.title('distribution of interferometric phase angles')
@@ -553,7 +563,7 @@ def main():
     _, nadir_emp_pdf = fl.empirical_pdf(fc, B, N, gamma)
     _, srf_emp_pdf = fl.empirical_pdf(fc, B, N, gamma, phi_m=mean_srf)
     iphi, obs_emp_pdf = fl.empirical_pdf(fc, B, N, gamma, phi_m=mean_phi)
-    if True:
+    if bplot:
         fig, ax1 = plt.subplots()
         ax1.set_xlabel('interferometric phase angle [deg]')
         ax1.set_ylabel('histogram counts', color='b')
@@ -569,7 +579,7 @@ def main():
         fig.tight_layout()
         plt.xlim([-180, 180])
         plt.legend(loc=1)
-        #plt.show()
+        plt.show()
       
     # Determine the uncertainty in the nadir empirical sample mean
     print('-- determine uncertainty in the nadir empirical sample mean')
@@ -609,8 +619,6 @@ def main():
     #else:
     #    print('>> FOI cannot be distinguished from an off-nadir clutter feature')
     #print(' ')
-    if bplot:
-        plt.show()
     
 if __name__ == "__main__":
     main()
