@@ -177,21 +177,35 @@ def filter_ra(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
 
     if trim is not None and trim[1] is not None:
         MS1 = trim[1] - trim[0]
+        ftrim = (trim[0], trim[1], None, None)
     else:
         MS1 = MS
-        trim = (0, MS)
+        ftrim = None
 
     len_output = filter_ra_length(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=snm)
-    signalout = np.empty((MS1, len_output), dtype=complex)
+
+    if trim is not None and trim[3] is not None:
+        assert trim[2] == 0 # only support trimming the end
+        strim = (trim[2], trim[3])
+    else:
+        strim = (0, len_output)
+
+
+    signalout = np.empty((MS1, strim[1] - strim[0]), dtype=complex)
 
     idx = 0
     for signalim in filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm,
                               undersamp=undersamp, combined=combined, filter2d=filter2d,
-                              resample=resample, blank=blank, trim=trim):
+                              resample=resample, blank=blank, trim=ftrim):
         assert len(signalim.shape) >= 2
-        signalout[trim[0]:trim[1], idx:(idx + signalim.shape[1])] = signalim
-        idx += signalim.shape[1]
-    assert idx == len_output
+        idx2 = min(strim[1], idx + signalim.shape[1])
+        blocklen = idx2 - idx
+        signalout[:, idx:idx2] = signalim[:, 0:blocklen]
+        idx += blocklen #signalim.shape[1]
+        if idx2 >= strim[1]:
+            break
+
+    assert idx == strim[1] - strim[0]
     return signalout
 
 
@@ -206,6 +220,8 @@ def test():
     x = filter_ra(bxds_input, geopath, 1, 3200, 1000, 100, 5)
     assert x is not None
     assert x.shape[0] == 3200 and x.shape[1] > 0
+
+    # TODO: test filter_ra with a fast and slow time trim
 
     bxds_input = '/disk/kea/WAIS/orig/xlob/ICP4/JKB2g/F19T03a/RADnh3/bxds'
     geopath = '/disk/kea/WAIS/targ/xtra/ICP4/FOC/Best_Versions/S2_FIL/ICP4/JKB2g/F19T03a'
@@ -579,6 +595,10 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
         MS1 = MS
         ftrim = (0, MS)
 
+    if trim is not None:
+        # Slow time trimming is not supported
+        assert trim[2] is None
+        assert trim[3] is None
 
     Filter = make_range_filter(MS1, NRb)
 

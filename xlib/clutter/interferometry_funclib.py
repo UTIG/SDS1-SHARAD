@@ -1252,15 +1252,11 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
             # C[ii] = rolls[int(np.argwhere(R == np.max(R)))]
     elif method == 'xcorr2': # faster cross correlation
         C = np.empty((data.shape[1],) )
-        # See https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.correlate.html
-        # for definitions of k, N
-        N = min(data.shape[0], reference.shape[0])
+        N = data.shape[0] // 2
         for ii in range(data.shape[1]):
-            # Use standard scipy correlation, which can be faster
             R = scipy.correlate(data[:, ii], reference, mode='same')
-            k = np.argmax(R)
             # TODO: interpolate for peak
-            C[ii] = k - N + 1
+            C[ii] = np.argmax(R) - N
 
 
     else:
@@ -1318,19 +1314,8 @@ def raw_bxds_load(rad_path, geo_path, channel, trim, DX=1, MS=3200, NR=1000, NRr
     combined = True
     channel = int(channel)
     snm = None #'RADnh5' # either RADnh3 or RADnh5
-    
     signalout = filter_ra.filter_ra(rad_name, geo_path, DX, MS, NR, NRr, channel, snm=snm,
-              undersamp=undersamp, combined=combined, blank=False, trim=None) #[trim[0], trim[1], None, None])
-
-    if trim is not None and trim[3] is not None and trim[3] != 0:
-        logging.debug("raw_bxds_load trimming signal from slow time  {:d} to {:d} "
-                      "(original size {:d}".format(trim[2], trim[3], signalout.shape[1]))
-        signalout = signalout[:, trim[2]:trim[3]]
-
-    if trim is not None and trim[1] is not None:
-        logging.debug("raw_bxds_load trimming signal from fast time {:d} to {:d} "
-                      "(original size {:d}".format(trim[0], trim[1], signalout.shape[0]))
-        signalout = signalout[trim[0]:trim[1], :]
+              undersamp=undersamp, combined=combined, blank=False, trim=trim)
 
     return signalout
 
