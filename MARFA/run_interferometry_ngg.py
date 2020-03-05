@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, '../xlib/clutter/')
 import os.path
 from os import path as pth
+import logging
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -133,6 +134,7 @@ Traceback (most recent call last):
 ValueError: cannot reshape array of size 1981809664 into shape (619315,3200)
 """
 
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
 project = 'GOG3'
 line = 'NAQLK/JKB2j/ZY1b/'
@@ -141,7 +143,7 @@ line = 'NAQLK/JKB2j/ZY1b/'
 #line = 'DEV2/JKB2t/Y81a/'
 bplot = False
 bsave = True
-debug = False
+debug = True
 gain = 'low'
 fresnel_stack = 15
 fc = 60E6
@@ -153,7 +155,7 @@ interferogram_correction_mode = 'Roll'
 roll_correction = True
 
 path = '/disk/kea/WAIS/targ/xtra/' + project + '/FOC/Best_Versions/'
-if project == 'SRH1' or project == 'ICP10':
+if project in ('SRH1', 'ICP9', 'ICP10'):
     rawpath = '/disk/kea/WAIS/orig/xlob/' + line + 'RADnh5/'
     chirp_bp = True
 else:
@@ -166,7 +168,8 @@ print('tregpath = ' + tregpath)
 print('rawpath = ' + rawpath)
 
 if line == 'NAQLK/JKB2j/ZY1b/':
-    trim = [0, 1000, 0, 12000]
+    #trim = [0, 1000, 0, 12000]
+    trim = [0, 1000, 0, 6000]
     chirpwin = [120, 150]
 elif line == 'GOG3/JKB2j/BWN01b/':
     trim = [0, 1000, 0, 15000]
@@ -192,7 +195,6 @@ print('FOI_cache_file = ' + FOI_cache_file)
 if os.path.exists(FOI_cache_file):
     print('Loading picks from cache ' + FOI_cache_file)
     with np.load(FOI_cache_file) as data:
-        print(data)
         FOI = data['FOI']
         SRF = data['SRF']
         trim = data['trim']
@@ -214,28 +216,40 @@ post_coreg = post_coreg + '_AfterCoregistration.npz'
 coreg_test = pth.exists(post_coreg)
 print('post_coreg = ' + post_coreg)
 
-if coreg_test is False:
+if not coreg_test:
 
     # TODO: GNG: do we need to dechirp the whole thing or can we just dechirp the chirp?
 
     # Load and range compress the interpolated 1m data products
     print('-- load and range compress raw radar data')
-    dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trim, rawpath, path + 'S2_FIL/' + line, chirppath + line, do_cinterp=False, bp=chirp_bp)
+    print('chirpwin: ' + str(chirpwin))
+    trimchirp = list(trim)
+    #trimchirp[0] = None # no fast-time trimming
+    #trimchirp[1] = None
+    trimchirp[0] = 0 #trimchirp[0] = 4
+    trimchirp[1] = max(1000, chirpwin[1]) # limit to 1000 to allow plots to plot.
+    dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trimchirp, rawpath, path + 'S2_FIL/' + line, chirppath + line, do_cinterp=False, bp=chirp_bp)
     if bplot and debug:
         plt.figure()
-        plt.subplot(211); plt.imshow(20 * np.log10(np.abs(dechirpA[0:1000, :])), aspect='auto', cmap='gray'); plt.title('Antenna A')
-        plt.subplot(212); plt.imshow(20 * np.log10(np.abs(dechirpB[0:1000, :])), aspect='auto', cmap='gray'); plt.title('Antenna B')
+        xmax = min(1000, dechirpA.shape[0]) # plot at most first 1000 samples
+        plt.subplot(211)
+        plt.imshow(20 * np.log10(np.abs(dechirpA[0:xmax, :])), aspect='auto', cmap='gray')
+        plt.title('Antenna A')
+        plt.subplot(212)
+        plt.imshow(20 * np.log10(np.abs(dechirpB[0:xmax, :])), aspect='auto', cmap='gray')
+        plt.title('Antenna B')
         plt.show()
 
     # Extract the loop-back chirp
     print('-- extract the loop-back chirp')
     loopbackA = dechirpA[chirpwin[0]:chirpwin[1], :]
     loopbackB = dechirpB[chirpwin[0]:chirpwin[1], :]
-    if bplot and debug:
+    del dechirpA, dechirpB
+    if bplot:
         tempA = [0, int(np.round(np.size(loopbackA, axis=1) / 2)), np.size(loopbackA, axis=1) - 1]
         tempB = [0, int(np.round(np.size(loopbackB, axis=1) / 2)), np.size(loopbackB, axis=1) - 1]
         plt.figure()
-        plt.subplot(411); plt.imshow(20 * np.log10(np.abs(loopbackA)), aspect='auto', cmap='gray'); plt.title('Loopback A Magntiude [dB]')
+        plt.subplot(411); plt.imshow(20 * np.log10(np.abs(loopbackA)), aspect='auto', cmap='gray'); plt.title('Loopback A Magnitude [dB]')
         plt.subplot(412); plt.imshow(np.angle(loopbackA), aspect='auto', cmap='jet'); plt.title('Loopback A Phase')
         plt.subplot(413); plt.imshow(20 * np.log10(np.abs(loopbackB)), aspect='auto', cmap='gray'); plt.title('Loopback B Magnitude [dB]')
         plt.subplot(414); plt.imshow(np.angle(loopbackB), aspect='auto', cmap='jet'); plt.title('Loopback B Phase')
@@ -254,10 +268,11 @@ if coreg_test is False:
         plt.show()
 
     # Assess the phase stability of the loop-back chirp for each antenna
-    print('-- characterize chirp stability')
-    stabilityA = fl.chirp_phase_stability(loopbackA[:, 0], loopbackA, method='xcorr', rollval=20)
-    stabilityB = fl.chirp_phase_stability(loopbackB[:, 0], loopbackB, method='xcorr', rollval=20)
-    if bplot and debug:
+    method = 'xcorr2' 
+    print('-- characterize chirp stability ({:s})'.format(method))
+    stabilityA = fl.chirp_phase_stability(loopbackA[:, 0], loopbackA, method=method, rollval=20)
+    stabilityB = fl.chirp_phase_stability(loopbackB[:, 0], loopbackB, method=method, rollval=20)
+    if bplot:
         plt.figure()
         plt.plot(np.arange(0, np.size(loopbackA, axis=1)), stabilityA, label='Antenna A')
         plt.plot(np.arange(0, np.size(loopbackB, axis=1)), stabilityB, label='Antenna B')
@@ -266,12 +281,15 @@ if coreg_test is False:
         plt.legend()
         plt.show()
 
+    print('A chirp shift: mean={:0.3f}, std dev={:0.3g}'.format(np.mean(stabilityA), np.std(stabilityA)))
+    print('B chirp shift: mean={:0.3f}, std dev={:0.3g}'.format(np.mean(stabilityB), np.std(stabilityB)))
+    sys.exit(0) # debug stop
+
     stability_save_file = 'chirp_phase_stability.npz'
     np.savez(stability_save_file, stabilityA=stabilityA, stabilityB=stabilityB)
     print("Saved data to " + stability_save_file)
 
 
-    sys.exit(0) # quit here for profiling
 
     # Load the focused SLC 1m port and starboard radargrams
     print('-- load port and starboard single-look products')
@@ -292,7 +310,7 @@ if coreg_test is False:
         magA, phsA = fl.convert_to_magphs(cmpA)
         magB, phsB = fl.convert_to_magphs(cmpB)
         plt.figure()
-        plt.subplot(411); plt.imshow(magA, aspect='auto', cmap='gray'); plt.title('antenna A magntiude'); plt.colorbar(); plt.clim([0, 20])
+        plt.subplot(411); plt.imshow(magA, aspect='auto', cmap='gray'); plt.title('antenna A magnitude'); plt.colorbar(); plt.clim([0, 20])
         plt.subplot(412); plt.imshow(np.rad2deg(phsA), aspect='auto', cmap='seismic'); plt.title('antenna A phase'); plt.clim([-180, 180]); plt.colorbar()
         plt.subplot(413); plt.imshow(magB, aspect='auto', cmap='gray'); plt.title('antenna B magnitude'); plt.colorbar(); plt.clim([0, 20])
         plt.subplot(414); plt.imshow(np.rad2deg(phsB), aspect='auto', cmap='seismic'); plt.title('antenna B phase'); plt.clim([-180, 180]); plt.colorbar()
@@ -325,19 +343,19 @@ if coreg_test is False:
 
     # Sub-pixel co-registration of the port and starboard range lines
     print('-- co-registration of port and starboard radargrams')
-    cmpA3, cmpB3 = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
+    cmpA3, cmpB3, shift_array = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
     print('Saving to ' + post_coreg)
     if bsave:
-        np.savez_compressed(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3)
+        np.savez(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3, shift_array=shift_array)
 
 
 else:
 
     # Load previously coregistered datasets
     print('-- loading previously co-registered MARFA datasets')
-    temp = np.load(post_coreg)
-    cmpA3 = temp['cmpA3']
-    cmpB3 = temp['cmpB3']
+    with np.load(post_coreg) as temp:
+        cmpA3 = temp['cmpA3']
+        cmpB3 = temp['cmpB3']
 
 del A, post_coreg, coreg_test
 if bplot and debug:
@@ -366,9 +384,8 @@ print('INTERFEROMETRY')
 
 # Determine the number of azimuth samples between independent looks
 print('-- determine azimuth samples between independent range lines')
-az_step = fl.independent_azimuth_samples(cmpA3, cmpB3, FOI)
-az_step = int(az_step)
-#az_step = 8
+#az_step = int(fl.independent_azimuth_samples(cmpA3, cmpB3, FOI))
+az_step = 8
 print('   > azimuth samples between independent range lines:', str(az_step))
 
 if interferogram_correction_mode == 'Roll':
@@ -448,6 +465,17 @@ elif interferogram_correction_mode == 'Reference':
         plt.imshow(FOI, aspect='auto'); plt.imshow(reference, aspect='auto')
         plt.show()
 
+# save interferogram
+if bsave:
+    plt.savefig('ri_ngg__int_image.png', dpi=600)
+    out_filename = 'ri_ngg__int_image.npz'
+    np.savez(out_filename, int_image=int_image)
+    print("Saved " + out_filename)
+    # for debugging, quit here.
+    #sys.exit(0)
+
+
+
 # Correlation map
 print('-- producing correlation map')
 corrmap = fl.stacked_correlation_map(cmpA3, cmpB3, fresnel_stack, az_step=az_step)
@@ -468,6 +496,16 @@ if True:
     plt.imshow(FOI, aspect='auto'); plt.imshow(SRF, aspect='auto')
     plt.title('HSV image with interferogram in Hue and correlation in Values\n Saturation set to 1')
     #plt.show()
+
+# save correlation map
+if bsave:
+    plt.savefig('ri_ngg_corrmap.png', dpi=600)
+    out_filename = 'ri_ngg__corrmap.npz'
+    np.savez(out_filename, corrmap=corrmap)
+    print("Saved " + out_filename)
+    # for debugging, quit here.
+    sys.exit(0)
+
 
 # Extract feature-of-interest interferometric phase and correlation 
 # as well as the mean interferometric phase of the feature-of-interest
@@ -494,7 +532,9 @@ gamma = np.mean(FOI_cor)
 N = int(np.floor(np.divide(fresnel_stack, az_step)))
 if N != 1:
     N = N + 1
-Nf = int(np.round(np.divide(Nf, az_step)) + 1)
+# GNG: I had to change this -- undefined variable Nf
+#Nf = int(np.round(np.divide(Nf, az_step)) + 1)
+Nf = int(np.round(np.divide(N, az_step)) + 1)
 print('   > unwrapped cross-track surface clutter mean interferometric phase:', str(np.round(mean_srf, 3)))
 print('   > FOI mean interferometric phase:', str(np.round(mean_phi, 3)))
 print('   > FOI mean interferometric correlation:', str(np.round(gamma, 3)))
