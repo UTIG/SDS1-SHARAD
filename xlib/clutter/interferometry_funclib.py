@@ -256,6 +256,7 @@ def convert_to_complex(magnitude, phase, mag_dB=True, pwr_flag=True):
 
     return cmp
 
+# TODO: show that convert_to_magphs is invers of convert_to_complex
 def convert_to_magphs(cmp, mag_dB=True, pwr_flag=True):
     '''
     converting MARFA datasets back to magnitude and phase
@@ -986,7 +987,7 @@ def get_ref_chirp(path, bandpass=True, nsamp=3200):
 
     I = np.fromfile(os.path.join(path, 'I.bin'), '>i4')
     Q = np.fromfile(os.path.join(path, 'Q.bin'), '>i4')
-
+    assert I.shape == Q.shape
     if len(I) < nsamp:
         I = I[0:nsamp]
         Q = Q[0:nsamp]
@@ -1046,15 +1047,16 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     logging.debug("raw_path = " + raw_path)
     logging.debug("geo_path = " + geo_path)
     logging.debug("sigwin = " + str(sigwin))
-    #sys.exit(0)
 
     # load the bxds datasets
     if gain == 'low':
-        bxdsA = raw_bxds_load(raw_path, geo_path, '5', sigwin)
-        bxdsB = raw_bxds_load(raw_path, geo_path, '7', sigwin)
+        chans = ['5', '7']
     elif gain == 'high':
-        bxdsA = raw_bxds_load(raw_path, geo_path, '6', sigwin)
-        bxdsB = raw_bxds_load(raw_path, geo_path, '8', sigwin)
+        chans = ['6', '8']
+    else:
+        raise ValueError('Unknown gain ' + gain)
+    bxdsA = raw_bxds_load(raw_path, geo_path, chans[0], sigwin)
+    bxdsB = raw_bxds_load(raw_path, geo_path, chans[1], sigwin)
 
     assert bxdsA.shape == bxdsB.shape
 
@@ -1068,14 +1070,17 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     # Output shape needs to be the same as the input
     output_samples = bxdsA.shape[0]
 
-    if sigwin[3] != 0:
-        bxdsA = bxdsA[:, sigwin[2]:sigwin[3]]
-        bxdsB = bxdsB[:, sigwin[2]:sigwin[3]]
-    logging.debug("bxds trimmed  shape="  + str(bxdsA.shape))
+    # trimming now occurs in raw_bxds_load
+    #if sigwin[3] != 0:
+    #    bxdsA = bxdsA[:, sigwin[2]:sigwin[3]]
+    #    bxdsB = bxdsB[:, sigwin[2]:sigwin[3]]
+    #logging.debug("bxds trimmed  shape="  + str(bxdsA.shape))
 
     # prepare the reference chirp
     hamm = hamming(output_samples)
     refchirp = get_ref_chirp(chirp_path, bandpass=bp, nsamp=output_samples)
+    # TODO: do we need to make the chirp complex?
+    #refchirp *= hamming
 
     #plt.figure()
     #plt.subplot(311); plt.imshow(np.abs(bxdsA[sigwin[0]:sigwin[1], :]), aspect='auto'); plt.title('bxdsA')
@@ -1094,13 +1099,16 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     #dechirpA = np.zeros((len(bxdsA), np.size(bxdsA, axis=1)), dtype=complex)
     #dechirpB = np.zeros((len(bxdsB), np.size(bxdsB, axis=1)), dtype=complex)
     dechirpA = np.empty_like(bxdsA, dtype=complex)
-    dechirpB = np.empty_like(bxdsB, dtype=complex)
 
     # dechirp
     for ii in range(np.size(bxdsA, axis=1)):
         dechirpA[:, ii] = dechirp(bxdsA[:, ii], refchirp, do_cinterp)
+    del bxdsA
+
+    dechirpB = np.empty_like(bxdsB, dtype=complex)
     for ii in range(np.size(bxdsB, axis=1)):
         dechirpB[:, ii] = dechirp(bxdsB[:, ii], refchirp, do_cinterp)
+    del bxdsB
 
     return dechirpA, dechirpB
 
@@ -1239,7 +1247,21 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
                 # is np.corrcoef supposed to be the same as complex_correlation_coefficient?
                 CC = np.corrcoef(reference, np.roll(data[:, ii], rolls[jj]))
                 R[jj] = np.abs(CC[0, 1])
-            C[ii] = rolls[int(np.argwhere(R == np.max(R)))]
+
+            C[ii] = rolls[np.argmax(R)]
+            # C[ii] = rolls[int(np.argwhere(R == np.max(R)))]
+    elif method == 'xcorr2': # faster cross correlation
+        C = np.empty((data.shape[1],) )
+        # See https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.correlate.html
+        # for definitions of k, N
+        N = min(data.shape[0], reference.shape[0])
+        for ii in range(data.shape[1]):
+            # Use standard scipy correlation, which can be faster
+            R = scipy.correlate(data[:, ii], reference, mode='same')
+            k = np.argmax(R)
+            # TODO: interpolate for peak
+            C[ii] = k - N + 1
+
 
     else:
         raise ValueError('Unrecognized method {:s}'.format(method))
@@ -1278,8 +1300,8 @@ def raw_bxds_load(rad_path, geo_path, channel, trim, DX=1, MS=3200, NR=1000, NRr
       rad_path: Path to the raw radar files
       geo_path: Path to the raw geometry files required to perform interpolation
        channel: desired MARFA channel to load
-          trim: vector of values with trim[2]:trim[3] is range lines of interest.
-                None to use entire range
+          trim: vector of values with trim[2]:trim[3] is slow time range lines of interest.
+                None to use entire range. trim[0]:trim[1] is fast time samples of interest
             DX: alongtrack range line spacing after interpolation
             MS: number of fast-time samples in the output
             NR: block size to load data
@@ -1292,16 +1314,23 @@ def raw_bxds_load(rad_path, geo_path, channel, trim, DX=1, MS=3200, NR=1000, NRr
 
     rad_name = os.path.join(rad_path, 'bxds')
     undersamp = True
+
     combined = True
     channel = int(channel)
     snm = None #'RADnh5' # either RADnh3 or RADnh5
     
     signalout = filter_ra.filter_ra(rad_name, geo_path, DX, MS, NR, NRr, channel, snm=snm,
-              undersamp=undersamp, combined=combined)
+              undersamp=undersamp, combined=combined, blank=False, trim=None) #[trim[0], trim[1], None, None])
 
-
-    if trim is not None and trim[3] != 0:
+    if trim is not None and trim[3] is not None and trim[3] != 0:
+        logging.debug("raw_bxds_load trimming signal from slow time  {:d} to {:d} "
+                      "(original size {:d}".format(trim[2], trim[3], signalout.shape[1]))
         signalout = signalout[:, trim[2]:trim[3]]
+
+    if trim is not None and trim[1] is not None:
+        logging.debug("raw_bxds_load trimming signal from fast time {:d} to {:d} "
+                      "(original size {:d}".format(trim[0], trim[1], signalout.shape[0]))
+        signalout = signalout[trim[0]:trim[1], :]
 
     return signalout
 

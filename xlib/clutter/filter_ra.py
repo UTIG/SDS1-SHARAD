@@ -170,7 +170,7 @@ def filter_ra_length(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None, d
         return len_output
 
 def filter_ra(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
-              undersamp=False, combined=False, filter2d=True, resample=True, trim=None):
+              undersamp=False, combined=False, filter2d=True, resample=True, blank=True, trim=None):
     """ Generate a filtered data file and output to a numpy array
     See filter_ra_gen for parameter information.
     """
@@ -186,7 +186,8 @@ def filter_ra(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
 
     idx = 0
     for signalim in filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm,
-                              undersamp, combined, filter2d, resample, trim=trim):
+                              undersamp=undersamp, combined=combined, filter2d=filter2d,
+                              resample=resample, blank=blank, trim=trim):
         assert len(signalim.shape) >= 2
         signalout[trim[0]:trim[1], idx:(idx + signalim.shape[1])] = signalim
         idx += signalim.shape[1]
@@ -362,7 +363,7 @@ def fill_gap_gen(rec0_idx, rec0, rec1_idx, rec1, winsize, blocksize=None):
         for nblock in range(nblocks):
             n0 = nblock * blocksize
             n1 = min((nblock + 1) * blocksize, nrecs)
-            signal = np.zeros((rec0.shape[0], n1 - n0))
+            signal = np.zeros((rec0.shape[0], n1 - n0), dtype=complex)
             
             if n0 <= winsize or nrecs - winsize <= n1:
                 # If the range is within the window edges of the gap, process.
@@ -490,7 +491,8 @@ def test_fill_gap(b_run_timing=False):
 
               
 def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
-                  undersamp=False, combined=False, filter2d=True, resample=True, trim=[None, None, None, None]):
+                  undersamp=False, combined=False, filter2d=True, resample=True, 
+                  blank=True, trim=[None, None, None, None]):
     """ Filter a bxds file to doppler filtering and resampling to equal distances
     (with spacing DX).  
     
@@ -518,7 +520,8 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
     
     
     """
-              
+    logging.info("undersamp={:s} do? {:s}".format(str(undersamp), str(not undersamp)))
+    logging.info("resample={:s}".format(str(resample)))
     # Number of output blocks
     out = 0
 
@@ -716,7 +719,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 S = f_read_block(block_source, MS, NumRead, (NB0+1), bxds_input)
                 # Initialize enough space for number of blocks to read (NumRead), 
                 # plus overlap at the beginning (NRr//2).
-                signal = np.empty((MS1,int(NRr//2+NumRead)))
+                signal = np.empty((MS1,int(NRr//2+NumRead)), dtype=complex)
                 # Pad the beginning of the block with the first block read
                 for N in range(NRr//2):
                     signal[:, N] = S[ftrim[0]:ftrim[1], 0]
@@ -726,7 +729,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 # If not the first block in the segment, then
                 # Initialize enough space for number of blocks to read (NumRead)
                 # plus overlap at beginning (NRr//2) and at end (NRr//2)
-                signal = np.empty((MS1, NRr+NumRead))
+                signal = np.empty((MS1, NRr+NumRead), dtype=complex)
                 # Copy previous overlap
                 signal[:, 0:NRr] = S[ftrim[0]:ftrim[1], NRp-NRr:NRp]
                 S = f_read_block(block_source, MS, NumRead, (NB0+1), bxds_input)
@@ -743,10 +746,10 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
             #pcheck.pcheck(signal, "signal")
   
             # Clear top samples
-            if HiCARS == 2:
+            if blank and HiCARS == 2:
                 # HiCARS2
                 signal[0:250, :] = 0
-            else: 
+            elif blank: 
                 # HiCARS1
                 signal[0:50, :] = 0
 
@@ -822,7 +825,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
 
 
 
-            signali = np.empty((MS1, Nif-Nii+1), complex)
+            signali = np.empty((MS1, Nif-Nii+1), dtype=complex)
             if resample:
                 # gotta have at least 3 samples.
                 # assert signal.shape[1] >= 3
