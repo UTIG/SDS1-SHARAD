@@ -262,7 +262,7 @@ if coreg_test is False:
 
     # Sub-pixel co-registration of the port and starboard range lines
     print('-- co-registration of port and starboard radargrams')
-    cmpA3, cmpB3 = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
+    cmpA3, cmpB3, _ = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
     np.savez_compressed(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3)
 
 else:
