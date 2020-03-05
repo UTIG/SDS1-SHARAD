@@ -520,8 +520,6 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
     
     
     """
-    logging.info("undersamp={:s} do? {:s}".format(str(undersamp), str(not undersamp)))
-    logging.info("resample={:s}".format(str(resample)))
     # Number of output blocks
     out = 0
 

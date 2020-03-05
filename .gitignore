@@ -16,6 +16,7 @@ SPICE
 *.npz
 *.npy
 *.profile
+*.png
 
 EDR*.txt
 lookup.txt
