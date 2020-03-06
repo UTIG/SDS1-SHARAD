@@ -250,12 +250,10 @@ def main():
 
         # Load and range compress the interpolated 1m data products
         print('-- load and range compress raw radar data')
-        print('chirpwin: ' + str(chirpwin))
         trimchirp = list(trim)
-        #trimchirp[0] = None # no fast-time trimming
-        #trimchirp[1] = None
         trimchirp[0] = 0 #trimchirp[0] = 4
-        trimchirp[1] = max(1000, chirpwin[1]) # limit to 1000 to allow plots to plot.
+        # trimchirp[1] = max(1000, chirpwin[1]) # limit to 1000 to allow plots to plot.
+        trimchirp[1] = chirpwin[1] + (chirpwin[1] - chirpwin[0])
         dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trimchirp, rawpath, path + 'S2_FIL/' + line, chirppath + line, do_cinterp=False, bp=chirp_bp)
         if bplot and debug:
             plt.figure()
@@ -302,12 +300,13 @@ def main():
         stabilityB = fl.chirp_phase_stability(loopbackB[:, 0], loopbackB, method=method, rollval=20)
         if bplot:
             plt.figure()
-            plt.plot(np.arange(0, np.size(loopbackA, axis=1)), stabilityA, label='Antenna A')
-            plt.plot(np.arange(0, np.size(loopbackB, axis=1)), stabilityB, label='Antenna B')
+            plt.plot(np.arange(0, loopbackA.shape[1]), stabilityA, label='Antenna A')
+            plt.plot(np.arange(0, loopbackB.shape[1]), stabilityB, label='Antenna B')
             plt.xlabel('Range Line #')
             plt.ylabel('Shift for Optimal Chirp Stability')
             plt.legend()
             plt.show()
+        del loopbackA, loopbackB
 
         print('A chirp shift: mean={:0.3f}, std dev={:0.3g}'.format(np.mean(stabilityA), np.std(stabilityA)))
         print('B chirp shift: mean={:0.3f}, std dev={:0.3g}'.format(np.mean(stabilityB), np.std(stabilityB)))
@@ -321,18 +320,14 @@ def main():
         # Load the focused SLC 1m port and starboard radargrams
         print('-- load port and starboard single-look products')
         if gain == 'low':
-            magA, phsA = fl.load_marfa(line, '5', pth=path + 'S4_FOC/')
-            magB, phsB = fl.load_marfa(line, '7', pth=path + 'S4_FOC/')
+            chan1, chan2 = '5', '7'
         elif gain == 'high':
-            magA, phsA = fl.load_marfa(line, '6', pth=path + 'S4_FOC/')
-            magB, phsB = fl.load_marfa(line, '8', pth=path + 'S4_FOC/')
-        magA = magA[trim[0]:trim[1], trim[2]:trim[3]]
-        phsA = phsA[trim[0]:trim[1], trim[2]:trim[3]]
-        magB = magB[trim[0]:trim[1], trim[2]:trim[3]]
-        phsB = phsB[trim[0]:trim[1], trim[2]:trim[3]]
-        cmpA = fl.convert_to_complex(magA, phsA)
-        cmpB = fl.convert_to_complex(magB, phsB)
-        del magA, phsA, magB, phsB
+            chan1, chan2 = '6', '8'
+        else:
+            assert False
+        cmpA = fl.convert_to_complex(*fl.load_marfa(line, chan1, pth=path + 'S4_FOC/', trim=trim))
+        cmpB = fl.convert_to_complex(*fl.load_marfa(line, chan2, pth=path + 'S4_FOC/', trim=trim))
+
         if bplot and debug:
             magA, phsA = fl.convert_to_magphs(cmpA)
             magB, phsB = fl.convert_to_magphs(cmpB)
@@ -357,6 +352,7 @@ def main():
         print('-- chirp stability adjustment')
         cmpA2 = fl.phase_stability_adjustment(cmpA, stabilityA)
         cmpB2 = fl.phase_stability_adjustment(cmpB, stabilityB)
+        del cmpA, cmpB, stabilityA, stabilityB
         if bplot and debug:
             magA, phsA = fl.convert_to_magphs(cmpA2)
             magB, phsB = fl.convert_to_magphs(cmpB2)
@@ -371,6 +367,7 @@ def main():
         # Sub-pixel co-registration of the port and starboard range lines
         print('-- co-registration of port and starboard radargrams')
         cmpA3, cmpB3, shift_array = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
+        del cmpA2, cmpB2
         if bsave:
             print('Saving to ' + post_coreg)
             np.savez(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3, shift_array=shift_array)
@@ -394,6 +391,7 @@ def main():
         plt.subplot(413); plt.imshow(magB, aspect='auto', cmap='gray'); plt.title('co-registered antenna B magnitude'); plt.colorbar(); plt.clim([0, 20])
         plt.subplot(414); plt.imshow(np.rad2deg(phsB), aspect='auto', cmap='seismic'); plt.title('co-registered antenna B phase'); plt.clim([-180, 180]); plt.colorbar()
         plt.show()
+        del magA, phsA, magB, phsB
 
     print('CHIRP STABILITY ASSESSMENT AND COREGISTRATION -- complete')
     print(' ')
@@ -505,6 +503,7 @@ def main():
     # Correlation map
     print('-- producing correlation map')
     corrmap = fl.stacked_correlation_map(cmpA3, cmpB3, fresnel_stack, az_step=az_step)
+    del cmpA3, cmpB3
     if bplot:
         RGB = np.zeros((len(corrmap), np.size(corrmap, axis=1), 3), dtype=float)
         RGB[:, :, 2] = np.divide(np.abs(corrmap), np.max(np.max(np.abs(corrmap))))
