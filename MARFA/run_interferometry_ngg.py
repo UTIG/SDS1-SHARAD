@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 __authors__ = ['Kirk Scanlan, kirk.scanlan@utexas.edu', 'Gregory Ng, ngg@ig.utexas.edu']
 __version__ = '0.2'
 __history__ = {
@@ -91,11 +92,7 @@ def select_foi_and_srf():
             plt.colorbar()
             plt.show()
         # check the length of the picked FOI
-        temp = 0
-        for ii in range(np.size(FOI, axis=1)):
-            if len(np.argwhere(FOI[:, ii] == 1)) >= 1:
-                temp += 1
-        Nf = temp; del temp, ii
+        Nf = FOI_picklen(FOI)
         ind += 1
 
     # output: FOI
@@ -119,7 +116,14 @@ def select_foi_and_srf():
     # -----------------------------------------------------------------------------
     # -----------------------------------------------------------------------------
 
-    return FOI, SRF
+    return FOI, SRF, Nf
+
+def FOI_picklen(FOI):
+    Nf = 0
+    for ii in range(np.size(FOI, axis=1)):
+        if len(np.argwhere(FOI[:, ii] == 1)) >= 1:
+            Nf += 1
+    return Nf
 
 
 def main():
@@ -218,7 +222,6 @@ def main():
 
 
     FOI_cache_file = 'run_interferometry__FOI.npz'
-    SRF_cache_file = 'run_interferometry__SRF.npz'
     print('FOI_cache_file = ' + FOI_cache_file)
     if os.path.exists(FOI_cache_file):
         print('Loading picks from cache ' + FOI_cache_file)
@@ -226,11 +229,13 @@ def main():
             FOI = data['FOI']
             SRF = data['SRF']
             trim = data['trim']
+        # check the length of the picked FOI
+        Nf = FOI_picklen(FOI)
+
     else:
-        FOI, SRF = select_foi_and_srf()
+        FOI, SRF, Nf = select_foi_and_srf()
         np.savez_compressed(FOI_cache_file, FOI=FOI, SRF=SRF, trim=trim)
         print('Saved picks to ' + FOI_cache_file)
-
 
     # CHIRP STABILITY ASSESSMENT AND COREGISTRATION ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -407,6 +412,7 @@ def main():
     # Determine the number of azimuth samples between independent looks
     print('-- determine azimuth samples between independent range lines')
     #az_step = int(fl.independent_azimuth_samples(cmpA3, cmpB3, FOI))
+    #az_step = int(az_step)
     az_step = 8
     print('   > azimuth samples between independent range lines:', str(az_step))
 
@@ -550,7 +556,7 @@ def main():
     N = int(np.floor(np.divide(fresnel_stack, az_step)))
     if N != 1:
         N = N + 1
-    Nf = int(np.round(np.divide(N, az_step)) + 1)
+    Nf = int(np.round(np.divide(Nf, az_step)) + 1)
     print('   > unwrapped cross-track surface clutter mean interferometric phase:', str(np.round(mean_srf, 3)))
     print('   > FOI mean interferometric phase:', str(np.round(mean_phi, 3)))
     print('   > FOI mean interferometric correlation:', str(np.round(gamma, 3)))
