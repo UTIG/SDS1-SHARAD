@@ -25,6 +25,14 @@ Usage example
 # TODO: save and load picks in a standard format
 # Save intermediate products to named intermediate files
 
+    #'NAQLK/JKB2j/ZY1b/'
+    #line = 'GOG3/JKB2j/BWN01a/'
+    #project = 'SRH1'
+    #line = 'DEV2/JKB2t/Y81a/'
+    #project = 'ICP10'
+    #line = 'AMY/JKB2u/Y226b/'
+
+
 """
 
 import sys
@@ -40,99 +48,17 @@ from tkinter import *
 
 import interferometry_funclib as fl
 import interface_picker as ip
+import pick_interferometry as pickint
 
-
-
-def select_foi_and_srf():
-    """ FOI, SRF = select_foi() """
-
-    # FEATURE OF INTEREST SELECTION ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    print(' ')
-    print('FEATURE OF INTEREST SELECTION')
-
-    # Load the combined and focused 1m MARFA data product and stack to the 
-    # desired trace spacing in preparation for feature detection and selection
-    print('-- load combined and focused radar product')
-    if gain == 'low':
-        pwr_image, lim = fl.load_power_image(line, '1', trim, fresnel_stack, 'averaged', pth=path + 'S4_FOC/')
-    elif gain == 'high':
-        pwr_image, lim = fl.load_power_image(line, '2', trim, fresnel_stack, 'averaged', pth=path + 'S4_FOC/')
-    if trim[3] == 0:
-        trim[3] = lim
-    if debug and bplot:
-        plt.figure()
-        plt.imshow(pwr_image, aspect='auto', cmap='gray'); plt.title('power image at Fresnel trace spacing')
-        plt.colorbar()
-        plt.clim([0, 20])
-        plt.show()
-
-    # Feature selection from the stacked power image
-    print('-- select feature of interest')
-    Nf = 0
-    ind = 0
-    while Nf < 5:
-        if ind != 0:
-            print('feature of interest not long enough - only', str(Nf),'samples re-select')
-        #FOI = np.transpose(np.load('ZY1b_testpicksALL_15Stack.npy'))
-        #FOI = np.transpose(np.load('ZY1b_testpicksSTART_15Stack.npy'))
-        #FOI = np.transpose(np.load('ZY1b_testpicksEND_15Stack.npy'))
-        #FOI = np.transpose(np.load('BWN01b_testpicks_15Stack.npy'))
-        #FOI = np.transpose(np.load('SRH_Y81a_testpicks_15Stack.npy'))
-        #FOI = np.transpose(np.load('SRH_Y81a_lakepicks_15Stack.npy'))
-        FOI = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
-        #np.save('SRH_Y81a_lakepicks_15Stack.npy', FOI)
-        FOI = np.transpose(FOI)
-        if debug:
-            plt.figure()
-            plt.imshow(pwr_image, aspect='auto', cmap='gray')
-            plt.title('power image with picked FOI')
-            plt.imshow(FOI, aspect='auto')
-            plt.colorbar()
-            plt.show()
-        # check the length of the picked FOI
-        Nf = FOI_picklen(FOI)
-        ind += 1
-
-    # output: FOI
-
-    # Feature surface above the picked FOI from the stacked power image
-    print('-- select surface above feature of interest')
-    SRF = fl.surface_pick(pwr_image, FOI)
-    if bplot and debug:
-        plt.figure()
-        plt.imshow(pwr_image, aspect='auto', cmap='gray')
-        plt.title('power image with picked FOI and associated SURFACE')
-        plt.imshow(FOI, aspect='auto')
-        plt.imshow(SRF, aspect='auto')
-        plt.colorbar()
-        plt.show()
-
-    print('FEATURE OF INTEREST SELECTION -- complete')
-    print(' ')
-    # output: SRF 
-
-    # -----------------------------------------------------------------------------
-    # -----------------------------------------------------------------------------
-
-    return FOI, SRF, Nf
-
-def FOI_picklen(FOI):
-    Nf = 0
-    for ii in range(np.size(FOI, axis=1)):
-        if len(np.argwhere(FOI[:, ii] == 1)) >= 1:
-            Nf += 1
-    return Nf
 
 
 def main():
-    #project = 'ICP10'
-    #line = 'AMY/JKB2u/Y226b/'
 
     """
     #project = 'ICP10'
     #line = 'ICP10/JKB2u/F01T01a/'
+
+    Note: The bxds for this file seems to be the wrong shape and so it won't load.
 
 
     FEATURE OF INTEREST SELECTION
@@ -152,16 +78,17 @@ def main():
     """
 
     parser = argparse.ArgumentParser(description='Interferometry')
+    parser.add_argument('-p', '--project', default='GOG3',
+                        help='Project name')
+    parser.add_argument('--line', default='NAQLK/JKB2j/ZY1b/',
+                        help='Line name: project/set/transect')
     parser.add_argument('--fresnelstack', type=int, default=15, help='fresnel_stack')
     parser.add_argument('--plot', action='store_true', help='Plot debugging graphs')
     parser.add_argument('--save', action='store_true', help='Save intermediate files')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
     parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD', help='targ data base directory')
     parser.add_argument('--mode', default='Roll', choices=('Roll','Reference', 'none'), help='Interferogram Correction Mode')
-    parser.add_argument('-p', '--project', default='GOG3',
-                        help='Project name')
-    parser.add_argument('--line', default='NAQLK/JKB2j/ZY1b/',
-                        help='Line name: project/set/transect')
+    parser.add_argument('--pickfile', help="Use pick file generated by pick_interferometry.py")
 
     args = parser.parse_args()
 
@@ -169,10 +96,7 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout)
 
     project = args.project #'GOG3'
-    line = args.line #'NAQLK/JKB2j/ZY1b/'
-    #line = 'GOG3/JKB2j/BWN01a/'
-    #project = 'SRH1'
-    #line = 'DEV2/JKB2t/Y81a/'
+    line = args.line
     bplot = args.plot
     bsave = args.save
     debug = True
@@ -199,43 +123,51 @@ def main():
     print('tregpath = ' + tregpath)
     print('rawpath = ' + rawpath)
 
-    if line == 'NAQLK/JKB2j/ZY1b/':
-        #trim = [0, 1000, 0, 12000]
-        trim = [0, 1000, 0, 6000]
-        chirpwin = [120, 150]
-    elif line == 'GOG3/JKB2j/BWN01b/':
-        trim = [0, 1000, 0, 15000]
-        chirpwin = [120, 150]
-    elif line == 'GOG3/JKB2j/BWN01a/':
-        trim = [0, 1000, 15000, 27294]
-        chirpwin = [120, 150]
-    else:
-        trim = [0, 1000, 0, 0]
-        chirpwin = [0, 200]
+    LINE_PARAMS = {
+        'NAQLK/JKB2j/ZY1b': {
+            'trim': [0, 1000, 0, 12000],
+            'chirpwin': [120, 150],
+        },
+        'GOG3/JKB2j/BWN01b': {
+            'trim': [0, 1000, 0, 15000],
+            'chirpwin': [120, 150],
+        },
+        'GOG3/JKB2j/BWN01a': {
+            'trim': [0, 1000, 15000, 27294],
+            'chirpwin': [120, 150],
+        },
+        '__DEFAULT__': {
+            'trim': [0, 1000, 0, 0],
+            'chirpwin': [0, 200],
+        },
+    }
 
-    if project == 'GOG3':
-        mb_offset = 155.6
-    elif project == 'SRH1':
-        mb_offset = 127.5
-    elif project == 'ICP10':
-        mb_offset = '127.5'
+    lineparm = LINE_PARAMS.get(line.rstrip('/'), LINE_PARAMS['__DEFAULT__'])
+    trim = lineparm['trim']
+    chirpwin = lineparm['chirpwin']
 
+    mb_offsets = {'GOG3': 155.6, 'SRH1': 127.5, 'ICP10': 127.5}
+    mb_offset = mb_offsets.get(project, mb_offsets['SRH1'])
 
-    FOI_cache_file = 'run_interferometry__FOI.npz'
-    print('FOI_cache_file = ' + FOI_cache_file)
-    if os.path.exists(FOI_cache_file):
-        print('Loading picks from cache ' + FOI_cache_file)
-        with np.load(FOI_cache_file) as data:
+    if args.pickfile:
+        # TODO: validate pick parameters against interferometry parameters from
+        # argparse and make sure they match.
+        print('Loading picks from ' + args.pickfile)
+        with np.load(args.pickfile) as data:
             FOI = data['FOI']
             SRF = data['SRF']
             trim = data['trim']
         # check the length of the picked FOI
-        Nf = FOI_picklen(FOI)
-
+        Nf = pickint.FOI_picklen(FOI)
     else:
-        FOI, SRF, Nf = select_foi_and_srf()
-        np.savez_compressed(FOI_cache_file, FOI=FOI, SRF=SRF, trim=trim)
-        print('Saved picks to ' + FOI_cache_file)
+        # Pick an FOI, and save it to a cache file for reuse
+        savefile = 'run_interferometry_FOI_save0.npz'
+        FOI, SRF, Nf = pickint.select_foi_and_srf(line=line, path=path, \
+                       chan=pickint.CHANNELS[gain], fresnel_stack=args.fresnelstack,
+                       FOI_selection_method=FOI_selection_method,
+                       trim=trim, bplot=args.plot, debug=debug, savefile=savefile)
+        logging.debug("Cached picks to " + savefile)
+
 
     # CHIRP STABILITY ASSESSMENT AND COREGISTRATION ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -366,13 +298,16 @@ def main():
 
         # Sub-pixel co-registration of the port and starboard range lines
         print('-- co-registration of port and starboard radargrams')
-        cmpA3, cmpB3, shift_array = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
+        cmpA3, cmpB3, shift_array, qual_array = fl.coregistration(cmpA2, cmpB2, (1 / 50E6), 10)
         del cmpA2, cmpB2
         if bsave:
             print('Saving to ' + post_coreg)
             np.savez(post_coreg, cmpA3=cmpA3, cmpB3=cmpB3, shift_array=shift_array)
-
-
+        if bplot:
+            plt.figure()
+            plt.subplot(211); plt.plot(shift_array);
+            plt.subplot(212); plt.plot(qual_array);
+            plt.show()
     else:
 
         # Load previously coregistered datasets

@@ -33,8 +33,9 @@ import scipy.special
 import interface_picker as ip
 from parse_channels import parse_channels
 import filter_ra
+import qint
 
-def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
+def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200, trim=None):
     '''
     function for loading MARFA data (magnitude and phase) for a specific line
 
@@ -44,6 +45,7 @@ def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
        channel: string specifying MARFA channel
            pth: path to line of interest
          nsamp: number of fast-time samples
+          trim: trim[0]:trim[1] is fast time trimming, trim[2]:trim[3] is slow time trimming
 
     Outputs:
     ------------
@@ -57,16 +59,20 @@ def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200):
     # load and organize the magnitude file
     logging.debug("Loading " + mag_pth)
     mag = np.fromfile(mag_pth, dtype='>i4')
-    ncol = int(len(mag) / nsamp)
-    mag = np.transpose(np.reshape(mag, (ncol, nsamp))) / 10000
+    mag = np.reshape(mag, (-1, nsamp))
+
+    if trim is not None: # trim before transpose
+        mag = mag[trim[2]:trim[3], trim[0]:trim[1]]
 
     # load and organize the phase file
     logging.debug("Loading " + phs_pth)
     phs = np.fromfile(phs_pth, dtype='>i4')
-    ncol = int(len(phs) / nsamp)
-    phs = np.transpose(np.reshape(phs, (ncol, nsamp))) / 2**16
+    phs = np.reshape(phs, (-1, nsamp))
 
-    return mag, phs
+    if trim is not None:
+        phs = phs[trim[2]:trim[3], trim[0]:trim[1]]
+
+    return mag.T / 10000, phs.T / 2**16
 
 def test_load_marfa():
     line = 'DEV2/JKB2t/Y81a'
@@ -751,12 +757,16 @@ def test_interpolate():
 
 
 
-def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30):
+def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300):
     '''
     function for sub-sampling and coregistering complex-valued range lines
         tempB = np.mean(np.square(np.abs(subsampA))) # GNG: move this out?
     from two radargrams as required to perform interferometry. Follows the
     steps outlines in Castelletti et al. (2018)
+
+    TODO: coregistration should probably occur using either just the first half of the image,
+    or it should be done in a log-scaled domain.  Otherwise the only effective contribution
+    to the signal will be the echoes near the surface.  
 
     Inputs:
     -------------
@@ -772,52 +782,69 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=30)
        coregB: coregistered complex-valued B radargram
     '''
 
+    method = 0
+    shift2 = shift // (subsample_factor // 2)
+
     # define the output
     coregB = np.empty_like(cmpB, dtype=complex)
 
     shift_array = np.zeros(cmpA.shape[1])
+    qual_array = np.zeros(cmpA.shape[1])
 
     for ii in range(cmpA.shape[1]): #range(np.size(cmpA, axis=1)):
-        # subsample
-        # Older sinc interpolation method, determined equivalent nto frequency_interpolate
-        #subsampA = sinc_interpolate(cmpA[:, ii], orig_sample_interval, subsample_factor)
-        #subsampB = sinc_interpolate(cmpB[:, ii], orig_sample_interval, subsample_factor)
-        subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
-        subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
-        #logging.debug("subsampA.shape = " + str(subsampA.shape))
+        if method == 1:
+            # correlate in the non-subsampled domain
+            rho = np.abs(scipy.signal.correlate(cmpA[:, ii], cmpB[shift2:-(shift2-1), ii], mode='valid'))
 
+            # interpolate maximum between subsample points
+            x = np.argmax(rho)
+            p, _, _ = qint.qint(rho, x)
+            x += p - (rho.shape[0] // 2)
+            to_shift = int(np.round(x * subsample_factor))
+            # subsample
+            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+        elif method == 2:
+            # subsample
+            subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
+            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+            a1 = subsampA - np.mean(cmpA[:, ii])
+            b1 = subsampB[shift:-(shift-1)] - np.mean(cmpB[:, ii])
+            sa = np.std(cmpA[:, ii])
+            sb = np.std(cmpB[:, ii])
+            if sa > 0:
+                a1 /= sa
+            if sb > 0:
+                b1 /= sb
 
-        #if ii == 0:
-        #    plt.figure()
-        #    plt.plot(np.linspace(0, 1, len(cmpA)), np.abs(cmpA[:, ii]), label='original A')
-        #    plt.plot(np.linspace(0, 1, len(subsampA)), np.abs(subsampA), label='interpolated A')
-        #    plt.plot(np.linspace(0, 1, len(cmpB)), np.abs(cmpB[:, ii]), label='original B')
-        #    plt.plot(np.linspace(0, 1, len(subsampB)), np.abs(subsampB), label='interpolated B')
-        #    plt.legend()
-        #    plt.show()
-
-        # co-register and shift
-        shifts = np.arange(-1 * shift, shift, 1)
-        rho = np.zeros((len(shifts), ), dtype=float)
-        b_do_scipy = True
-        if b_do_scipy:
-            # calculate using a fourier cross-correlation (scipy.signal.correlate)
-            rho = np.abs(correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
+            # co-register and shift
+            rho = np.real(scipy.signal.correlate(a1, b1, mode='valid'))
+            if np.max(rho) > 0:
+                to_shift = np.argmax(rho) - shift
+            else:
+                to_shift = 0
         else:
-            tempB = np.mean(np.square(np.abs(subsampA))) 
-            for jj in range(len(shifts)):
-                tempA = np.abs(np.mean(np.multiply(subsampA, np.conj(np.roll(subsampB, shifts[jj])))))
-                tempC = np.mean(np.square(np.abs(np.roll(subsampB, shifts[jj]))))
-                #tempD = np.sqrt(np.multiply(tempB, tempC)) # GNG: sqrt is un-necessary for this relative compare
-                tempD = np.multiply(tempB, tempC)
-                rho[jj] = np.divide(tempA, tempD)
-        to_shift = shifts[np.argwhere(rho == np.max(rho))][0][0]
+            # subsample
+            subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
+            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+
+            # co-register and shift
+            rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
+            to_shift = np.argmax(rho) - shift
+
         subsampB = np.roll(subsampB, to_shift)
+        qual_array[ii] = np.max(rho)
         shift_array[ii] = to_shift
         # remove subsampling
         coregB[:, ii] = subsampB[np.arange(0, len(subsampB), subsample_factor)]
 
-    return cmpA, coregB, shift_array
+    #logging.info("x={:f} shift={:f}".format(x, shift2))
+    logging.info("shift_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
+                np.mean(shift_array), np.median(shift_array), np.std(shift_array),
+                np.min(shift_array), np.max(shift_array)))
+    logging.info(" qual_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
+                np.mean(qual_array), np.median(qual_array), np.std(qual_array),
+                np.min(qual_array), np.max(qual_array)))
+    return cmpA, coregB, shift_array, qual_array
 
 
 def test_coregistration():
@@ -1055,6 +1082,9 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
         chans = ['6', '8']
     else:
         raise ValueError('Unknown gain ' + gain)
+
+    # TODO: reduce max mem usage by streaming
+
     bxdsA = raw_bxds_load(raw_path, geo_path, chans[0], sigwin)
     bxdsB = raw_bxds_load(raw_path, geo_path, chans[1], sigwin)
 
@@ -1081,33 +1111,18 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     refchirp = get_ref_chirp(chirp_path, bandpass=bp, nsamp=output_samples)
     # TODO: do we need to make the chirp complex?
     #refchirp *= hamming
-
-    #plt.figure()
-    #plt.subplot(311); plt.imshow(np.abs(bxdsA[sigwin[0]:sigwin[1], :]), aspect='auto'); plt.title('bxdsA')
-    #plt.subplot(312); plt.imshow(np.abs(bxdsB[sigwin[0]:sigwin[1], :]), aspect='auto'); plt.title('bxdsB')
-    #plt.subplot(313)
-    #plt.plot(20 * np.log10(np.abs(bxdsA[0:200, 0000])), label='bxdsA - 0')
-    #plt.plot(20 * np.log10(np.abs(bxdsA[0:200, 1000])), label='bxdsA - 1000')
-    #plt.plot(20 * np.log10(np.abs(bxdsA[0:200, 2000])), label='bxdsA - 2000')
-    #plt.plot(20 * np.log10(np.abs(bxdsB[0:200, 0000])), label='bxdsB - 0')
-    #plt.plot(20 * np.log10(np.abs(bxdsB[0:200, 1000])), label='bxdsB - 1000')
-    #plt.plot(20 * np.log10(np.abs(bxdsB[0:200, 2000])), label='bxdsB - 2000')
-    #plt.legend()
-    #plt.show()
-
+    # Since we did an FFT with a detrend in it in filter_ra, we can skip detrending.
+    detrend = False #'constant' 
     # prepare the outputs
-    #dechirpA = np.zeros((len(bxdsA), np.size(bxdsA, axis=1)), dtype=complex)
-    #dechirpB = np.zeros((len(bxdsB), np.size(bxdsB, axis=1)), dtype=complex)
     dechirpA = np.empty_like(bxdsA, dtype=complex)
-
     # dechirp
     for ii in range(np.size(bxdsA, axis=1)):
-        dechirpA[:, ii] = dechirp(bxdsA[:, ii], refchirp, do_cinterp)
+        dechirpA[:, ii] = dechirp(bxdsA[:, ii], refchirp, do_cinterp, detrend=detrend)
     del bxdsA
 
     dechirpB = np.empty_like(bxdsB, dtype=complex)
     for ii in range(np.size(bxdsB, axis=1)):
-        dechirpB[:, ii] = dechirp(bxdsB[:, ii], refchirp, do_cinterp)
+        dechirpB[:, ii] = dechirp(bxdsB[:, ii], refchirp, do_cinterp, detrend=detrend)
     del bxdsB
 
     return dechirpA, dechirpB
@@ -1152,7 +1167,7 @@ def test_load_power_image():
         for method in ('averaged','summed'):
             img = load_power_image(line, '1', trim, fresnel_stack, method, pth=path)
 
-def dechirp(trace, refchirp, do_cinterp, output_samples=3200):
+def dechirp(trace, refchirp, do_cinterp, output_samples=3200, detrend='linear'):
     '''
     Range line dechirp processor
 
@@ -1162,6 +1177,7 @@ def dechirp(trace, refchirp, do_cinterp, output_samples=3200):
          refchirp: reference chirp
        do_cinterp: do frequency domain interpolation (coherent noise
                    removal) for HiCARS/MARFA data
+          detrend: parameter to pass to detrend. If False, don't detrend
 
     Outputs:
     -----------
@@ -1172,8 +1188,11 @@ def dechirp(trace, refchirp, do_cinterp, output_samples=3200):
     shifter = int(np.median(np.argmax(trace)))
     trace = np.roll(trace, -shifter)
 
-    #DFT = np.fft.fft(trace)
-    DFT = np.fft.fft(signal.detrend(trace))
+    if detrend:
+        #DFT = np.fft.fft(trace)
+        DFT = np.fft.fft(signal.detrend(trace, type=detrend))
+    else:
+        DFT = np.fft.fft(trace)
 
     if do_cinterp:
         # Remove five samples per cycle problem
@@ -1307,6 +1326,7 @@ def raw_bxds_load(rad_path, geo_path, channel, trim, DX=1, MS=3200, NR=1000, NRr
     ----------------
        signalout is an array of raw MARFA data for the line and channel in question
     '''
+
 
     rad_name = os.path.join(rad_path, 'bxds')
     undersamp = True
