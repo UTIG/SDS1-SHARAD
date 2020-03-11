@@ -250,7 +250,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
     return b
 
 
-def todo(delete=False, senv=None, filename=None):
+def todo(delete=False, senv=None, filename=None, verbose=False):
     """List the orbits that are not already RSR-processed to be
     processed but for which an altimetry file exists
 
@@ -274,10 +274,8 @@ def todo(delete=False, senv=None, filename=None):
         senv = SHARADEnv.SHARADEnv()
 
     # Numpy errors
-    if verbose is False:
-        np.seterr(all='ignore')
-    else:
-        np.seterr(all:'warn')
+    errlevel = 'warn' if verbose else 'ignore'
+    np.seterr(all=errlevel)
 
     # Existing orbits
     alt_orbits = []

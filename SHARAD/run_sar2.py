@@ -145,7 +145,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, procparam['mf_bandwidth [Hz]']))
             logging.debug('{:s}: SAR number of looks: {:d}'.format(taskname, int(number_of_looks)))
             logging.debug('{:s}: SAR matched filter recalc interval: {:d}'.format(taskname, procparam['mf_recalc_int [samples]']))
-            logging.debug('{:s}: SAR subsurface permittivity: {:d}'.format(taskname, procparam['mf_Er']))
+            logging.debug('{:s}: SAR subsurface permittivity: {:f}'.format(taskname, procparam['mf_Er']))
             del number_of_looks
         elif focuser == 'Delay Doppler v2':
             logging.debug("{:s}: SAR range line interpolation interval [m]: {:f}".format(taskname, procparam['ddv2_interpolate_dx [m]']))

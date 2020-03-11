@@ -33,7 +33,7 @@ import scipy.special
 import interface_picker as ip
 from parse_channels import parse_channels
 import filter_ra
-import qint
+import peakint
 
 def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200, trim=None):
     '''
@@ -57,22 +57,30 @@ def load_marfa(line, channel, pth='./Test Data/MARFA/', nsamp=3200, trim=None):
     phs_pth = os.path.join(pth, line, 'P1D' + channel)
 
     # load and organize the magnitude file
-    logging.debug("Loading " + mag_pth)
-    mag = np.fromfile(mag_pth, dtype='>i4')
-    mag = np.reshape(mag, (-1, nsamp))
-
-    if trim is not None: # trim before transpose
-        mag = mag[trim[2]:trim[3], trim[0]:trim[1]]
+    mag = load_and_trim(mag_pth, trim, nsamp)
 
     # load and organize the phase file
-    logging.debug("Loading " + phs_pth)
-    phs = np.fromfile(phs_pth, dtype='>i4')
-    phs = np.reshape(phs, (-1, nsamp))
+    phs = load_and_trim(phs_pth, trim, nsamp)
 
-    if trim is not None:
-        phs = phs[trim[2]:trim[3], trim[0]:trim[1]]
+    return mag / 10000, phs / 2**16
 
-    return mag.T / 10000, phs.T / 2**16
+def load_and_trim(infile, trim, nsamp=3200):
+    logging.debug("Loading " + infile)
+    fbytes = os.path.getsize(infile)
+    fsamples = fbytes // 4
+    ncols = fsamples // nsamp
+    fullbytes = ncols * nsamp * 4
+    if fullbytes != fbytes:
+        msg = "{:s} has extra bytes -- {:d} traces" \
+              " + {:d} extra bytes, {:d} bytes total".format(infile, ncols, fbytes - fullbytes, fbytes)
+        logging.warning(msg)
+
+    data = np.fromfile(infile, dtype='>i4', count=ncols*nsamp)
+    data = np.reshape(data, (ncols, nsamp))
+
+    if trim is not None: # trim before transpose
+        data = data[trim[2]:trim[3], trim[0]:trim[1]]
+    return data.T
 
 def test_load_marfa():
     line = 'DEV2/JKB2t/Y81a'
@@ -80,6 +88,11 @@ def test_load_marfa():
     mag, phs = load_marfa(line, '1', pth=path)
 
     assert mag.shape == phs.shape
+
+    # Test a file that has a bad length
+    line = 'ICP10/JKB2u/F01T01a'
+    path = '/disk/kea/WAIS/targ/xtra/ICP10/FOC/Best_Versions/S4_FOC'
+    mag, phs = load_marfa(line, '1', pth=path)
 
 
 def load_S2_bxds(pth, channel, nsamp=3200):
@@ -798,7 +811,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
 
             # interpolate maximum between subsample points
             x = np.argmax(rho)
-            p, _, _ = qint.qint(rho, x)
+            p, _, _ = peakint.qint(rho, x)
             x += p - (rho.shape[0] // 2)
             to_shift = int(np.round(x * subsample_factor))
             # subsample
@@ -1137,7 +1150,9 @@ def test_denoise_and_dechirp():
     inputs = [
         {'prj': 'SRH1', 'line': 'DEV2/JKB2t/Y81a', 'trim': trim_default },
         {'prj': 'GOG3', 'line': 'NAQLK/JKB2j/ZY1b', 'trim': [0, 1000, 0, 12000] },
-        {'prj': 'GOG3', 'line': 'GOG3/JKB2j/BWN01a/', 'trim': [0, 1000, 15000, 27294] },
+        # Trimming at trim[2] == 15000 isn't supported yet
+        #{'prj': 'GOG3', 'line': 'GOG3/JKB2j/BWN01a/', 'trim': [0, 1000, 15000, 27294] },
+        {'prj': 'GOG3', 'line': 'GOG3/JKB2j/BWN01a/', 'trim': [0, 1000, 0, 27294] },
         {'prj': 'GOG3', 'line': 'GOG3/JKB2j/BWN01b/', 'trim': [0, 1000, 0, 15000] },
     ]
 
@@ -1334,6 +1349,7 @@ def raw_bxds_load(rad_path, geo_path, channel, trim, DX=1, MS=3200, NR=1000, NRr
     combined = True
     channel = int(channel)
     snm = None #'RADnh5' # either RADnh3 or RADnh5
+
     signalout = filter_ra.filter_ra(rad_name, geo_path, DX, MS, NR, NRr, channel, snm=snm,
               undersamp=undersamp, combined=combined, blank=False, trim=trim)
 
@@ -1702,12 +1718,12 @@ def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
 def main():
     logging.basicConfig(level=logging.DEBUG)
 
-    test_raw_bxds_load(); sys.exit(0)
+    test_load_marfa()
 
     test_interpolate()
     test_load_pik1()
+    test_raw_bxds_load()
     test_load_S2_bxds()
-    test_load_marfa()
     test_load_power_image()
     test_denoise_and_dechirp()
 

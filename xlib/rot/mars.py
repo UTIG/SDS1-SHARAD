@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
 
 import rot.trafos as rot_trafos
+#import trafos as rot_trafos
 
 
 def mars_rot_model(model):

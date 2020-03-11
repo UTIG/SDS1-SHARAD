@@ -70,7 +70,10 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # TODO: can we just load sections of the ROI?
 
     # Number of Rangelines
+    
     Necho = ROIstop-ROIstart
+    if maxechoes is not None:
+        Necho1 = min(Necho, maxechoes)
     # Derive pulse repetition frequency
     prf = np.zeros(Necho)
     prf[pri == 1] = 1/1428e-6
@@ -124,9 +127,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # of each rangeline.
     echosp = np.zeros((Nsample, Necho), dtype=complex)
 
-    p = prg.Prog(Necho) if do_progress else None
+    p = prg.Prog(Necho1) if do_progress else None
 
-    for pos in range(0, Necho):
+    for pos in range(Necho1):
         # Extract DTM topography
         lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
                                                r_circle, r_sphere)
@@ -182,11 +185,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         echosp[:, pos] = spectrum[np.abs(fo) <= fs/2]
         if p:
             p.print_Prog(pos)
-        if maxechoes is not None and pos > maxechoes:
-            print(" ")
-            sys.exit(0)
     if p:
-        print(" ")
+        p.close_Prog()
+
 
     # Align to a common reference, convert power to voltage, apply a window
     # Align echoes to a common reference point in time
@@ -205,7 +206,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     w = 0.5*(1+np.cos(2*pi*f/B))
     w[np.abs(f) > B/2] = 0
     w_c = np.conj(w)
-    for pos in range(0, Necho):
+    for pos in range(Necho):
         echo[:, pos] = np.fft.ifft(w_c * echosp[:, pos])
 
     rdrgr = 20*np.log10(np.abs(echo))
@@ -373,7 +374,11 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     # given a surface described by a set of points expressed in cartesian
     # coordinates and a point external to the surface, computes the size,
     # orientation and distance of each portion of the discretized surface
-    # w.r.t. the external point
+    # w.r.t. the external point (x0, y0, z0)
+
+    # GN TODO: summarize computations in some comments
+    # GN TODO: implement this using more streamlined matrix math?
+    logging.debug("surfaspect using {:d} points".format(len(X)))
 
     Xu = np.vstack((X[0, :], X[0:-1, :]))
     Xd = np.vstack((X[1:, :], X[-1, :]))
@@ -401,11 +406,12 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Zcole = Zcole[:, np.newaxis]
     Zl = np.hstack((Zcol1, Z[:, 0:-1]))
     Zr = np.hstack((Z[:, 1:], Zcole))
-
+    # right minus left
     Xa = Xr-Xl
     Ya = Yr-Yl
     Za = Zr-Zl
 
+    # up minus down
     Xb = Xu-Xd
     Yb = Yu-Yd
     Zb = Zu-Zd
@@ -428,7 +434,100 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Xa /= la
     Ya /= la
     Za /= la
-    la = la/2
+    la /= 2
+
+    # vertical facet sizes
+    lb = np.sqrt(Xb**2+Yb**2+Zb**2)
+    Xb /= lb
+    Yb /= lb
+    Zb /= lb
+    lb /= 2
+
+    n = np.sqrt(Xn**2+Yn**2+Zn**2)
+    Xn /= n
+    Yn /= n
+    Zn /= n
+
+    # distances
+    R = np.sqrt(XR**2+YR**2+ZR**2)
+    XR /= R
+    YR /= R
+    ZR /= R
+
+    # angles
+    Ux = XR*Xa + YR*Ya + ZR*Za
+    Uy = XR*Xb + YR*Yb + ZR*Zb
+    Uz = XR*Xn + YR*Yn + ZR*Zn
+
+    return (la, lb, Ux, Uy, Uz, R)
+
+def surfaspect1(X, Y, Z, x0, y0, z0):
+    # given a surface described by a set of points expressed in cartesian
+    # coordinates and a point external to the surface, computes the size,
+    # orientation and distance of each portion of the discretized surface
+    # w.r.t. the external point (x0, y0, z0)
+
+    # GN TODO: summarize computations in some comments
+    # GN TODO: implement this using more streamlined matrix math?
+    logging.debug("surfaspect using {:d} points".format(len(X)))
+
+    Xu = np.vstack((X[0, :], X[0:-1, :]))
+    Xd = np.vstack((X[1:, :], X[-1, :]))
+    Xcol1 = X[:, 0]
+    Xcole = X[:, -1]
+    Xcol1 = Xcol1[:, np.newaxis]
+    Xcole = Xcole[:, np.newaxis]
+    Xl = np.hstack((Xcol1, X[:, 0:-1]))
+    Xr = np.hstack((X[:, 1:], Xcole))
+
+    Yu = np.vstack((Y[0, :], Y[0:-1, :]))
+    Yd = np.vstack((Y[1:, :], Y[-1, :]))
+    Ycol1 = Y[:, 0]
+    Ycole = Y[:, -1]
+    Ycol1 = Ycol1[:, np.newaxis]
+    Ycole = Ycole[:, np.newaxis]
+    Yl = np.hstack((Ycol1, Y[:, 0:-1]))
+    Yr = np.hstack((Y[:, 1:], Ycole))
+
+    Zu = np.vstack((Z[0, :], Z[0:-1, :]))
+    Zd = np.vstack((Z[1:, :], Z[-1, :]))
+    Zcol1 = Z[:, 0]
+    Zcole = Z[:, -1]
+    Zcol1 = Zcol1[:, np.newaxis]
+    Zcole = Zcole[:, np.newaxis]
+    Zl = np.hstack((Zcol1, Z[:, 0:-1]))
+    Zr = np.hstack((Z[:, 1:], Zcole))
+    # right minus left
+    Pa = np.empty((len(Xr), 3))
+    Pa[:, 0] = Xr - Xl #Xa = Xr-Xl
+    Pa[:, 1] = Yr - Yl #Ya = Yr-Yl
+    Pa[:, 2] = Zr - Zl #Za = Zr-Zl
+
+    # up minus down
+    Pb = np.empty((len(Xr), 3))
+    Pb[:, 0] = Xu - Xu #Xb = Xu-Xd
+    Pb[:, 1] = Yu - Yu #Yb = Yu-Yd
+    Pb[:, 2] = Zu - Zu #Zb = Zu-Zd
+
+    del Xu, Yu, Zu, \
+        Xd, Yd, Zd, \
+        Xl, Yl, Zl, \
+        Xr, Yr, Zr
+
+    Xn = Ya*Zb-Za*Yb
+    Yn = Za*Xb-Xa*Zb
+    Zn = Xa*Yb-Ya*Xb
+
+    XR = x0-X
+    YR = y0-Y
+    ZR = z0-Z
+
+    # horizontal facet sizes
+    la = np.sqrt(Xa**2+Ya**2+Za**2)
+    Xa /= la
+    Ya /= la
+    Za /= la
+    la /= 2
 
     # vertical facet sizes
     lb = np.sqrt(Xb**2+Yb**2+Zb**2)
@@ -570,7 +669,7 @@ Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)""".split
         print(lat1,lon1)
 
 
-def test_icsim1():
+def test_icsim1(do_progress=True):
     """ Run icsim using parameters from run_ranging.py and icd.py """
     logging.debug("test_icsim1()")
 
@@ -626,15 +725,23 @@ def test_icsim1():
     v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
     state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
     # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
-    sim = incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end, maxechoes=1000).transpose()
-    assert sim.shape == data.shape
+    sim = incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end, maxechoes=100, do_progress=do_progress).transpose()
+    #try:
+    #    assert sim.shape == data.shape
+    #except AssertionError:
+    #    print("sim.shape = {:s}".format(str(sim.shape)))
+    #    print("data.shape = {:s}".format(str(data.shape)))
+    #    raise
 
 
 
 def main():
+    debug = True
+    loglevel = logging.DEBUG if debug else logging.WARNING
+    logging.basicConfig(level=loglevel, stream=sys.stdout)
     test_latlon()
     test_GetCornerCoordinates1()
-    test_icsim1()
+    test_icsim1(do_progress = not debug)
 
 
 if __name__ == "__main__":

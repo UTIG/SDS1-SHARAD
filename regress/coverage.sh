@@ -39,10 +39,12 @@ done
 # TODO: ../subradar/utils.py
 # TODO: ../xlib/rsr/fit.py
 # TODO: ../xlib/rsr/run.py
+# rot and trafos also have
+# ../xlib/rot/mars.py
 
 for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py \
 ../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
-../xlib/misc/coord.py ../xlib/misc/prog.py ../xlib/misc/hdf.py ../xlib/rot/mars.py ../xlib/rot/trafos.py  \
+../xlib/misc/coord.py ../xlib/misc/prog.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
 ../xlib/subradar/roughness.py ../xlib/rng/icsim.py \
 ../xlib/rsr/pdf.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
 do
