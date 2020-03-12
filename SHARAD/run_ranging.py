@@ -100,7 +100,7 @@ def main():
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
-        sys.exit(1)
+        sys.exit(0)
 
     logging.info("Start processing {:d} tracks".format(len(process_list)) )
 
@@ -152,6 +152,7 @@ def main():
 def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0, clutterfile=None,
                 b_noprogress=False, bplot=False):
     try:
+        obn = 0 # Suppressing undefined variable error.
         # create cmp path
         path_root_rng = '/disk/kea/SDS/targ/xtra/SHARAD/rng/'
         path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'

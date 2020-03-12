@@ -769,7 +769,6 @@ def test_interpolate():
                 plt.show()
 
 
-
 def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300):
     '''
     function for sub-sampling and coregistering complex-valued range lines
@@ -861,7 +860,21 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
 
 
 def test_coregistration():
-    pass
+    chanlist = {'low': ('5','7')} # not all high gain data exists, 'high': ('6','8')}
+    # Load the focused SLC 1m port and starboard radargrams
+
+    #"/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S2_FIL/NAQLK/JKB2j/ZY1a/"
+    line = "NAQLK/JKB2j/ZY1a/"
+    path = "/disk/kea/WAIS/targ/xtra/GOG3/FOC/Best_Versions/S4_FOC"
+    trim = [0, 1000, 0, 12000]
+    for name, chans in chanlist.items():
+        logging.info("Coregistration " + name)
+        cmpa = convert_to_complex(*load_marfa(line, chans[0], pth=path, trim=trim))
+        cmpb = convert_to_complex(*load_marfa(line, chans[1], pth=path, trim=trim))
+        logging.info("Coregistration done loading data")
+        # orig_sample_interval is unused; TODO: remove
+        cmpa3, cmpb3, shift_array, qual_array = coregistration(cmpa, cmpb, orig_sample_interval=None, subsample_factor=10)
+
 
 def read_ztim(filename, field_names=None):
     '''
@@ -1716,8 +1729,15 @@ def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    parser = argparse.ArgumentParser(description='Interferometry Function Library Test')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
 
+    args = parser.parse_args()
+
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout)
+    
+    test_coregistration()
     test_load_marfa()
 
     test_interpolate()
@@ -1729,5 +1749,7 @@ def main():
 
 
 if __name__ == "__main__":
+    import argparse
     import glob
     main()
+

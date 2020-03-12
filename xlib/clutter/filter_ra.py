@@ -595,7 +595,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
         MS1 = MS
         ftrim = (0, MS)
 
-    if trim is not None:
+    if trim is not None and len(trim) >= 4: #pragma: no-cover
         # Slow time trimming is not supported
         assert trim[2] is None
         assert trim[3] is None

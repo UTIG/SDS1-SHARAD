@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
-import rot.trafos as rot_trafos
-#import trafos as rot_trafos
+try:
+    import rot.trafos as rot_trafos
+except ModuleNotFoundError:
+    import trafos as rot_trafos
 
 
 def mars_rot_model(model):
@@ -172,3 +174,20 @@ def mars_rot_model(model):
     else:
         print('unknown model for Mars')
         return None
+
+def main():
+    # Test
+    print('testing mars.py')
+    for model in ('IAU2000', 'Kuchynka2014', 'Konopliv2016', 'unknown'):
+        m = mars_rot_model(model)
+        if model == 'unknown':
+            assert m is None
+        else:
+            assert m is not None
+
+#../xlib/rot/mars.py
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
