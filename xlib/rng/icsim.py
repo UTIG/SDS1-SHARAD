@@ -15,6 +15,7 @@ import gdal
 import json
 import re
 import argparse
+import time
 
 from scipy.constants import c, pi
 import numpy as np
@@ -61,7 +62,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     Output:
     """
-
+    t0 = time.time()
     # Open DTM
     geotiff = gdal.Open(dtm_path)
     band = geotiff.GetRasterBand(1)
@@ -123,9 +124,10 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     pulsesp_c = np.conj(pulsesp)
 
     # Extract topography and simulate scattering
-    # Create array to store result. echosp will contain the fourrier transform
+    # Create array to store result. echosp will contain the Fourier transform
     # of each rangeline.
-    echosp = np.zeros((Nsample, Necho), dtype=complex)
+    echosp = np.empty((Nsample, Necho), dtype=complex)
+    logging.debug("incoherent_sim: setup elapsed time: {:0.3f} sec".format(time.time() - t0))
 
     p = prg.Prog(Necho1) if do_progress else None
 
@@ -167,16 +169,11 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         # TODO: only pick the items you're interested in (i.e., top 20%), then sort after that.
 
         iP = np.argsort(-P)   # sort in descending order of power
+        # don't sort them, just index.
         delay = delay[iP]     # sort delays in descending order of power
         P = P[iP]             # sort powers in descending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
-        #-------------------------------------
-        idelay = np.around(delay*of*fs)-1
-        idelay[idelay < 0] = 0
-        idelay[idelay >= Nosample] = Nosample
-        idelay = idelay.astype(int)
-        # GN: i think we can replace the above with this:
-        # idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
+        idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
         #-------------------------------------
         reflections = np.zeros(Nosample)
 
@@ -185,6 +182,10 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         for j in range(thresh):
             #reflections[idelay[j]] = reflections[idelay[j]] + P[j]
             reflections[idelay[j]] += P[j]
+            #reflections[idelay[iP[j]]] += P[iP[j]]
+            #d1 = np.mod(delay[iP[j]], trx)
+            #id1 = int(min(max(np.around(d1*of*fs)-1, 0), Nosample))
+            #reflections[id1] += P[iP[j]]
 
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
         spectrum = pulsesp_c*np.fft.fft(reflections)
@@ -194,18 +195,24 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     if p:
         p.close_Prog()
 
+    logging.debug("incoherent_sim: reflection sim: {:0.3f} sec".format(time.time() - t0))
 
     # Align to a common reference, convert power to voltage, apply a window
     # Align echoes to a common reference point in time
     deltat = -(rxwot/fs+1428e-6)+11.96e-6
-    for pos in range(0, Necho):
-        phase = np.exp(-2j*pi*deltat[pos]*np.conj(f))
-        echosp[:, pos] = echosp[:, pos]*phase
-
+    # TODO: associativity
+    conjf = np.conj(f)
+    for pos in range(Necho):
+        #phase = np.exp(-2j*pi*deltat[pos]*conjf)
+        phase = np.exp(-2j*pi*deltat[pos]*conjf)
+        echosp[:, pos] *= phase #echosp[:, pos]*phase
+    # GN: Do we really need to do an ifft here in order to do a sqrt?
     # Convert echoes from power to voltage
     echo = np.fft.ifft(echosp, axis=0)
     echo = np.sqrt(echo)
     echosp = np.fft.fft(echo, axis=0)
+    # echosp = sqrt(echosp)
+    logging.debug("incoherent_sim: delay and power to voltage: {:0.3f} sec".format(time.time() - t0))
 
     # Create a Hann window and apply it to data
     # TODO: Change this to a Hamming Window to be consistent with cmp!
@@ -216,6 +223,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         echo[:, pos] = np.fft.ifft(w_c * echosp[:, pos])
 
     rdrgr = 20*np.log10(np.abs(echo))
+    logging.debug("incoherent_sim: hanning filter and freq to time domain: {:0.3f} sec".format(time.time() - t0))
 
     # Save results in an output file
     if save_path is not None:
