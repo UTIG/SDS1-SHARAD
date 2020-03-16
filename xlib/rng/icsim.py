@@ -14,6 +14,7 @@ import sys
 import gdal
 import json
 import re
+import argparse
 
 from scipy.constants import c, pi
 import numpy as np
@@ -72,8 +73,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # Number of Rangelines
     
     Necho = ROIstop-ROIstart
-    if maxechoes is not None:
-        Necho1 = min(Necho, maxechoes)
+    Necho1 = min(Necho, maxechoes) if maxechoes else Necho
     # Derive pulse repetition frequency
     prf = np.zeros(Necho)
     prf[pri == 1] = 1/1428e-6
@@ -164,14 +164,20 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         # spacecraft, but only for the most significant scatterers
         delay = delay.flatten()
         P = P.flatten()
+        # TODO: only pick the items you're interested in (i.e., top 20%), then sort after that.
+
         iP = np.argsort(-P)   # sort in descending order of power
-        delay = delay[iP]
-        P = P[iP]
-        delay = np.mod(delay, trx)
+        delay = delay[iP]     # sort delays in descending order of power
+        P = P[iP]             # sort powers in descending order of power
+        delay = np.mod(delay, trx) # wrap delay by radar receive window
+        #-------------------------------------
         idelay = np.around(delay*of*fs)-1
         idelay[idelay < 0] = 0
         idelay[idelay >= Nosample] = Nosample
         idelay = idelay.astype(int)
+        # GN: i think we can replace the above with this:
+        # idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
+        #-------------------------------------
         reflections = np.zeros(Nosample)
 
         # Remove 1/5 if you want all the echo, not just the top 20% brightest
@@ -378,7 +384,7 @@ def surfaspect(X, Y, Z, x0, y0, z0):
 
     # GN TODO: summarize computations in some comments
     # GN TODO: implement this using more streamlined matrix math?
-    logging.debug("surfaspect using {:d} points".format(len(X)))
+    #logging.debug("surfaspect using {:d} points".format(len(X)))
 
     Xu = np.vstack((X[0, :], X[0:-1, :]))
     Xd = np.vstack((X[1:, :], X[-1, :]))
@@ -469,7 +475,7 @@ def surfaspect1(X, Y, Z, x0, y0, z0):
 
     # GN TODO: summarize computations in some comments
     # GN TODO: implement this using more streamlined matrix math?
-    logging.debug("surfaspect using {:d} points".format(len(X)))
+    # logging.debug("surfaspect using {:d} points".format(len(X)))
 
     Xu = np.vstack((X[0, :], X[0:-1, :]))
     Xd = np.vstack((X[1:, :], X[-1, :]))
@@ -669,7 +675,7 @@ Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)""".split
         print(lat1,lon1)
 
 
-def test_icsim1(do_progress=True):
+def test_icsim1(save_path=None, do_progress=True):
     """ Run icsim using parameters from run_ranging.py and icd.py """
     logging.debug("test_icsim1()")
 
@@ -725,7 +731,8 @@ def test_icsim1(do_progress=True):
     v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
     state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
     # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
-    sim = incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end, maxechoes=100, do_progress=do_progress).transpose()
+    sim = incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end,
+                         maxechoes=100, save_path=save_path, do_progress=do_progress).transpose()
     #try:
     #    assert sim.shape == data.shape
     #except AssertionError:
@@ -737,11 +744,25 @@ def test_icsim1(do_progress=True):
 
 def main():
     debug = True
-    loglevel = logging.DEBUG if debug else logging.WARNING
+    parser = argparse.ArgumentParser(description='Run SHARAD ranging processing')
+    parser.add_argument('-o','--output', help="Output file for icsim test data")
+    parser.add_argument('--tracklist', default="xover_idx.dat",
+        help="List of tracks with xover points to process")
+    parser.add_argument('--clutterpath', default=None, help="Cluttergram path")
+    parser.add_argument('--noprogress', action="store_true", help="don't show progress")
+    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    parser.add_argument('-d','--debug', action="store_true", help="Display debugging plots")
+    #parser.add_argument('--SDS', default=os.getenv('SDS'), help="Override SDS environment variable")
+
+
+    args = parser.parse_args()
+    loglevel = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
     test_latlon()
     test_GetCornerCoordinates1()
-    test_icsim1(do_progress = not debug)
+
+
+    test_icsim1(save_path=args.output, do_progress=not args.noprogress)
 
 
 if __name__ == "__main__":
