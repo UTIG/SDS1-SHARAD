@@ -166,11 +166,15 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         # spacecraft, but only for the most significant scatterers
         delay = delay.flatten()
         P = P.flatten()
-        # TODO: only pick the items you're interested in (i.e., top 20%), then sort after that.
 
-        # np.argpartition
-        iP = np.argsort(-P)   # sort in descending order of power
-        # don't sort them, just index.
+        # thresh is the count of reflectors to retain. Increase this to 100% to retain all
+        # thresh = int(np.rint(len(P) * 0.20))
+        # Remove 1/5 if you want all the echo, not just the top 20% brightest
+        thresh = int(np.rint(len(P)/5))
+
+        # Partition powers into top x%, then sort that 20%
+        idxtop = np.argpartition(-P, thresh)[0:thresh]
+        iP = idxtop[np.argsort(-P[idxtop])]
         delay = delay[iP]     # sort delays in descending order of power
         P = P[iP]             # sort powers in descending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
@@ -178,8 +182,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         #-------------------------------------
         reflections = np.zeros(Nosample)
 
-        # Remove 1/5 if you want all the echo, not just the top 20% brightest
-        thresh = int(np.rint(len(P)/5))
         for j in range(thresh):
             #reflections[idelay[j]] = reflections[idelay[j]] + P[j]
             reflections[idelay[j]] += P[j]
@@ -187,8 +189,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
             #d1 = np.mod(delay[iP[j]], trx)
             #id1 = int(min(max(np.around(d1*of*fs)-1, 0), Nosample))
             #reflections[id1] += P[iP[j]]
-
-        # could we not apply the reflection sqrt here?
 
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
         spectrum = pulsesp_c*np.fft.fft(reflections)
