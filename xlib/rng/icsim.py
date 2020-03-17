@@ -91,7 +91,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     latsc = sph[:, 0]
     lonsc = sph[:, 1]-360
 
-    # Compute distance between points in the ground track as the arc between
+    # Compute distance between points din the ground track as the arc between
     # two consecutive points on a sphere of radius equal to mean Mars radius
     gt = crd.sph2cart(np.transpose(np.vstack((lonsc, latsc, np.ones(Necho)))))
     gtx = gt[:, 0]
@@ -126,7 +126,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # Extract topography and simulate scattering
     # Create array to store result. echosp will contain the Fourier transform
     # of each rangeline.
-    echosp = np.empty((Nsample, Necho), dtype=complex)
+    echosp = np.empty((Nsample, Necho1), dtype=complex)
     logging.debug("incoherent_sim: setup elapsed time: {:0.3f} sec".format(time.time() - t0))
 
     p = prg.Prog(Necho1) if do_progress else None
@@ -154,7 +154,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
                                              state[0, pos],
                                              state[1, pos],
                                              state[2, pos])
-
+        del X, Y, Z, cartDEM
         # Compute reflected power and distance from radar for every surface
         # element.
         E = facetgeopt(la, lb, Uz, R, sigmas)
@@ -168,6 +168,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         P = P.flatten()
         # TODO: only pick the items you're interested in (i.e., top 20%), then sort after that.
 
+        # np.argpartition
         iP = np.argsort(-P)   # sort in descending order of power
         # don't sort them, just index.
         delay = delay[iP]     # sort delays in descending order of power
@@ -187,9 +188,12 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
             #id1 = int(min(max(np.around(d1*of*fs)-1, 0), Nosample))
             #reflections[id1] += P[iP[j]]
 
+        # could we not apply the reflection sqrt here?
+
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
         spectrum = pulsesp_c*np.fft.fft(reflections)
         echosp[:, pos] = spectrum[np.abs(fo) <= fs/2]
+	
         if p:
             p.print_Prog(pos)
     if p:
@@ -202,24 +206,25 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     deltat = -(rxwot/fs+1428e-6)+11.96e-6
     # TODO: associativity
     conjf = np.conj(f)
-    for pos in range(Necho):
+    for pos in range(Necho1):
         #phase = np.exp(-2j*pi*deltat[pos]*conjf)
         phase = np.exp(-2j*pi*deltat[pos]*conjf)
         echosp[:, pos] *= phase #echosp[:, pos]*phase
     # GN: Do we really need to do an ifft here in order to do a sqrt?
     # Convert echoes from power to voltage
+    logging.debug("incoherent_sim: delay: {:0.3f} sec".format(time.time() - t0))
     echo = np.fft.ifft(echosp, axis=0)
     echo = np.sqrt(echo)
+    logging.debug("incoherent_sim: power to voltage: {:0.3f} sec".format(time.time() - t0))
     echosp = np.fft.fft(echo, axis=0)
-    # echosp = sqrt(echosp)
-    logging.debug("incoherent_sim: delay and power to voltage: {:0.3f} sec".format(time.time() - t0))
-
+    
     # Create a Hann window and apply it to data
     # TODO: Change this to a Hamming Window to be consistent with cmp!
     w = 0.5*(1+np.cos(2*pi*f/B))
     w[np.abs(f) > B/2] = 0
     w_c = np.conj(w)
-    for pos in range(Necho):
+
+    for pos in range(Necho1):
         echo[:, pos] = np.fft.ifft(w_c * echosp[:, pos])
 
     rdrgr = 20*np.log10(np.abs(echo))
@@ -230,10 +235,19 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         logging.debug("incoherent_sim: Saving radargram to " + save_path)
         np.save(save_path, rdrgr)
 
+
+
+
     # Plot radargram
     if plot:
-        fig = plt.imshow(rdrgr)
-        plt.show(fig)
+        fig, axs = plt.subplots(2, 1)
+        im = axs[0].imshow(rdrgr, aspect='auto')
+        axs[0].set_title('Radargram')
+        fig.colorbar(im, ax=axs[0])
+        #im = axs[1].imshow(rdrgr - rdrgr2, aspect='auto')
+        #axs[1].set_title('Diff')
+        #fig.colorbar(im, ax=axs[1])
+        plt.show()
 
     return rdrgr
 
@@ -683,7 +697,7 @@ Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)""".split
         print(lat1,lon1)
 
 
-def test_icsim1(save_path=None, do_progress=True):
+def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     """ Run icsim using parameters from run_ranging.py and icd.py """
     logging.debug("test_icsim1()")
 
@@ -740,7 +754,7 @@ def test_icsim1(save_path=None, do_progress=True):
     state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
     # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
     sim = incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end,
-                         maxechoes=100, save_path=save_path, do_progress=do_progress).transpose()
+                         maxechoes=100, plot=do_plot, save_path=save_path, do_progress=do_progress)
     #try:
     #    assert sim.shape == data.shape
     #except AssertionError:
@@ -764,13 +778,13 @@ def main():
 
 
     args = parser.parse_args()
-    loglevel = logging.DEBUG if args.debug else logging.INFO
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
     test_latlon()
     test_GetCornerCoordinates1()
 
 
-    test_icsim1(save_path=args.output, do_progress=not args.noprogress)
+    test_icsim1(save_path=args.output, do_plot=args.debug, do_progress=not args.noprogress)
 
 
 if __name__ == "__main__":
