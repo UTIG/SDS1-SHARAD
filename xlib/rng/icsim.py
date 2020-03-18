@@ -150,7 +150,8 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         X = cartDEM[:, 0].reshape(DEMshp)
         Y = cartDEM[:, 1].reshape(DEMshp)
         Z = cartDEM[:, 2].reshape(DEMshp)
-        [la, lb, Ux, Uy, Uz, R] = surfaspect(X, Y, Z,
+        #logging.info("X shape: " + str(X.shape))
+        [la, lb, Ux, Uy, Uz, R] = surfaspect1(X, Y, Z,
                                              state[0, pos],
                                              state[1, pos],
                                              state[2, pos])
@@ -526,59 +527,67 @@ def surfaspect1(X, Y, Z, x0, y0, z0):
     Zl = np.hstack((Zcol1, Z[:, 0:-1]))
     Zr = np.hstack((Z[:, 1:], Zcole))
     # right minus left
-    Pa = np.empty((len(Xr), 3))
-    Pa[:, 0] = Xr - Xl #Xa = Xr-Xl
-    Pa[:, 1] = Yr - Yl #Ya = Yr-Yl
-    Pa[:, 2] = Zr - Zl #Za = Zr-Zl
+    Pa = np.empty(Xr.shape + (3,))
+    Pa[:, :, 0] = Xr - Xl #Xa = Xr-Xl
+    Pa[:, :, 1] = Yr - Yl #Ya = Yr-Yl
+    Pa[:, :, 2] = Zr - Zl #Za = Zr-Zl
 
     # up minus down
-    Pb = np.empty((len(Xr), 3))
-    Pb[:, 0] = Xu - Xu #Xb = Xu-Xd
-    Pb[:, 1] = Yu - Yu #Yb = Yu-Yd
-    Pb[:, 2] = Zu - Zu #Zb = Zu-Zd
+    Pb = np.empty(Xr.shape + (3,))
+    Pb[:, :, 0] = Xu - Xd #Xb = Xu-Xd
+    Pb[:, :, 1] = Yu - Yd #Yb = Yu-Yd
+    Pb[:, :, 2] = Zu - Zd #Zb = Zu-Zd
 
     del Xu, Yu, Zu, \
         Xd, Yd, Zd, \
         Xl, Yl, Zl, \
         Xr, Yr, Zr
 
-    Xn = Ya*Zb-Za*Yb
-    Yn = Za*Xb-Xa*Zb
-    Zn = Xa*Yb-Ya*Xb
+    # TODO: cross product?
+    Pn = np.empty(Pa.shape)
 
-    XR = x0-X
-    YR = y0-Y
-    ZR = z0-Z
+    Pn[:, :, 0] = Pa[:, :, 1] * Pb[:, :, 2] - Pa[:, :, 2] * Pb[:, :, 1] #Xn = Ya*Zb-Za*Yb
+    Pn[:, :, 1] = Pa[:, :, 2] * Pb[:, :, 0] - Pa[:, :, 0] * Pb[:, :, 2] #Yn = Za*Xb-Xa*Zb
+    Pn[:, :, 2] = Pa[:, :, 0] * Pb[:, :, 1] - Pa[:, :, 1] * Pb[:, :, 0] #Zn = Xa*Yb-Ya*Xb
+
+    PR = np.empty(Pa.shape)
+    PR[:, :, 0] = x0 - X #XR = x0-X
+    PR[:, :, 1] = y0 - Y #YR = y0-Y
+    PR[:, :, 2] = z0 - Z #ZR = z0-Z
+    del X, Y, Z
 
     # horizontal facet sizes
-    la = np.sqrt(Xa**2+Ya**2+Za**2)
-    Xa /= la
-    Ya /= la
-    Za /= la
+    #la = np.sqrt(Xa**2+Ya**2+Za**2)
+    la = np.sqrt(Pa[:, :, 0]**2 + Pa[:, :, 1]**2 + Pa[:, :, 2]**2)
+    Pa[:, :, 0] /= la #Xa /= la
+    Pa[:, :, 1] /= la #Ya /= la
+    Pa[:, :, 2] /= la #Za /= la
     la /= 2
 
     # vertical facet sizes
-    lb = np.sqrt(Xb**2+Yb**2+Zb**2)
-    Xb /= lb
-    Yb /= lb
-    Zb /= lb
+    #lb = np.sqrt(Xb**2+Yb**2+Zb**2)
+    lb = np.sqrt(Pb[:, :, 0]**2 + Pb[:, :, 1]**2 + Pb[:, :, 2]**2)
+    Pb[:, :, 0] /= lb # Xb /= lb
+    Pb[:, :, 1] /= lb # Yb /= lb
+    Pb[:, :, 2] /= lb # Zb /= lb
     lb /= 2
 
-    n = np.sqrt(Xn**2+Yn**2+Zn**2)
-    Xn /= n
-    Yn /= n
-    Zn /= n
+    n = np.sqrt(Pn[:, :, 0]**2+Pn[:, :, 1]**2+Pn[:, :, 2]**2)
+    Pn[:, :, 0] /= n
+    Pn[:, :, 1] /= n
+    Pn[:, :, 2] /= n
 
     # distances
-    R = np.sqrt(XR**2+YR**2+ZR**2)
-    XR /= R
-    YR /= R
-    ZR /= R
+    R = np.sqrt(PR[:, :, 0]**2+PR[:, :, 1]**2+PR[:, :, 2]**2)
+    PR[:, :, 0] /= R
+    PR[:, :, 1] /= R
+    PR[:, :, 2] /= R
 
     # angles
-    Ux = XR*Xa + YR*Ya + ZR*Za
-    Uy = XR*Xb + YR*Yb + ZR*Zb
-    Uz = XR*Xn + YR*Yn + ZR*Zn
+    # TODO: dot product?
+    Ux = PR[:, :, 0]*Pa[:, :, 0] + PR[:, :, 1]*Pa[:, :, 1] + PR[:, :, 2]*Pa[:, :, 2]
+    Uy = PR[:, :, 0]*Pb[:, :, 0] + PR[:, :, 1]*Pb[:, :, 1] + PR[:, :, 2]*Pb[:, :, 2]
+    Uz = PR[:, :, 0]*Pn[:, :, 0] + PR[:, :, 1]*Pn[:, :, 1] + PR[:, :, 2]*Pn[:, :, 2]
 
     return (la, lb, Ux, Uy, Uz, R)
 
