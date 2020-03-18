@@ -554,38 +554,47 @@ def surfaspect1(X, Y, Z, x0, y0, z0):
     PR[:, :, 0] = x0 - X #XR = x0-X
     PR[:, :, 1] = y0 - Y #YR = y0-Y
     PR[:, :, 2] = z0 - Z #ZR = z0-Z
-    del X, Y, Z
 
     # horizontal facet sizes
     #la = np.sqrt(Xa**2+Ya**2+Za**2)
-    la = np.sqrt(Pa[:, :, 0]**2 + Pa[:, :, 1]**2 + Pa[:, :, 2]**2)
-    Pa[:, :, 0] /= la #Xa /= la
-    Pa[:, :, 1] /= la #Ya /= la
-    Pa[:, :, 2] /= la #Za /= la
+    #la = np.sqrt(Pa[:, :, 0]**2 + Pa[:, :, 1]**2 + Pa[:, :, 2]**2)
+    la = np.linalg.norm(Pa, axis=2)
+    Pa /= la[:, :, None]
+    #Pa[:, :, 0] /= la #Xa /= la
+    #Pa[:, :, 1] /= la #Ya /= la
+    #Pa[:, :, 2] /= la #Za /= la
     la /= 2
 
     # vertical facet sizes
     #lb = np.sqrt(Xb**2+Yb**2+Zb**2)
-    lb = np.sqrt(Pb[:, :, 0]**2 + Pb[:, :, 1]**2 + Pb[:, :, 2]**2)
-    Pb[:, :, 0] /= lb # Xb /= lb
-    Pb[:, :, 1] /= lb # Yb /= lb
-    Pb[:, :, 2] /= lb # Zb /= lb
+    #lb = np.sqrt(Pb[:, :, 0]**2 + Pb[:, :, 1]**2 + Pb[:, :, 2]**2)
+    lb = np.linalg.norm(Pb, axis=2)
+    Pb /= lb[:, :, None]
+    #Pb[:, :, 0] /= lb # Xb /= lb
+    #Pb[:, :, 1] /= lb # Yb /= lb
+    #Pb[:, :, 2] /= lb # Zb /= lb
     lb /= 2
 
-    n = np.sqrt(Pn[:, :, 0]**2+Pn[:, :, 1]**2+Pn[:, :, 2]**2)
-    Pn[:, :, 0] /= n
-    Pn[:, :, 1] /= n
-    Pn[:, :, 2] /= n
+    #n = np.sqrt(Pn[:, :, 0]**2+Pn[:, :, 1]**2+Pn[:, :, 2]**2)
+    n = np.linalg.norm(Pn, axis=2)
+    Pn /= n[:, :, None]
+    #Pn[:, :, 0] /= n
+    #Pn[:, :, 1] /= n
+    #Pn[:, :, 2] /= n
 
     # distances
-    R = np.sqrt(PR[:, :, 0]**2+PR[:, :, 1]**2+PR[:, :, 2]**2)
-    PR[:, :, 0] /= R
-    PR[:, :, 1] /= R
-    PR[:, :, 2] /= R
+    #R = np.sqrt(PR[:, :, 0]**2+PR[:, :, 1]**2+PR[:, :, 2]**2)
+    #R = np.sqrt(np.sum(np.square(PR), axis=2))
+    R = np.linalg.norm(PR, axis=2)
+    PR /= R[:, :, None]
+    #PR[:, :, 0] /= R
+    #PR[:, :, 1] /= R
+    #PR[:, :, 2] /= R
 
     # angles
     # TODO: dot product?
     Ux = PR[:, :, 0]*Pa[:, :, 0] + PR[:, :, 1]*Pa[:, :, 1] + PR[:, :, 2]*Pa[:, :, 2]
+    #Ux = np.dot(PR, Pa)
     Uy = PR[:, :, 0]*Pb[:, :, 0] + PR[:, :, 1]*Pb[:, :, 1] + PR[:, :, 2]*Pb[:, :, 2]
     Uz = PR[:, :, 0]*Pn[:, :, 0] + PR[:, :, 1]*Pn[:, :, 1] + PR[:, :, 2]*Pn[:, :, 2]
 
