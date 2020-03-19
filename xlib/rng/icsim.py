@@ -150,7 +150,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         if pos == 0:
             logging.info("cartDEM=" + str(cartDEM.shape))
         
-        if False:
+        if True:
             X = cartDEM[:, 0].reshape(DEMshp)
             Y = cartDEM[:, 1].reshape(DEMshp)
             Z = cartDEM[:, 2].reshape(DEMshp)
@@ -404,8 +404,12 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
 
 def facetgeopt(la, lb, Uz, R, sigma_s):
     # Calculate field strength
-    tant = np.sqrt(1-Uz**2)/Uz
-    E = la*lb*np.exp(-tant**2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz**2)/R**2
+    Uz2 = Uz**2
+    tant = np.sqrt(1-Uz2)/Uz
+    E = la*lb*np.exp(-tant**2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz2)/R**2
+    # we did have $^2 previously.
+    #tant2 = (1-Uz2)/Uz2
+    #E = la*lb*np.exp(-tant2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz2)/R**2
     return E
 
 def surfaspect(X, Y, Z, x0, y0, z0):
@@ -420,26 +424,38 @@ def surfaspect(X, Y, Z, x0, y0, z0):
 
     Xu = np.vstack((X[0, :], X[0:-1, :]))
     Xd = np.vstack((X[1:, :], X[-1, :]))
+
+    Yu = np.vstack((Y[0, :], Y[0:-1, :]))
+    Yd = np.vstack((Y[1:, :], Y[-1, :]))
+
+    Zu = np.vstack((Z[0, :], Z[0:-1, :]))
+    Zd = np.vstack((Z[1:, :], Z[-1, :]))
+
+
+    # up minus down
+    Xb = Xu-Xd
+    Yb = Yu-Yd
+    Zb = Zu-Zd
+    del Xu, Yu, Zu, Xd, Yd, Zd
+
+
     Xcol1 = X[:, 0]
-    Xcole = X[:, -1]
+    Xcole = X[:, -1]    
     Xcol1 = Xcol1[:, np.newaxis]
     Xcole = Xcole[:, np.newaxis]
     Xl = np.hstack((Xcol1, X[:, 0:-1]))
     Xr = np.hstack((X[:, 1:], Xcole))
 
-    Yu = np.vstack((Y[0, :], Y[0:-1, :]))
-    Yd = np.vstack((Y[1:, :], Y[-1, :]))
     Ycol1 = Y[:, 0]
-    Ycole = Y[:, -1]
+    Ycole = Y[:, -1]    
     Ycol1 = Ycol1[:, np.newaxis]
     Ycole = Ycole[:, np.newaxis]
     Yl = np.hstack((Ycol1, Y[:, 0:-1]))
     Yr = np.hstack((Y[:, 1:], Ycole))
 
-    Zu = np.vstack((Z[0, :], Z[0:-1, :]))
-    Zd = np.vstack((Z[1:, :], Z[-1, :]))
     Zcol1 = Z[:, 0]
     Zcole = Z[:, -1]
+    
     Zcol1 = Zcol1[:, np.newaxis]
     Zcole = Zcole[:, np.newaxis]
     Zl = np.hstack((Zcol1, Z[:, 0:-1]))
@@ -448,17 +464,11 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Xa = Xr-Xl
     Ya = Yr-Yl
     Za = Zr-Zl
+    del Xl, Yl, Zl, Xr, Yr, Zr, 
+        Xcol1, Xcole, Ycol1, Ycole, Zcol1, Zcole
 
-    # up minus down
-    Xb = Xu-Xd
-    Yb = Yu-Yd
-    Zb = Zu-Zd
 
-    del Xu, Yu, Zu, \
-        Xd, Yd, Zd, \
-        Xl, Yl, Zl, \
-        Xr, Yr, Zr
-
+    # Compute normal vector to each facet by computing cross product
     Xn = Ya*Zb-Za*Yb
     Yn = Za*Xb-Xa*Zb
     Zn = Xa*Yb-Ya*Xb
@@ -467,40 +477,44 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     YR = y0-Y
     ZR = z0-Z
 
-    # horizontal facet sizes
+    # get horizontal facet sizes, obtain unit horizontal vector
     la = np.sqrt(Xa**2+Ya**2+Za**2)
     Xa /= la
     Ya /= la
     Za /= la
     la /= 2
 
-    # vertical facet sizes
+    # get vertical facet sizes, obtain unit vertical vector
     lb = np.sqrt(Xb**2+Yb**2+Zb**2)
     Xb /= lb
     Yb /= lb
     Zb /= lb
     lb /= 2
 
+    # get normal vector length; obtain unit normal vector
     n = np.sqrt(Xn**2+Yn**2+Zn**2)
     Xn /= n
     Yn /= n
     Zn /= n
 
-    # distances
+    # distances of each point on surface to external point
     R = np.sqrt(XR**2+YR**2+ZR**2)
     XR /= R
     YR /= R
     ZR /= R
 
-    # angles
-    Ux = XR*Xa + YR*Ya + ZR*Za
-    Uy = XR*Xb + YR*Yb + ZR*Zb
-    Uz = XR*Xn + YR*Yn + ZR*Zn
+    # cos of angles using dot product
+    Ux = XR*Xa + YR*Ya + ZR*Za # Ux = dot(R, va)
+    Uy = XR*Xb + YR*Yb + ZR*Zb # Uy = dot(R, vb)
+    Uz = XR*Xn + YR*Yn + ZR*Zn # Uz = dot(R, vn)
 
     return (la, lb, Ux, Uy, Uz, R)
+    
+    
 
 def surfaspect1(surf, p0):
     """
+    This is a simplified (but slower!?) version of surfaspect.  The output is binary-compatible.
     given a surface described by a grid of points surf, expressed in cartesian
     coordinates, and a point external to the surface, computes the size,
     orientation and distance of each portion of the discretized surface
@@ -512,41 +526,38 @@ def surfaspect1(surf, p0):
     Z = surf[:, :, 2] is the z coordinate of each point
     """
 
-    # logging.debug("surfaspect using {:d} points".format(len(X)))
-    ashape = surf.shape #X.shape + (3,)
     # Compute facet's vector along one axis: upper coordinates minus lower coordinates
-    vb = np.empty(ashape)  # store upper coordinates in final result
+    vb = np.empty(surf.shape)  # store upper coordinates in final result
 
     # up minus down
-    vb[0, :, :] = surf[0, :, :]
-    vb[1:, :, :] = surf[0:-1, :]
-    vb[0:-1, :, :] -= surf[1:, :, :]
-    vb[-1, :, :] -= surf[-1, :, :]
+    vb[0, :, :] = surf[0, :, :]      # up
+    vb[1:, :, :] = surf[0:-1, :]     # up
+    vb[0:-1, :, :] -= surf[1:, :, :] # down
+    vb[-1, :, :] -= surf[-1, :, :]   # down
     
 
     # Compute facet's vector along perpendicular axis: right coordinate minus left coordinate
-    va = np.empty(ashape) # left coordinates in final result
+    va = np.empty(surf.shape) # left coordinates in final result
 
     # right minus left
-    va[:, 0:-1, :] = surf[:, 1:, :]
-    va[:, -1, :] = surf[:, -1, :]
-    va[:, 0, :] -= surf[:,  0, :]
-    va[:, 1:, :] -= surf[:,  0:-1, :]
+    va[:, 0:-1, :] = surf[:, 1:, :]   # right
+    va[:, -1, :] = surf[:, -1, :]     # right
+    va[:, 0, :] -= surf[:,  0, :]     # left
+    va[:, 1:, :] -= surf[:,  0:-1, :] # left
 
          
-
     # Compute normal vector to each facet
     vn = np.cross(va, vb)
 
-    # Compute vector from each point to the external point
+    # Compute vector from each point on the surface to the external point
     PR = p0 - surf
 
-    # get horizontal facet sizes, obtain unit horizontal vector
+    # get horizontal facet sizes (la), obtain unit horizontal vector (va)
     la = np.linalg.norm(va, axis=2)
     va /= la[:, :, None]
     la /= 2
 
-    # get vertical facet sizes, obtain unit vertical vectors
+    # get vertical facet sizes (lb), obtain unit vertical vectors (vb)
     lb = np.linalg.norm(vb, axis=2)
     vb /= lb[:, :, None]
     lb /= 2
@@ -557,21 +568,27 @@ def surfaspect1(surf, p0):
 
     # distance from external point to each point on surface
     R = np.linalg.norm(PR, axis=2)
+    # Unit vector to external point
     PR /= R[:, :, None]
 
-    # angles
-    #Ux = np.sum(PR*va, axis=2)
-    va *= PR ; Ux = np.sum(va, axis=2)
-    del va
+    # cos of angles to external point, using dot product
+    Ux = np.sum(PR*va, axis=2)
+    #Ux = np.dot(PR, va.transpose(0, 2, 1))
+    #va *= PR; Ux = np.sum(va, axis=2)
+    #del va
     
     #Uy = np.sum(PR*vb, axis=2)
     vb *= PR; Uy = np.sum(vb, axis=2)
     del vb
       
-    #Uz = np.sum(PR*Pn, axis=2)
+    #Uz = np.sum(PR*vn, axis=2)
     vn *= PR; Uz = np.sum(vn, axis=2)
 
     return (la, lb, Ux, Uy, Uz, R)
+    
+    
+
+    
 
 def GetCornerCoordinates2(FileName):
     """ Use gdalinfo to get corner coordinates, but use json format """
