@@ -33,7 +33,7 @@ import misc.prog as prg
 def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
                    r_sphere=3396000,B=10E+6, trx=135E-6, fs=26.67E+6,
                    r_circle=27E+3,sigmas=0.02, of=8,
-                   save_path=None, plot=False, do_progress=True, maxechoes=None):
+                   save_path=None, plot=False, do_progress=True, maxechoes=None, fast=False):
 
     """
     Incoherent Clutter Simulator for ranging based on code by R. Orosei [1],
@@ -62,11 +62,16 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     Output:
     """
+    
+    global DEM_STATS
+    
     t0 = time.time()
     # Open DTM
     geotiff = gdal.Open(dtm_path)
     band = geotiff.GetRasterBand(1)
     dem = band.ReadAsArray()
+    logging.debug("dem.shape = " + str(dem.shape))
+    DEM_STATS = np.zeros_like(dem, dtype=int)
     CornerLats, CornerLons = GetCornerCoordinates(dtm_path)
 
     # TODO: can we just load sections of the ROI?
@@ -120,36 +125,93 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     pulsesp[abs(fo) > B/2] = 0
     pulse = np.fft.ifft(pulsesp)
     pulse = pulse**2
-    pulsesp = np.fft.fft(pulse)
-    pulsesp_c = np.conj(pulsesp)
+    #pulsesp = np.fft.fft(pulse)
+    pulsesp_c = np.conj(np.fft.fft(pulse))
+    # Portion of the output spectrum that is of interest
+    #spec_idx = np.abs(fo) <= fs/2
+
+    # Create a Hann window to apply it to data
+    # TODO: Change this to a Hamming Window to be consistent with cmp!
+    w = 0.5*(1+np.cos(2*pi*f/B))
+    w[np.abs(f) > B/2] = 0
+    w_c = np.conj(w)
+
+
 
     # Extract topography and simulate scattering
     # Create array to store result. echosp will contain the Fourier transform
     # of each rangeline.
     echosp = np.empty((Nsample, Necho1), dtype=complex)
     logging.debug("incoherent_sim: setup elapsed time: {:0.3f} sec".format(time.time() - t0))
+    
+    
+    # Calculate cartesian coordinates for all coordinates on the map being used.
+    logging.info("Precomputing cartesian coordinates of interest")
+    dem_mask = np.zeros_like(dem, dtype=int)
+    p = prg.Prog(Necho1) if do_progress else None
+    for pos in range (Necho1):
+        # Extract DTM topography
+        lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
+                                               r_circle, r_sphere)
+        hrsc, lon, lat, aidx = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
+                                 CornerLats, CornerLons)
+        dem_mask[aidx[0]:aidx[1], aidx[2]:aidx[3]] += 1
+        if p:
+            p.print_Prog(pos)
+    if p:
+    	p.close_Prog()
+    
+    # Calculate cartesian and generate a full spherical.
+    dem_cart, dem_sph = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
+    
+    logging.debug("Done precomputing cartesian coordinates")
 
     p = prg.Prog(Necho1) if do_progress else None
-
+    # TOOD: convert DEM to cartesian outside of range line processing
     for pos in range(Necho1):
         # Extract DTM topography
         lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
                                                r_circle, r_sphere)
-        hrsc, lon, lat = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
+        hrsc, lon, lat, aidx = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
                                  CornerLats, CornerLons)
 
-        hrsc = hrsc+r_sphere
+
+        hrsc += r_sphere
         DEMshp = hrsc.shape
 
         # Compute position and orientation of the observed surface
-        [theta, phi] = np.meshgrid(pi/180*lon, pi/180*lat)
-        sphDEM = np.transpose(np.vstack((phi.flatten(), theta.flatten(),
-                                         hrsc.flatten())))
+        theta, phi = np.meshgrid(pi/180*lon, pi/180*lat)
+        sphDEM = np.transpose(np.vstack((phi.flatten(), theta.flatten(), hrsc.flatten())))
+        cartDEM2 = crd.sph2cart(sphDEM, indeg=False)
+        # TODO: remove all the reshapings
+        cartDEM = dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], :].reshape((DEMshp[0]*DEMshp[1], 3))
 
-        cartDEM = crd.sph2cart(sphDEM, indeg=False)
-        if pos == 0:
-            logging.info("cartDEM=" + str(cartDEM.shape))
-        
+
+        sphDEM = dem_sph[aidx[0]:aidx[1], aidx[2]:aidx[3], :] #.reshape((DEMshp[0]*DEMshp[1], 3))
+        try:
+            assert (np.abs(hrsc - sphDEM[:, :, 2]) < 1e-7).all()
+            assert (np.abs(theta - sphDEM[:, :, 1]) < 1e-7).all()
+            assert (np.abs(phi - sphDEM[:, :, 0]) < 1e-7).all()
+            assert (hrsc == sphDEM[:, :, 2]).all()
+            assert (theta == sphDEM[:, :, 1]).all()
+            assert (phi == sphDEM[:, :, 0]).all()
+        except AssertionError:
+            maxerr = np.max(np.abs(hrsc - sphDEM[:, :, 2]) )
+            logging.error("aidx={:s} max r error={:f}".format(str(aidx), maxerr))
+            maxerr = np.max(np.abs(theta - sphDEM[:, :, 1]) )
+            logging.error("aidx={:s} max lon err={:f}".format(str(aidx), maxerr))
+            maxerr = np.max(np.abs(phi - sphDEM[:, :, 0]) )
+            logging.error("aidx={:s} max lat err={:f}".format(str(aidx), maxerr))
+            raise
+        try:
+            assert (np.abs(cartDEM2 - cartDEM) < 1e-5).all()
+        except AssertionError:
+            logging.error("cartdem shape: {:s}".format(str(cartDEM.shape)))
+            for i in range(3):
+                maxerr = np.max(np.abs(cartDEM2[:, i] - cartDEM[:, i]) )
+                logging.error("aidx={:s} cartdem[:, :, {:d}] error={:f}".format(str(aidx), i, maxerr))
+            raise
+
         if True:
             X = cartDEM[:, 0].reshape(DEMshp)
             Y = cartDEM[:, 1].reshape(DEMshp)
@@ -161,15 +223,14 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
             del X, Y, Z, cartDEM
         else:
             la, lb, Ux, Uy, Uz, R = surfaspect1(cartDEM.reshape(DEMshp + (3,)), state[0:3, pos])
-      
+
             del cartDEM
         
-        # Compute reflected power and distance from radar for every surface
-        # element.
-        #E = facetgeopt(la, lb, Uz, R, sigmas)
+        # Compute reflected power and distance from radar for every surface element.
+        #E = s(la, lb, Uz, R, sigmas)d
         #P = E**2
-        P = np.square(facetgeopt(la, lb, Uz, R, sigmas))
-        delay = 2*R/c
+        P = facetgeopt(la, lb, Uz, R, sigmas) ** 2 # power from electric field
+        delay = (2/c)*R
 
         # Compute echo as the incoherent sum of power reflected by surface
         # elements and delayed in time according to their distance from the
@@ -177,30 +238,34 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         delay = delay.flatten()
         P = P.flatten()
 
+        # TODO: a more sophisticated way would be to go to say 90% of cumulative power
         # thresh is the count of reflectors to retain. Increase this to 100% to retain all
         # thresh = int(np.rint(len(P) * 0.20))
         # Remove 1/5 if you want all the echo, not just the top 20% brightest
         thresh = int(np.rint(len(P)/5))
 
         # Partition powers into top x%, then sort that 20%
+        # TODO: technically I don't think we need to argsort?
         idxtop = np.argpartition(-P, thresh)[0:thresh]
         iP = idxtop[np.argsort(-P[idxtop])]
+        
+        if pos == 0:
+            tot_power = np.sum(P)
+            used_power = np.sum(P[iP])
+            logging.info("Using 20% of reflectors, got {:0.2f}% of power".format(used_power / tot_power * 100))
+        
         delay = delay[iP]     # sort delays in descending order of power
         P = P[iP]             # sort powers in descending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
         idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
         #-------------------------------------
+        # Sum these reflections into the fast-time record
         reflections = np.zeros(Nosample)
-
         for j in range(thresh):
-            #reflections[idelay[j]] = reflections[idelay[j]] + P[j]
             reflections[idelay[j]] += P[j]
-            #reflections[idelay[iP[j]]] += P[iP[j]]
-            #d1 = np.mod(delay[iP[j]], trx)
-            #id1 = int(min(max(np.around(d1*of*fs)-1, 0), Nosample))
-            #reflections[id1] += P[iP[j]]
 
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
+        #echosp[:, pos] = pulsesp_c[spec_idx] * np.fft.fft(reflections)[spec_idx]
         spectrum = pulsesp_c*np.fft.fft(reflections)
         echosp[:, pos] = spectrum[np.abs(fo) <= fs/2]
 	
@@ -214,7 +279,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # Align to a common reference, convert power to voltage, apply a window
     # Align echoes to a common reference point in time
     deltat = -(rxwot/fs+1428e-6)+11.96e-6
-    # TODO: associativity
+
     conjf = np.conj(f)
     for pos in range(Necho1):
         #phase = np.exp(-2j*pi*deltat[pos]*conjf)
@@ -228,11 +293,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     logging.debug("incoherent_sim: power to voltage: {:0.3f} sec".format(time.time() - t0))
     echosp = np.fft.fft(echo, axis=0)
     
-    # Create a Hann window and apply it to data
-    # TODO: Change this to a Hamming Window to be consistent with cmp!
-    w = 0.5*(1+np.cos(2*pi*f/B))
-    w[np.abs(f) > B/2] = 0
-    w_c = np.conj(w)
 
     for pos in range(Necho1):
         echo[:, pos] = np.fft.ifft(w_c * echosp[:, pos])
@@ -246,7 +306,15 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         np.save(save_path, rdrgr)
 
 
-
+    if True:
+        logging.debug("DEM coveragestatistics: ")
+        logging.debug("median: {:f} max: {:d}".format(np.mean(DEM_STATS), np.max(DEM_STATS)))
+        if plot:
+            #hist, bins = np.histogram(DEM_STATS.flatten(), bins='auto')
+            #plt.semilogy(bins, hist)
+            _ = plt.hist(DEM_STATS.flatten(), bins='auto')
+            plt.yscale('log', nonposy='clip')
+            plt.show()
 
     # Plot radargram
     if plot:
@@ -353,6 +421,66 @@ def lonlatbox(lon_0, lat_0, r_circle, r_sphere):
     return (lon_w, lon_e, lat_s, lat_n)
 
 
+def calc_dem_cart(dem, dem_mask, corner_lats, corner_lons, r_sphere):
+    """ Calculate the cartesian coordinates of a DEM 
+    dem - an array of digital elevation model heights in meters
+    dem_mask - an array with the same dimensions as dem, indicating which array values
+    to compute a value for.  entries with nonzero values will be computed.
+    
+    corner_lats: a 2-element array describing the minimum and maximum latitude of the array
+    corner_lons: a 2-element array describing the minimum and maximum longitude of the array
+    r_sphere: Radius (meters) of the sphere of the body to which the DEM elevations are referenced.
+        
+    """
+    
+    
+    DEMv, DEMh = np.shape(dem)
+
+    # coordinates of the DEM corners.
+    maxlat = corner_lats[0]
+    minlat = corner_lats[1]
+    minlon = corner_lons[0]
+
+    # pixels per degree (remark: ppd = DEMh/np.abs(maxlon-minlon) gives the same result ==> GOOD)
+    ppd = DEMv/np.abs(maxlat-minlat)
+    #ppdh = DEMh / np.abs(corner_lons[1] - corner_lons[0])
+    #assert np.abs(ppd - ppdh) < 1e-3
+
+    # latitude
+    lat = maxlat - 1/ppd * np.arange(1, DEMv+1) + 1/(2*ppd)
+    #I_g = np.where((lat >= lat_s) & (lat <= lat_n))
+    #lat = lat[I_g]
+
+    # longitude
+    lon = minlon + 1/ppd * np.arange(1, DEMh+1) - 1/(2*ppd)
+    #J_g = np.where((lon >= lon_w) & (lon <= lon_e))
+    #lon = lon[J_g]
+    
+    sph_dem1 = np.empty(dem.shape + (3,))
+    sph_dem1[:, :, 2] = dem + r_sphere
+    
+    sph_dem1[:, :, 1], sph_dem1[:, :, 0] = np.meshgrid(pi/180*lon, pi/180*lat)  # phi, theta
+    
+    ## Get indices of locations where mask is nonzero
+    maskidx = np.nonzero(dem_mask > 0)
+    sph_dem = np.vstack((sph_dem1[maskidx[0], maskidx[1], 0], \
+                         sph_dem1[maskidx[0], maskidx[1], 1], \
+                         sph_dem1[maskidx[0], maskidx[1], 2]))
+    #sph_dem = np.hstack(
+    #sph_dem = np.vstack((sph_dem1[:, :, 0].flatten(), sph_dem1[:, :, 1].flatten(), sph_dem1[:, :, 2].flatten()))
+    cart_dem = np.empty_like(sph_dem1) # dummy variable for now
+    cart_dem0 = crd.sph2cart(sph_dem.T, indeg=False)
+    
+    cart_dem[maskidx[0], maskidx[1], :] = cart_dem0 # = np.zeros_like(sph_dem1) # dummy variable for now
+    
+    
+    logging.info("Creating spherical DEM data with shape " + str(sph_dem1.shape))
+     
+    #return cart_dem, sph_dem1    
+    return cart_dem.reshape(dem.shape + (3,)), sph_dem1
+
+
+
 def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     """
     Picks pixels inside box from DTM
@@ -373,6 +501,8 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
 
     """
 
+    global DEM_STATS
+
     [DEMv, DEMh] = np.shape(DEM)
 
     # coordinates of the DEM corners.
@@ -380,7 +510,7 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     minlat = CornerLats[1]
     minlon = CornerLons[0]
 
-    # pixels per degree (remqrk: ppd = DEMh/np.abs(maxlon-minlon) gives the same result ==> GOOD)
+    # pixels per degree (remark: ppd = DEMh/np.abs(maxlon-minlon) gives the same result ==> GOOD)
     ppd = DEMv/np.abs(maxlat-minlat)
 
     # latitude
@@ -389,7 +519,7 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     lat = lat[I_g]
 
     # longitude
-    lon = minlon+1/ppd*np.arange(1, DEMh+1)-1/(2*ppd)
+    lon = minlon + 1/ppd * np.arange(1, DEMh+1) - 1/(2*ppd)
     J_g = np.where((lon >= lon_w) & (lon <= lon_e))
     lon = lon[J_g]
 
@@ -397,9 +527,13 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     start1 = np.array(I_g)[0, 0]; end1 = np.array(I_g)[0, -1]
     start2 = np.array(J_g)[0, 0]; end2 = np.array(J_g)[0, -1]
     hrsc = DEM[start1:end1+1, start2:end2+1].astype(float)
+    
+    DEM_STATS[start1:end1+1, start2:end2+1] += 1
+    # Array indices in the DEM used
+    arrayidx = (start1, end1+1, start2, end2+1)
 
     # gather and return
-    return (hrsc, lon, lat)
+    return (hrsc, lon, lat, arrayidx)
 
 
 def facetgeopt(la, lb, Uz, R, sigma_s):
@@ -423,6 +557,7 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     #logging.debug("surfaspect using {:d} points".format(len(X)))
 
     Xu = np.vstack((X[0, :], X[0:-1, :]))
+    #np.vstack((np.diff(X, axis=0), 0.0))
     Xd = np.vstack((X[1:, :], X[-1, :]))
 
     Yu = np.vstack((Y[0, :], Y[0:-1, :]))
@@ -464,7 +599,7 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Xa = Xr-Xl
     Ya = Yr-Yl
     Za = Zr-Zl
-    del Xl, Yl, Zl, Xr, Yr, Zr, 
+    del Xl, Yl, Zl, Xr, Yr, Zr, \
         Xcol1, Xcole, Ycol1, Ycole, Zcol1, Zcole
 
 
@@ -520,7 +655,7 @@ def surfaspect1(surf, p0):
     orientation and distance of each portion of the discretized surface
     w.r.t. the external point p0=(x0, y0, z0)
     
-    surf is expected to be an N x M x 3 grid of points, where
+    surf is expected to be an N x M x 3 grid of point coordinates, where
     X = surf[:, :, 0] is the x coordinate of each point
     Y = surf[:, :, 1] is the y coordinate of each point
     Z = surf[:, :, 2] is the z coordinate of each point
@@ -528,23 +663,21 @@ def surfaspect1(surf, p0):
 
     # Compute facet's vector along one axis: upper coordinates minus lower coordinates
     vb = np.empty(surf.shape)  # store upper coordinates in final result
-
-    # up minus down
+ 
+    # up minus down (position of point below minus point above)
     vb[0, :, :] = surf[0, :, :]      # up
     vb[1:, :, :] = surf[0:-1, :]     # up
     vb[0:-1, :, :] -= surf[1:, :, :] # down
     vb[-1, :, :] -= surf[-1, :, :]   # down
-    
 
     # Compute facet's vector along perpendicular axis: right coordinate minus left coordinate
     va = np.empty(surf.shape) # left coordinates in final result
 
-    # right minus left
+    # right minus left (position of  point right minus point left)
     va[:, 0:-1, :] = surf[:, 1:, :]   # right
     va[:, -1, :] = surf[:, -1, :]     # right
     va[:, 0, :] -= surf[:,  0, :]     # left
     va[:, 1:, :] -= surf[:,  0:-1, :] # left
-
          
     # Compute normal vector to each facet
     vn = np.cross(va, vb)
@@ -563,8 +696,7 @@ def surfaspect1(surf, p0):
     lb /= 2
 
     # Obtain unit normal vector 
-    n = np.linalg.norm(vn, axis=2)
-    vn /= n[:, :, None]
+    vn /= np.linalg.norm(vn, axis=2)[:, :, None]
 
     # distance from external point to each point on surface
     R = np.linalg.norm(PR, axis=2)
@@ -573,16 +705,8 @@ def surfaspect1(surf, p0):
 
     # cos of angles to external point, using dot product
     Ux = np.sum(PR*va, axis=2)
-    #Ux = np.dot(PR, va.transpose(0, 2, 1))
-    #va *= PR; Ux = np.sum(va, axis=2)
-    #del va
-    
-    #Uy = np.sum(PR*vb, axis=2)
-    vb *= PR; Uy = np.sum(vb, axis=2)
-    del vb
-      
-    #Uz = np.sum(PR*vn, axis=2)
-    vn *= PR; Uz = np.sum(vn, axis=2)
+    Uy = np.sum(PR*vb, axis=2)
+    Uz = np.sum(PR*vn, axis=2)
 
     return (la, lb, Ux, Uy, Uz, R)
     
