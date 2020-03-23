@@ -63,15 +63,12 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     Output:
     """
     
-    global DEM_STATS
-    
     t0 = time.time()
     # Open DTM
     geotiff = gdal.Open(dtm_path)
     band = geotiff.GetRasterBand(1)
     dem = band.ReadAsArray()
     logging.debug("dem.shape = " + str(dem.shape))
-    DEM_STATS = np.zeros_like(dem, dtype=int)
     CornerLats, CornerLons = GetCornerCoordinates(dtm_path)
 
     # TODO: can we just load sections of the ROI?
@@ -147,46 +144,42 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     
     # Calculate cartesian coordinates for all coordinates on the map being used.
     logging.info("Precomputing cartesian coordinates of interest")
-    dem_mask = np.zeros_like(dem, dtype=int)
-    p = prg.Prog(Necho1) if do_progress else None
-    for pos in range (Necho1):
-        # Extract DTM topography
-        lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
-                                               r_circle, r_sphere)
-        hrsc, lon, lat, aidx = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
-                                 CornerLats, CornerLons)
-        dem_mask[aidx[0]:aidx[1], aidx[2]:aidx[3]] += 1
-        if p:
-            p.print_Prog(pos)
-    if p:
-    	p.close_Prog()
-    
-    # Calculate cartesian and generate a full spherical.
-    dem_cart, dem_sph = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
-    
-    logging.debug("Done precomputing cartesian coordinates")
-
-    p = prg.Prog(Necho1) if do_progress else None
-    # TOOD: convert DEM to cartesian outside of range line processing
+    dem_mask = np.zeros_like(dem, dtype=np.bool)
     for pos in range(Necho1):
         # Extract DTM topography
         lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
                                                r_circle, r_sphere)
-        hrsc, lon, lat, aidx = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
+        _, _, aidx = argwhere_dtmgrid(dem.shape, lon_w, lon_e, lat_s, lat_n,
+                                 CornerLats, CornerLons)
+        dem_mask[aidx[0]:aidx[1], aidx[2]:aidx[3]] = True
+    
+    # Calculate cartesian and generate a full spherical.
+    dem_cart = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
+    
+    logging.info("incoherent_sim: Done precomputing cartesian coordinates: {:0.3f} sec".format(time.time() - t0))
+
+    p = prg.Prog(Necho1) if do_progress else None
+    
+    for pos in range(Necho1):
+        # Extract DTM topography
+        lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
+                                               r_circle, r_sphere)
+        #hrsc, lon, lat, aidx = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
+        #                         CornerLats, CornerLons)
+        _, _, aidx = argwhere_dtmgrid(dem.shape, lon_w, lon_e, lat_s, lat_n,
                                  CornerLats, CornerLons)
 
 
-        hrsc += r_sphere
-        DEMshp = hrsc.shape
+        #hrsc += r_sphere
+        #DEMshp = hrsc.shape
 
         # Compute position and orientation of the observed surface
-        theta, phi = np.meshgrid(pi/180*lon, pi/180*lat)
-        sphDEM = np.transpose(np.vstack((phi.flatten(), theta.flatten(), hrsc.flatten())))
-        cartDEM2 = crd.sph2cart(sphDEM, indeg=False)
-        # TODO: remove all the reshapings
-        cartDEM = dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], :].reshape((DEMshp[0]*DEMshp[1], 3))
+        #theta, phi = np.meshgrid(pi/180*lon, pi/180*lat)
+        #sphDEM = np.transpose(np.vstack((phi.flatten(), theta.flatten(), hrsc.flatten())))
+        #cartDEM2 = crd.sph2cart(sphDEM, indeg=False)
+        #cartDEM = dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], :]
 
-
+        """ # make sure the spherical DEM is the same (this works)
         sphDEM = dem_sph[aidx[0]:aidx[1], aidx[2]:aidx[3], :] #.reshape((DEMshp[0]*DEMshp[1], 3))
         try:
             assert (np.abs(hrsc - sphDEM[:, :, 2]) < 1e-7).all()
@@ -203,6 +196,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
             maxerr = np.max(np.abs(phi - sphDEM[:, :, 0]) )
             logging.error("aidx={:s} max lat err={:f}".format(str(aidx), maxerr))
             raise
+        """
+        
+        """
         try:
             assert (np.abs(cartDEM2 - cartDEM) < 1e-5).all()
         except AssertionError:
@@ -211,16 +207,18 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
                 maxerr = np.max(np.abs(cartDEM2[:, i] - cartDEM[:, i]) )
                 logging.error("aidx={:s} cartdem[:, :, {:d}] error={:f}".format(str(aidx), i, maxerr))
             raise
+        """
 
         if True:
-            X = cartDEM[:, 0].reshape(DEMshp)
-            Y = cartDEM[:, 1].reshape(DEMshp)
-            Z = cartDEM[:, 2].reshape(DEMshp)
-            la, lb, Ux, Uy, Uz, R = surfaspect(X, Y, Z,
-                                             state[0, pos],
-                                             state[1, pos],
-                                             state[2, pos])
-            del X, Y, Z, cartDEM
+            #X = cartDEM[:, :, 0]#.reshape(DEMshp)
+            #Y = cartDEM[:, :, 1]#.reshape(DEMshp)
+            #Z = cartDEM[:, :, 2]#.reshape(DEMshp)
+            la, lb, Ux, Uy, Uz, R = surfaspect(
+                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 0], 
+                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 1], 
+                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 2], 
+                state[0, pos], state[1, pos], state[2, pos])
+            #del cartDEM #X, Y, Z, cartDEM
         else:
             la, lb, Ux, Uy, Uz, R = surfaspect1(cartDEM.reshape(DEMshp + (3,)), state[0:3, pos])
 
@@ -235,7 +233,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         # Compute echo as the incoherent sum of power reflected by surface
         # elements and delayed in time according to their distance from the
         # spacecraft, but only for the most significant scatterers
-        delay = delay.flatten()
         P = P.flatten()
 
         # TODO: a more sophisticated way would be to go to say 90% of cumulative power
@@ -245,7 +242,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         thresh = int(np.rint(len(P)/5))
 
         # Partition powers into top x%, then sort that 20%
-        # TODO: technically I don't think we need to argsort?
+        # TODO: technically I don't think we need to argsort, but it guarantees a reliable calc order
         idxtop = np.argpartition(-P, thresh)[0:thresh]
         iP = idxtop[np.argsort(-P[idxtop])]
         
@@ -254,15 +251,17 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
             used_power = np.sum(P[iP])
             logging.info("Using 20% of reflectors, got {:0.2f}% of power".format(used_power / tot_power * 100))
         
-        delay = delay[iP]     # sort delays in descending order of power
+        delay = delay.flatten()[iP]     # sort delays in descending order of power
         P = P[iP]             # sort powers in descending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
         idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
         #-------------------------------------
         # Sum these reflections into the fast-time record
         reflections = np.zeros(Nosample)
+
         for j in range(thresh):
             reflections[idelay[j]] += P[j]
+
 
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
         #echosp[:, pos] = pulsesp_c[spec_idx] * np.fft.fft(reflections)[spec_idx]
@@ -306,13 +305,11 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         np.save(save_path, rdrgr)
 
 
-    if True:
+    if False:
         logging.debug("DEM coveragestatistics: ")
-        logging.debug("median: {:f} max: {:d}".format(np.mean(DEM_STATS), np.max(DEM_STATS)))
+        logging.debug("median: {:f} max: {:d}".format(np.mean(dem_mask), np.max(dem_mask)))
         if plot:
-            #hist, bins = np.histogram(DEM_STATS.flatten(), bins='auto')
-            #plt.semilogy(bins, hist)
-            _ = plt.hist(DEM_STATS.flatten(), bins='auto')
+            _ = plt.hist(dem_mask.flatten(), bins='auto')
             plt.yscale('log', nonposy='clip')
             plt.show()
 
@@ -424,8 +421,8 @@ def lonlatbox(lon_0, lat_0, r_circle, r_sphere):
 def calc_dem_cart(dem, dem_mask, corner_lats, corner_lons, r_sphere):
     """ Calculate the cartesian coordinates of a DEM 
     dem - an array of digital elevation model heights in meters
-    dem_mask - an array with the same dimensions as dem, indicating which array values
-    to compute a value for.  entries with nonzero values will be computed.
+    dem_mask - a boolean array with the same dimensions as dem, indicating for which array values
+    to compute.  Entries with True values will be computed.
     
     corner_lats: a 2-element array describing the minimum and maximum latitude of the array
     corner_lons: a 2-element array describing the minimum and maximum longitude of the array
@@ -446,48 +443,32 @@ def calc_dem_cart(dem, dem_mask, corner_lats, corner_lons, r_sphere):
     #ppdh = DEMh / np.abs(corner_lons[1] - corner_lons[0])
     #assert np.abs(ppd - ppdh) < 1e-3
 
-    # latitude
-    lat = maxlat - 1/ppd * np.arange(1, DEMv+1) + 1/(2*ppd)
-    #I_g = np.where((lat >= lat_s) & (lat <= lat_n))
-    #lat = lat[I_g]
+    # latitude (radians)
+    lat_r = pi / 180 * (maxlat - 1/ppd * np.arange(1, DEMv+1) + 1/(2*ppd))
 
-    # longitude
-    lon = minlon + 1/ppd * np.arange(1, DEMh+1) - 1/(2*ppd)
-    #J_g = np.where((lon >= lon_w) & (lon <= lon_e))
-    #lon = lon[J_g]
-    
-    sph_dem1 = np.empty(dem.shape + (3,))
-    sph_dem1[:, :, 2] = dem + r_sphere
-    
-    sph_dem1[:, :, 1], sph_dem1[:, :, 0] = np.meshgrid(pi/180*lon, pi/180*lat)  # phi, theta
-    
+    # longitude (radians)
+    lon_r = pi / 180 * (minlon + 1/ppd * np.arange(1, DEMh+1) - 1/(2*ppd))
+        
     ## Get indices of locations where mask is nonzero
-    maskidx = np.nonzero(dem_mask > 0)
-    sph_dem = np.vstack((sph_dem1[maskidx[0], maskidx[1], 0], \
-                         sph_dem1[maskidx[0], maskidx[1], 1], \
-                         sph_dem1[maskidx[0], maskidx[1], 2]))
-    #sph_dem = np.hstack(
-    #sph_dem = np.vstack((sph_dem1[:, :, 0].flatten(), sph_dem1[:, :, 1].flatten(), sph_dem1[:, :, 2].flatten()))
-    cart_dem = np.empty_like(sph_dem1) # dummy variable for now
-    cart_dem0 = crd.sph2cart(sph_dem.T, indeg=False)
+    maskidx = np.nonzero(dem_mask)
+    sph_dem = np.empty((len(maskidx[0]), 3))
+    sph_dem[:, 0] = lat_r[maskidx[0]]
+    sph_dem[:, 1] = lon_r[maskidx[1]]
+    sph_dem[:, 2] = dem[maskidx[0], maskidx[1]] + r_sphere
+
+    cart_dem = np.empty(dem.shape +  (3,))
+    cart_dem[maskidx[0], maskidx[1], :] = crd.sph2cart(sph_dem, indeg=False)
     
-    cart_dem[maskidx[0], maskidx[1], :] = cart_dem0 # = np.zeros_like(sph_dem1) # dummy variable for now
-    
-    
-    logging.info("Creating spherical DEM data with shape " + str(sph_dem1.shape))
-     
-    #return cart_dem, sph_dem1    
-    return cart_dem.reshape(dem.shape + (3,)), sph_dem1
+    return cart_dem.reshape(dem.shape + (3,))
 
 
-
-def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
+def argwhere_dtmgrid(dem_shape, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     """
-    Picks pixels inside box from DTM
+    Picks indexes inside box from DTM
 
     Input:
     --------------
-    DEM: Digital terrain model
+    dem_shape: Shape of digital terrain model array
     lon_w: Western longitude of box
     lon_e: Eastern longitude of box
     lat_s: Southern latitude of box
@@ -501,9 +482,7 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
 
     """
 
-    global DEM_STATS
-
-    [DEMv, DEMh] = np.shape(DEM)
+    DEMv, DEMh = dem_shape
 
     # coordinates of the DEM corners.
     maxlat = CornerLats[0]
@@ -526,12 +505,36 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
     # select DEM portion
     start1 = np.array(I_g)[0, 0]; end1 = np.array(I_g)[0, -1]
     start2 = np.array(J_g)[0, 0]; end2 = np.array(J_g)[0, -1]
-    hrsc = DEM[start1:end1+1, start2:end2+1].astype(float)
     
-    DEM_STATS[start1:end1+1, start2:end2+1] += 1
     # Array indices in the DEM used
     arrayidx = (start1, end1+1, start2, end2+1)
 
+    # gather and return
+    return (lat, lon, arrayidx)
+
+def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
+    """
+    Picks pixels inside box from DTM
+
+    Input:
+    --------------
+    DEM: Digital terrain model
+    lon_w: Western longitude of box
+    lon_e: Eastern longitude of box
+    lat_s: Southern latitude of box
+    lat_n: Northern latitude of box
+
+    Output:
+    --------------
+    hrsc: Terrain heights
+    lon: Longitude of pixels
+    lat: Latitude of pixels
+
+    """
+    lat, lon, arrayidx = argwhere_dtmgrid(DEM.shape, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons)
+
+    hrsc = DEM[arrayidx[0]: arrayidx[1], arrayidx[2]:arrayidx[3]].astype(float)
+    
     # gather and return
     return (hrsc, lon, lat, arrayidx)
 
