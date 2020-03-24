@@ -37,7 +37,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     """
     Incoherent Clutter Simulator for ranging based on code by R. Orosei [1],
-    with modifications from C. Gerekos [2] and G. Steinbruegge [3].
+    with modifications from C. Gerekos [2] and G. Steinbruegge [3], G. Ng [3].
 
     [1] Istituto Nazionale di Astrofisica (Italy).
     [2] Università degli Studi di Trento (Italy)
@@ -155,11 +155,11 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     
     # Calculate cartesian and generate a full spherical.
     dem_cart = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
-    
+    del dem_mask
     logging.info("incoherent_sim: Done precomputing cartesian coordinates: {:0.3f} sec".format(time.time() - t0))
 
     p = prg.Prog(Necho1) if do_progress else None
-    
+
     for pos in range(Necho1):
         # Extract DTM topography
         lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
@@ -170,88 +170,42 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
                                  CornerLats, CornerLons)
 
 
-        #hrsc += r_sphere
-        #DEMshp = hrsc.shape
-
-        # Compute position and orientation of the observed surface
-        #theta, phi = np.meshgrid(pi/180*lon, pi/180*lat)
-        #sphDEM = np.transpose(np.vstack((phi.flatten(), theta.flatten(), hrsc.flatten())))
-        #cartDEM2 = crd.sph2cart(sphDEM, indeg=False)
-        #cartDEM = dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], :]
-
-        """ # make sure the spherical DEM is the same (this works)
-        sphDEM = dem_sph[aidx[0]:aidx[1], aidx[2]:aidx[3], :] #.reshape((DEMshp[0]*DEMshp[1], 3))
-        try:
-            assert (np.abs(hrsc - sphDEM[:, :, 2]) < 1e-7).all()
-            assert (np.abs(theta - sphDEM[:, :, 1]) < 1e-7).all()
-            assert (np.abs(phi - sphDEM[:, :, 0]) < 1e-7).all()
-            assert (hrsc == sphDEM[:, :, 2]).all()
-            assert (theta == sphDEM[:, :, 1]).all()
-            assert (phi == sphDEM[:, :, 0]).all()
-        except AssertionError:
-            maxerr = np.max(np.abs(hrsc - sphDEM[:, :, 2]) )
-            logging.error("aidx={:s} max r error={:f}".format(str(aidx), maxerr))
-            maxerr = np.max(np.abs(theta - sphDEM[:, :, 1]) )
-            logging.error("aidx={:s} max lon err={:f}".format(str(aidx), maxerr))
-            maxerr = np.max(np.abs(phi - sphDEM[:, :, 0]) )
-            logging.error("aidx={:s} max lat err={:f}".format(str(aidx), maxerr))
-            raise
-        """
-        
-        """
-        try:
-            assert (np.abs(cartDEM2 - cartDEM) < 1e-5).all()
-        except AssertionError:
-            logging.error("cartdem shape: {:s}".format(str(cartDEM.shape)))
-            for i in range(3):
-                maxerr = np.max(np.abs(cartDEM2[:, i] - cartDEM[:, i]) )
-                logging.error("aidx={:s} cartdem[:, :, {:d}] error={:f}".format(str(aidx), i, maxerr))
-            raise
-        """
-
         if True:
-            #X = cartDEM[:, :, 0]#.reshape(DEMshp)
-            #Y = cartDEM[:, :, 1]#.reshape(DEMshp)
-            #Z = cartDEM[:, :, 2]#.reshape(DEMshp)
-            la, lb, Ux, Uy, Uz, R = surfaspect(
-                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 0], 
-                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 1], 
-                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 2], 
+            la, lb, _, _, Uz, R = surfaspect(
+                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 0],  # X
+                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 1],  # Y
+                dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], 2],  # Z
                 state[0, pos], state[1, pos], state[2, pos])
-            #del cartDEM #X, Y, Z, cartDEM
         else:
-            la, lb, Ux, Uy, Uz, R = surfaspect1(cartDEM.reshape(DEMshp + (3,)), state[0:3, pos])
+            la, lb, _, _, Uz, R = surfaspect1(dem_cart[aidx[0]:aidx[1], aidx[2]:aidx[3], :], state[0:3, pos])
 
-            del cartDEM
-        
         # Compute reflected power and distance from radar for every surface element.
-        #E = s(la, lb, Uz, R, sigmas)d
+        #E = s(la, lb, Uz, R, sigmas)
         #P = E**2
-        P = facetgeopt(la, lb, Uz, R, sigmas) ** 2 # power from electric field
-        delay = (2/c)*R
+        P = facetgeopt(la, lb, Uz, R, sigmas).flatten() ** 2 # power from electric field
+        delay = (2/c)*R.flatten()
 
         # Compute echo as the incoherent sum of power reflected by surface
         # elements and delayed in time according to their distance from the
         # spacecraft, but only for the most significant scatterers
-        P = P.flatten()
 
-        # TODO: a more sophisticated way would be to go to say 90% of cumulative power
+        # TODO: a more sophisticated way would be to go to say 98% of cumulative power
         # thresh is the count of reflectors to retain. Increase this to 100% to retain all
         # thresh = int(np.rint(len(P) * 0.20))
         # Remove 1/5 if you want all the echo, not just the top 20% brightest
         thresh = int(np.rint(len(P)/5))
 
-        # Partition powers into top x%, then sort that 20%
-        # TODO: technically I don't think we need to argsort, but it guarantees a reliable calc order
+        # Partition powers into top x%, then sort that x%
+        # TODO: technically I don't think we need to argsort, but it guarantees a reliable numerical calc order
         idxtop = np.argpartition(-P, thresh)[0:thresh]
         iP = idxtop[np.argsort(-P[idxtop])]
         
         if pos == 0:
             tot_power = np.sum(P)
             used_power = np.sum(P[iP])
-            logging.info("Using 20% of reflectors, got {:0.2f}% of power".format(used_power / tot_power * 100))
+            logging.info("Using 20% of reflectors ({:d} total), got {:0.2f}% of power".format(len(P), used_power / tot_power * 100))
         
-        delay = delay.flatten()[iP]     # sort delays in descending order of power
+        delay = delay[iP]     # sort delays in descending order of power
         P = P[iP]             # sort powers in descending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
         idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
@@ -261,7 +215,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
         for j in range(thresh):
             reflections[idelay[j]] += P[j]
-
 
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
         #echosp[:, pos] = pulsesp_c[spec_idx] * np.fft.fft(reflections)[spec_idx]
@@ -281,10 +234,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     conjf = np.conj(f)
     for pos in range(Necho1):
-        #phase = np.exp(-2j*pi*deltat[pos]*conjf)
         phase = np.exp(-2j*pi*deltat[pos]*conjf)
         echosp[:, pos] *= phase #echosp[:, pos]*phase
-    # GN: Do we really need to do an ifft here in order to do a sqrt?
+
     # Convert echoes from power to voltage
     logging.debug("incoherent_sim: delay: {:0.3f} sec".format(time.time() - t0))
     echo = np.fft.ifft(echosp, axis=0)
@@ -540,6 +492,14 @@ def dtmgrid(DEM, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLons):
 
 
 def facetgeopt(la, lb, Uz, R, sigma_s):
+    """
+    Calculate field strength
+    la: length of facet on dimension a
+    lb: length of facet on dimension b
+    Uz: cosine zf
+    R:  distance from obzerver to reflector
+    sigma_s: 
+    """
     # Calculate field strength
     Uz2 = Uz**2
     tant = np.sqrt(1-Uz2)/Uz
@@ -555,8 +515,7 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     # orientation and distance of each portion of the discretized surface
     # w.r.t. the external point (x0, y0, z0)
 
-    # GN TODO: summarize computations in some comments
-    # GN TODO: implement this using more streamlined matrix math?
+    # GN: implement this using more streamlined matrix math? (see surfaspect1)
     #logging.debug("surfaspect using {:d} points".format(len(X)))
 
     Xu = np.vstack((X[0, :], X[0:-1, :]))
@@ -576,21 +535,39 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Zb = Zu-Zd
     del Xu, Yu, Zu, Xd, Yd, Zd
 
-
+    """
     Xcol1 = X[:, 0]
     Xcole = X[:, -1]    
     Xcol1 = Xcol1[:, np.newaxis]
     Xcole = Xcole[:, np.newaxis]
     Xl = np.hstack((Xcol1, X[:, 0:-1]))
     Xr = np.hstack((X[:, 1:], Xcole))
+    """
+    #Xcol1, Xcole = None, None
+    Xl = np.empty_like(X)
+    Xr = np.empty_like(X)
+    Xl[:, 0] = X[:, 0]
+    Xl[:, 1:] = X[:, 0:-1]
+    Xr[:, 0:-1] = X[:, 1:]
+    Xr[:, -1] = X[:, -1]
 
+    """
     Ycol1 = Y[:, 0]
     Ycole = Y[:, -1]    
     Ycol1 = Ycol1[:, np.newaxis]
     Ycole = Ycole[:, np.newaxis]
     Yl = np.hstack((Ycol1, Y[:, 0:-1]))
     Yr = np.hstack((Y[:, 1:], Ycole))
+    """
+    #Ycol1, Ycole = None, None
+    Yl = np.empty_like(Y)
+    Yr = np.empty_like(Y)
+    Yl[:, 0] = Y[:, 0]
+    Yl[:, 1:] = Y[:, 0:-1]
+    Yr[:, 0:-1] = Y[:, 1:]
+    Yr[:, -1] = Y[:, -1]    
 
+    """
     Zcol1 = Z[:, 0]
     Zcole = Z[:, -1]
     
@@ -598,12 +575,21 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Zcole = Zcole[:, np.newaxis]
     Zl = np.hstack((Zcol1, Z[:, 0:-1]))
     Zr = np.hstack((Z[:, 1:], Zcole))
+    """
+    #Zcol1, Zcole = None, None
+    Zl = np.empty_like(Z)
+    Zr = np.empty_like(Z)
+    Zl[:, 0] = Z[:, 0]
+    Zl[:, 1:] = Z[:, 0:-1]
+    Zr[:, 0:-1] = Z[:, 1:]
+    Zr[:, -1] = Z[:, -1]
+    
     # right minus left
     Xa = Xr-Xl
     Ya = Yr-Yl
     Za = Zr-Zl
-    del Xl, Yl, Zl, Xr, Yr, Zr, \
-        Xcol1, Xcole, Ycol1, Ycole, Zcol1, Zcole
+    del Xl, Yl, Zl, Xr, Yr, Zr#, \
+        #Xcol1, Xcole, Ycol1, Ycole, Zcol1, Zcole
 
 
     # Compute normal vector to each facet by computing cross product
@@ -617,16 +603,18 @@ def surfaspect(X, Y, Z, x0, y0, z0):
 
     # get horizontal facet sizes, obtain unit horizontal vector
     la = np.sqrt(Xa**2+Ya**2+Za**2)
-    Xa /= la
-    Ya /= la
-    Za /= la
+    # We don't use the unit vector later, so don't compute.
+    # Xa /= la
+    # Ya /= la
+    # Za /= la
     la /= 2
 
     # get vertical facet sizes, obtain unit vertical vector
     lb = np.sqrt(Xb**2+Yb**2+Zb**2)
-    Xb /= lb
-    Yb /= lb
-    Zb /= lb
+    # We don't use the unit vector later, so don't compute.
+    # Xb /= lb
+    # Yb /= lb
+    # Zb /= lb
     lb /= 2
 
     # get normal vector length; obtain unit normal vector
@@ -642,8 +630,10 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     ZR /= R
 
     # cos of angles using dot product
-    Ux = XR*Xa + YR*Ya + ZR*Za # Ux = dot(R, va)
-    Uy = XR*Xb + YR*Yb + ZR*Zb # Uy = dot(R, vb)
+    # We don't actually use Ux and Uy in any downstream uses, so
+    # don't bother computing for now.
+    Ux = None #Ux = XR*Xa + YR*Ya + ZR*Za # Ux = dot(R, va)
+    Uy = None #Uy = XR*Xb + YR*Yb + ZR*Zb # Uy = dot(R, vb)
     Uz = XR*Xn + YR*Yn + ZR*Zn # Uz = dot(R, vn)
 
     return (la, lb, Ux, Uy, Uz, R)
