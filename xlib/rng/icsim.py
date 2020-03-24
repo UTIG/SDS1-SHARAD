@@ -139,11 +139,11 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # Create array to store result. echosp will contain the Fourier transform
     # of each rangeline.
     echosp = np.empty((Nsample, Necho1), dtype=complex)
-    logging.debug("incoherent_sim: setup elapsed time: {:0.3f} sec".format(time.time() - t0))
+    logging.debug("incoherent_sim: setup elapsed time at {:0.3f} sec".format(time.time() - t0))
     
     
     # Calculate cartesian coordinates for all coordinates on the map being used.
-    logging.info("Precomputing cartesian coordinates of interest")
+    logging.debug("Precomputing cartesian coordinates of interest")
     dem_mask = np.zeros_like(dem, dtype=np.bool)
     for pos in range(Necho1):
         # Extract DTM topography
@@ -155,8 +155,8 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     
     # Calculate cartesian and generate a full spherical.
     dem_cart = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
-    del dem_mask
-    logging.info("incoherent_sim: Done precomputing cartesian coordinates: {:0.3f} sec".format(time.time() - t0))
+    del dem, dem_mask
+    logging.debug("incoherent_sim: Done precomputing cartesian coordinates at {:0.3f} sec".format(time.time() - t0))
 
     p = prg.Prog(Necho1) if do_progress else None
 
@@ -166,7 +166,8 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
                                                r_circle, r_sphere)
         #hrsc, lon, lat, aidx = dtmgrid(dem, lon_w, lon_e, lat_s, lat_n,
         #                         CornerLats, CornerLons)
-        _, _, aidx = argwhere_dtmgrid(dem.shape, lon_w, lon_e, lat_s, lat_n,
+        # dem_cart has almost the same shape as dem 
+        _, _, aidx = argwhere_dtmgrid(dem_cart.shape[0:2], lon_w, lon_e, lat_s, lat_n,
                                  CornerLats, CornerLons)
 
 
@@ -196,9 +197,10 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         thresh = int(np.rint(len(P)/5))
 
         # Partition powers into top x%, then sort that x%
-        # TODO: technically I don't think we need to argsort, but it guarantees a reliable numerical calc order
         idxtop = np.argpartition(-P, thresh)[0:thresh]
-        iP = idxtop[np.argsort(-P[idxtop])]
+        # Sort this top x% from smallest to largest, so thtey're added in this order,
+        # to maximize numerical precision.
+        iP = idxtop[np.argsort(P[idxtop])]
         
         if pos == 0:
             tot_power = np.sum(P)
@@ -210,9 +212,10 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         delay = np.mod(delay, trx) # wrap delay by radar receive window
         idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
         #-------------------------------------
-        # Sum these reflections into the fast-time record
+        # Accumulate these reflections into the fast-time record
         reflections = np.zeros(Nosample)
-
+        #for i, pwr in zip(idelay, P):
+        #    reflections[i] += pwr
         for j in range(thresh):
             reflections[idelay[j]] += P[j]
 
@@ -257,13 +260,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         np.save(save_path, rdrgr)
 
 
-    if False:
-        logging.debug("DEM coveragestatistics: ")
-        logging.debug("median: {:f} max: {:d}".format(np.mean(dem_mask), np.max(dem_mask)))
-        if plot:
-            _ = plt.hist(dem_mask.flatten(), bins='auto')
-            plt.yscale('log', nonposy='clip')
-            plt.show()
 
     # Plot radargram
     if plot:
@@ -502,11 +498,11 @@ def facetgeopt(la, lb, Uz, R, sigma_s):
     """
     # Calculate field strength
     Uz2 = Uz**2
-    tant = np.sqrt(1-Uz2)/Uz
-    E = la*lb*np.exp(-tant**2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz2)/R**2
+    #tant = np.sqrt(1-Uz2)/Uz
+    #E = la*lb*np.exp(-tant**2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz2)/R**2
     # we did have $^2 previously.
-    #tant2 = (1-Uz2)/Uz2
-    #E = la*lb*np.exp(-tant2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz2)/R**2
+    tant2 = (1-Uz2)/Uz2
+    E = la*lb*np.exp(-tant2/(4*sigma_s**2))/(np.sqrt(2)*sigma_s*Uz2)/R**2
     return E
 
 def surfaspect(X, Y, Z, x0, y0, z0):
