@@ -15,6 +15,7 @@ __history__ = {
 
 import sys
 import os
+import logging
 import numpy as np
 import spiceypy as spice
 import pandas as pd
@@ -33,23 +34,24 @@ from misc import coord
 def alt_profile(label_path, aux_path, science_path,
                 cmp_track_path, sar_window,
                 kernel_path='/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm',
-                save_path=None, idx_start=None, idx_end=None):
+                save_path=None, idx_start=None, idx_end=None, fix_pri=None):
 
     rot_model = mars.mars_rot_model('IAU2000')
     re = pd.read_hdf(cmp_track_path, key='real')
     im = pd.read_hdf(cmp_track_path, key='imag')
-    cmp_track = abs(re.values + 1j*im.values)
+    #cmp_track = abs(re.values + 1j*im.values)
+    cmp_track = np.hypot(re.values, im.values)
 
     # Set start and end point of evaluation
     # If not specified in input take the full track
-    if idx_start is not None:
-        idx_start = max(0, idx_start)
-    else:
+
+    if idx_start is None:
         idx_start = 0
-    if idx_end is not None:
-        idx_end = min(len(cmp_track), idx_end)
-    else:
+    idx_start = max(0, idx_start)
+
+    if idx_end is None:
         idx_end = len(cmp_track)
+    idx_end = min(len(cmp_track), idx_end)
 
     # Read pulse-compressed and complementing EDR data
     cmp_track = cmp_track[idx_start:idx_end]
@@ -91,7 +93,13 @@ def alt_profile(label_path, aux_path, science_path,
     }
 
     # Get shot frequency (assumed stable over full track)
-    pri_code = data['PULSE_REPETITION_INTERVAL'].values[0]
+
+    if fix_pri is None:
+        pri_code = data['PULSE_REPETITION_INTERVAL'].values[0]
+        #pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
+    else:
+        pri_code = fix_pri
+        #np.full_like(sc, fix_pri)
     pri = pri_table.get(pri_code, 0.0)
 
     # Construct radargram
@@ -113,6 +121,7 @@ def alt_profile(label_path, aux_path, science_path,
     shift_param = phase-tx0
     for i in range(len(avg)):
         dif = np.diff(avg[i])
+        # TODO: why np.sqrt(np.var()) and not np.std()?
         trsh = np.sqrt(np.var(dif[2
                                   + int(shift_param[i]):130
                                   + int(shift_param[i])])) * 4.5
@@ -139,9 +148,116 @@ def alt_profile(label_path, aux_path, science_path,
 
     return lat, lon, r, ets, delta - shift_param, d
 
+
+def test_alt_profile():
+    SDS = os.getenv('SDS', '/disk/kea/SDS')
+    inpath = os.path.join(SDS, "orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0168901/e_0168901_001_ss19_700_a_a.dat")
+
+
+    # input to process_alt()
+
+    # TODO: function for calculating paths
+    # create cmp path
+    path_root_alt = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
+    path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
+    path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    # Relative path to this file
+    fname = os.path.basename(inpath)
+    obn = fname[2:9] # orbit name
+    # Relative directory of this file
+    reldir = os.path.dirname(os.path.relpath(inpath, path_root_edr))
+    logging.debug("inpath: " + inpath)
+    logging.debug("reldir: " + reldir)
+    logging.debug("path_root_edr: " + path_root_edr)
+    cmp_path = os.path.join(path_root_cmp, reldir, 'ion',
+                                fname.replace('_a.dat', '_s.h5'))
+    #cmp_path = path_root_cmp+path_file+'ion/'+data_file.replace('_a.dat','_s.h5')
+
+
+    label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+    aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
+
+
+    science_path = inpath.replace('_a.dat', '_s.dat')
+    if not os.path.exists(cmp_path):
+        cmp_path = cmp_path.replace('_s.h5', '_a.h5')
+        if not os.path.exists(cmp_path):
+            logging.warning(cmp_path + " does not exist")
+            return 0
+
+    kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
+    spice.furnsh(kernel_path)
+
+    # GNG: Not sure what reasonable values for sar_window is.
+    sar_window = 10
+
+    #def alt_profile(label_path, aux_path, science_path,
+    #            cmp_track_path, sar_window,
+    #            kernel_path='/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm',
+    #            save_path=None, idx_start=None, idx_end=None):
+    for sar_window in (1, 5, 10):
+        save_path = None
+        # save_path = None if sar_window == 1 else 'treshold_test.npy'
+        alt_profile(label_path, aux_path, science_path, cmp_path, sar_window, fix_pri=1, save_path=save_path)
+
+
+
 def running_mean(x, N):
     # Algorithm to compute a running mean
     xp = np.pad(x, (N//2, N-1-N//2), mode='edge')
     res = np.convolve(xp, np.ones((N,))/N, mode='valid')
     return res
+
+
+def running_mean2(x, N):
+    """ https://stackoverflow.com/questions/13728392/moving-average-or-running-mean """
+    res = np.empty_like(x)
+    cumsum = [0]
+    for i, x in enumerate(x, 1):
+        cumsum.append(cumsum[i-1] + x)
+        if i>=N:
+            moving_ave = (cumsum[i] - cumsum[i-N])/N
+            #can do stuff with moving_ave here
+            res[i - N] = moving_ave
+            #moving_aves.append(moving_ave)
+    return res
+
+def test_running_mean():
+
+    for arraylen in (500, 501, 1000, 1001):
+        for windowlen in (1, 3, 5, 7):
+            # Check for centeredness
+            x1 = np.arange(1, arraylen, 0.2)
+            y1 = running_mean(x1, windowlen)
+            x2 = np.flip(x1)
+            y2 = running_mean(x2, windowlen)
+
+            try:
+                assert np.max(np.abs(np.flip(y2) - y1)) < 1e-5
+            except AssertionError:
+                print("Failed with arraylen={:d}, windowlen={:d}".format(arraylen, windowlen))
+                raise
+
+    arraylen = 11
+    windowlen = 53
+    x1 = np.arange(1, arraylen, 0.2)
+    y1 = running_mean(x1, windowlen)
+    y2 = running_mean2(x1, windowlen)
+
+    #print('y1 ', y1)
+    #print('y2 ', y2)
+    # They're not equivalent. GNG
+    #assert (y1 == y2).all()
+
+
+def main():
+    test_running_mean()
+    test_alt_profile()
+
+    pass
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
 
