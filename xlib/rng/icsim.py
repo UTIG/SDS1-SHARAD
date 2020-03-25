@@ -136,9 +136,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
 
     # Extract topography and simulate scattering
-    # Create array to store result. echosp will contain the Fourier transform
-    # of each rangeline.
-    echosp = np.empty((Nsample, Necho1), dtype=complex)
     logging.debug("incoherent_sim: setup elapsed time at {:0.3f} sec".format(time.time() - t0))
     
     
@@ -158,6 +155,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     del dem, dem_mask
     logging.debug("incoherent_sim: Done precomputing cartesian coordinates at {:0.3f} sec".format(time.time() - t0))
 
+    # Create array to store result. echosp will contain the Fourier transform
+    # of each rangeline.
+    echosp = np.empty((Nsample, Necho1), dtype=complex)
     p = prg.Prog(Necho1) if do_progress else None
 
     for pos in range(Necho1):
@@ -198,31 +198,32 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
         # Partition powers into top x%, then sort that x%
         idxtop = np.argpartition(-P, thresh)[0:thresh]
-        # Sort this top x% from smallest to largest, so thtey're added in this order,
-        # to maximize numerical precision.
+        # Sort this top x% from smallest to largest, so they're added in this order,
+        # to maximize numerical stability/accuracy.
+        # This step could be optional.
         iP = idxtop[np.argsort(P[idxtop])]
         
         if pos == 0:
             tot_power = np.sum(P)
             used_power = np.sum(P[iP])
-            logging.info("Using 20% of reflectors ({:d} total), got {:0.2f}% of power".format(len(P), used_power / tot_power * 100))
+            logging.info("incoherent_sim: Using 20% of reflectors ({:d} total), got {:0.2f}% of power".format(len(P), used_power / tot_power * 100))
         
-        delay = delay[iP]     # sort delays in descending order of power
-        P = P[iP]             # sort powers in descending order of power
+        delay = delay[iP]     # sort top x% delays in ascending order of power
+        P = P[iP]             # sort top x% powers in ascending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
         idelay = np.clip(np.around(delay*of*fs)-1, 0, Nosample).astype(int)
         #-------------------------------------
         # Accumulate these reflections into the fast-time record
         reflections = np.zeros(Nosample)
-        #for i, pwr in zip(idelay, P):
-        #    reflections[i] += pwr
-        for j in range(thresh):
-            reflections[idelay[j]] += P[j]
+        for i, pwr in zip(idelay, P):
+            reflections[i] += pwr
 
+        # Convert to frequency domain, then extract in-band portion of spectrum,
+        # and apply pulse shaping filter
         #spectrum = np.conj(pulsesp)*np.fft.fft(reflections)
-        #echosp[:, pos] = pulsesp_c[spec_idx] * np.fft.fft(reflections)[spec_idx]
         spectrum = pulsesp_c*np.fft.fft(reflections)
         echosp[:, pos] = spectrum[np.abs(fo) <= fs/2]
+
 	
         if p:
             p.print_Prog(pos)
@@ -883,7 +884,8 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     #    print("data.shape = {:s}".format(str(data.shape)))
     #    raise
 
-
+def test_surfaspect():
+    """ TODO: test equivalence of surfaspect() and surfaspect1() """
 
 def main():
     debug = True

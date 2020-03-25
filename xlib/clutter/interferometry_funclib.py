@@ -7,7 +7,7 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'library of functions required for interferometry'},
     '0.2':
-        {'date': 'February 01, 20202',
+        {'date': 'February 01, 2020',
          'author': 'Gregory Ng, UTIG',
          'info': 'Optimize algorithms, esp coregistration'},
 }
@@ -15,10 +15,10 @@ __history__ = {
 import sys
 import math
 import pytest
-from tkinter import *
 import logging
 import os
 import csv
+#from tkinter import *
 
 import pyfftw
 import numpy as np
@@ -732,7 +732,7 @@ def frequency_interpolate(data, subsample_factor):
 def test_interpolate():
     """ Test equivalence of interpolation algorithms, and run with
     a variety of input sizes """
-    bplot = True
+    bplot = False
     
     for repeatsize in (128, 255, 77):
         logging.debug("repeatsize = {:d}".format(repeatsize))
@@ -757,6 +757,8 @@ def test_interpolate():
             try:
                 assert rms3 < 5e-4
             except AssertionError:
+                logging.error("repeatsize={:d} ifactor={:d} RMS interpolation "
+                              "difference: {:f} (limit {:f})".format(repeatsize, ifactor, rms3, 5e-4))
                 bplot = True
                 
             if bplot: #pragma: no cover
