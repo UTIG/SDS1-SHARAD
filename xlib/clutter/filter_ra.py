@@ -632,7 +632,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
     else: # HiCARS == 2
         # Construct the unfoc processor if HiCARS2
         if (channel in [1, 2]):
-            if args.combined:
+            if combined:
                 logging.debug("filter: Combining channels to make channel {:d}".format(channel))
                 channel_specs = unfoc.parse_channels('[1,%d,1,%d,1]' % (channel, channel+2))
             else:
