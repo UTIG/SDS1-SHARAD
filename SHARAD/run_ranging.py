@@ -134,9 +134,8 @@ def main():
         for i, result in enumerate(rlist):
             for j, t in enumerate(process_list):
                 if str(int(result[0])) in t['inpath']:
-                    logging.info("Found result for {:d}".format(result[0]))
-                    out[j][0] = result[0]
-                    out[j][1] = result[1]
+                    logging.info("Found result for {:s}".format(str(result[0])))
+                    out[j] = result[1:3]
 
     logging.warning("Code is incomplete!  TODO Finish collecting results")
     sys.exit(0)
@@ -171,7 +170,6 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
     """
 
     try:
-        obn = tasknum # I think obn is supposed to be orbit number.
         taskname = "task{:03d}".format(tasknum)
         # create cmp path
         path_root_rng = '/disk/kea/SDS/targ/xtra/SHARAD/rng/'
@@ -180,7 +178,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
         dtm_path = '/disk/daedalus/sds/orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff'
         # Relative path to this file
         fname = os.path.basename(inpath)
-
+        obn = fname[2:9] # orbit name
         # Relative directory of this file
         reldir = os.path.dirname(os.path.relpath(inpath, path_root_edr))
         logging.debug("inpath: " + inpath)
@@ -233,7 +231,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
             #ranging_func = icd.icd_ranging_3
 
 
-            result[co_sim-5] = icd.icd_ranging_cg\
+            result[co_sim-5] = icd.icd_ranging_cg3\
                               (cmp_path, dtm_path, science_path, label_path, \
                                inpath, aux_label,
                                int(idx_start), int(idx_end), debug=args.debug,
@@ -241,7 +239,9 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
                                window=50, sim=sim,
                                #cluttergram_path=clutter_load_path, save_clutter_path=clutter_save_path,
                                do_progress=not b_noprogress, maxechoes=maxechoes)
-            logging.info("result[{:d}] = {:s}".format(co_sim - 5, str(result[co_sim - 5])))
+            j = co_sim - 5
+            logging.info("result[{:d}] = {:f} {:f} {:f}".format(j, \
+               result[j][0], result[j][1], result[j][2]))
 
         if bplot:
             plt.scatter(np.arange(1,25,1), result[:,0], s=30)
