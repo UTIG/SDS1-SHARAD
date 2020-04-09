@@ -275,8 +275,8 @@ def main():
             plt.show()
             del mag_a, phs_a, mag_b, phs_b
 
-        # Apply shifts calculated from chirp stability analysis to align
-        # range lines
+        # Apply shifts calculated from chirp stability analysis to align range lines
+        # TODO GNG: allow us to omit this and pass cmp_a and stabilityA onward
         print('-- chirp stability adjustment')
         cmp_a2 = fl.phase_stability_adjustment(cmp_a, stabilityA)
         cmp_b2 = fl.phase_stability_adjustment(cmp_b, stabilityB)
@@ -297,6 +297,8 @@ def main():
             del mag_a, phs_a, mag_b, phs_b
 
         # Sub-pixel co-registration of the port and starboard range lines
+        # TODO GNG: make fl.coregistration take cmp_a, cmp_b, and stabilityA and stabilityB as inputs,
+        # and output shift_array and qual_array as outputs
         print('-- co-registration of port and starboard radargrams')
         cmp_a3, cmp_b3, shift_array, qual_array = fl.coregistration(cmp_a2, cmp_b2, (1 / 50E6), 10)
         del cmp_a2, cmp_b2
@@ -369,7 +371,12 @@ def main():
             plt.title('roll correction interferometric phase angle [deg]'); plt.xlim([0, 1])
             plt.show()
 
+        # TODO: make a function that rolls data if taking a shift.
+        #  make this take cmp_a and a shift, cmp_b and a shift, and compute a total shifted product cmp_b3
+
+
         # Interferogram
+
         print('-- producing interferogram')
         int_image = fl.stacked_interferogram(cmp_a3, cmp_b3, fresnel_stack, roll_phase,
                                              roll_correction, az_step=az_step)
