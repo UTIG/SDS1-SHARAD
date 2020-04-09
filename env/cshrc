@@ -1,4 +1,8 @@
-# You should be sure to set this in  your cshrc to get to this var
+# To apply this file, from csh or tcsh, run
+# source cshrc
+#
+#
+# You should be sure to set this in your cshrc to get to this var
 setenv SDS /disk/kea/SDS
 
 # We want this to be the path
@@ -9,4 +13,4 @@ setenv PATH /disk/kea/SDS/syst/ext/bin:$PATH
 
 #setenv PATH $WAIS/syst/ext/linux/bin:$WAIS/syst/linux/bin:/usr/local/anaconda3:$PATH
 
-
+rehash
