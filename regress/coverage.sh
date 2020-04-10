@@ -7,6 +7,13 @@
 # ./coverage.sh
 # coverage3 report -m
 
+# A recommended report command, which excludes reporting of some external libraries:
+# coverage report -m --omit \
+# '/disk/kea/SDS/code/work/ngg/sds_master/xlib/rsr/*,\
+# /disk/kea/SDS/code/work/ngg/sds_master/xlib/subradar/*.py,\
+# /disk/kea/SDS/code/work/ngg/sds_master/SHARAD/data_visualization.py'
+
+
 
 S0=`basename $0`
 D0=`dirname $0`
@@ -18,7 +25,8 @@ RCFILE=`pwd`/.coveragerc
 FLAGS="--rcfile=$RCFILE"
 COV=coverage3
 
-
+# Turn off display variable for regressions. (prevent graph windows from activating)
+export DISPLAY=""
 
 rm -rf ./covdata/
  
