@@ -15,9 +15,9 @@ helps to reduce aliasing and noise amplification due to noisy input data.
 Radar records are processed in blocks to limit memory usage, and blocks are
 overlapped when read and filtered, to reduce edge effects.
 
-2020-02-14: 
+2020-02-14:
 GNG modified this script to rearrange how tears are processed.
-Previously, tears were handled in either two or four sections, depending on how 
+Previously, tears were handled in either two or four sections, depending on how
 you look at it, but this entire code was moved to a function called fill_gap_gen.
 
 """
@@ -40,11 +40,11 @@ WAIS=os.getenv('WAIS', '/disk/kea/WAIS')
 
 import unfoc_KMS2 as unfoc
 
-# Issue a warning if we attempt to create a gap of length 0 
+# Issue a warning if we attempt to create a gap of length 0
 WARN_GAP0 = False
 
-def quad3(X,X1,X2,X3,P1,P2,P3):
-    """ Quadratic interpolation with three input points 
+def quad3(X, X1, X2, X3, P1, P2, P3):
+    """ Quadratic interpolation with three input points
     Lagrange form """
     XX1 = X-X1
     XX2 = X-X2
@@ -72,8 +72,10 @@ def main():
     parser.add_argument('OutName', help='Filename of filtered/resampled output file', type=str)
     parser.add_argument('--geopath', help='path to geo files', default='.', type=str)
     parser.add_argument('channel', help='The channel number to produce', type=int)
-    parser.add_argument('--undersamp', help='let the processor know if data was undersampled', action='store_true')
-    parser.add_argument('--combined', help='let the processor know if channels need to be combined', action='store_true')
+    parser.add_argument('--undersamp', help='Input data used undersampling',
+                        action='store_true')
+    parser.add_argument('--combined', help='Combine left and right channels for output',
+                        action='store_true')
     parser.add_argument('--selftest', help='Run self-test routines', action='store_true')
     parser.add_argument('--nofilter2d', help='Disable 2d filtering', action='store_true')
     parser.add_argument('-v', '--verbose', help='Verbose output', action='store_true')
@@ -89,14 +91,14 @@ def main():
     channel = args.channel
     undersamp = args.undersamp
     combined = args.combined
-    
+
     fmt = "%(levelname)-8s: %(message)s"
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout, format=fmt)
-    
+
     if args.selftest:
         sys.exit(test())
-        
+
 
     # TODO: is_marfa() function with set as input
     # Test to see if this system is MARFA
@@ -117,8 +119,8 @@ def main():
     geo_path = args.geopath
 
     with open(OutName, "wb") as OFD:
-        for signalim in filter_ra_gen(InName, geo_path, DX, MS, NR, NRr, channel, 
-                                  undersamp=undersamp, combined=combined, filter2d=(not args.nofilter2d)):
+        for signalim in filter_ra_gen(InName, geo_path, DX, MS, NR, NRr, channel, \
+            undersamp=undersamp, combined=combined, filter2d=(not args.nofilter2d)):
             np.real(signalim).astype('<i2').T.tofile(OFD)
 
 def read_stackgen_block(stackgen, MS, NumRead, NB, filename="?", short_read_severity=logging.INFO):
@@ -135,7 +137,7 @@ def read_stackgen_block(stackgen, MS, NumRead, NB, filename="?", short_read_seve
             break #raise StopIteration(msg)
         block[:, i] = trace.data[0:MS]
     return block
-    
+
 def read_file_block(IFD, MS, NumRead, NB, filename="?", short_read_severity=logging.WARNING):
     block = np.empty((MS, NumRead))
     for i in range(NumRead):
@@ -288,7 +290,7 @@ def make_range_filter(MS, NRb):
     N1 = int(math.floor((Freq1*Ta*NRb)+0.5)) + 1
     N2 = int(math.floor((Freq2*Ta*NRb)+0.5)) + 1
     BW = N2 - N1
-    Hanning = np.reshape(0.5 + 0.5*np.cos(np.linspace(0.0,1.0, BW+1) * np.pi),(-1,1))
+    Hanning = np.reshape(0.5 + 0.5*np.cos(np.linspace(0.0, 1.0, BW+1) * np.pi), (-1, 1))
     FilterA[N1-1:N2] = Hanning
     FilterA[NRb+2-N2-1:NRb+2-N1] = 1.0-Hanning
     FilterA[0:N1-1] = 1.0
@@ -380,7 +382,7 @@ def fill_gap_gen(rec0_idx, rec0, rec1_idx, rec1, winsize, blocksize=None):
             n0 = nblock * blocksize
             n1 = min((nblock + 1) * blocksize, nrecs)
             signal = np.zeros((rec0.shape[0], n1 - n0), dtype=complex)
-            
+
             if n0 <= winsize or nrecs - winsize <= n1:
                 # If the range is within the window edges of the gap, process.
                 # but of course adjust range if beneficial.
@@ -401,7 +403,7 @@ def test_fill_gap(b_run_timing=False):
     # data2 = 2*np.ones((MS,))
     data_a = np.array([1, 2, 0, 3, 4, 5])
     data_b = np.array([5, 4, 0, 3, 2, 1])
-    
+
     for arr in fill_gap_gen(999, data_a, 1015, data_b, 5):
         for i, rec in enumerate(arr.transpose()):
             pass #print(i, i+999+1, rec.transpose())
@@ -424,35 +426,38 @@ def test_fill_gap(b_run_timing=False):
                 else:
                     # Check contents for symmetry
                     assert arr1.shape == (len(data1), gaplen)
-                
+
                     if not np.any(data1) and not np.any(data2):
                         # If both boundary records are zero, output should be zero
                         assert not np.any(arr1)
-                
+
                     # assert that the flip is the same as when you reverse the elements.
                     if (data1 == data2).all():
                         assert (np.flip(arr1, axis=1) == arr1).all()
                     elif (data1.astype(bool) == data2.astype(bool)).all():
                         # even if not equal, then at least the same entries will be nonzero
                         assert (arr1.astype(bool) == np.flip(arr1.astype(bool), axis=1)).all()
-                        
+
                     if np.any(data1) and np.any(data2): #if both ends are nonzero,
                         # assert that all middle columns are symmetrically zero.
-                        assert (np.all(arr1.astype(bool), axis=0) == np.all(np.flip(arr1.astype(bool), axis=1), axis=0)).all()
+                        assert (np.all(arr1.astype(bool), axis=0) ==
+                                np.all(np.flip(arr1.astype(bool), axis=1), axis=0)).all()
 
                 # Check equivalence of blocked output
                 for blocksize in (1, 2, 3, 5, 11, 13, 10, 100, 101, 199, 200, 1000, 1001, 1024):
                     idx = 0
-                    for arr in fill_gap_gen(x0, data1, x1, data2, winsize=windowsize, blocksize=blocksize):
+                    for arr in fill_gap_gen(x0, data1, x1, data2,
+                                            winsize=windowsize, blocksize=blocksize):
                         try:
                             assert arr.shape[1] > 0
                             assert (arr1[:, idx:(idx + arr.shape[1])] == arr).all()
                             idx += arr.shape[1]
                         except AssertionError:
                             arr1shape = str(arr1.shape) if arr1 is not None else "None"
-                            
-                            logging.error("blocksize={:d} gaplen={:d} windowsize={:d}, arr1.shape={:s} "
-                                          "idx={:d}".format(blocksize, gaplen, windowsize, arr1shape, idx))
+
+                            msg = "blocksize={:d} gaplen={:d} windowsize={:d}, arr1.shape={:s} " \
+                                  "idx={:d}".format(blocksize, gaplen, windowsize, arr1shape, idx)
+                            logging.error(msg)
                             logging.error("arr1={:s}\narr={:s}".format(str(arr1), str(arr)))
                             raise
 
@@ -478,10 +483,10 @@ def test_fill_gap(b_run_timing=False):
     #            arr_gen = fill_gap_gen(x0, data1, x1, data2, winsize=windowsize, blocksize=None)
     #            arr1 = next(arr_gen, None)
     #            assert next(arr_gen, None) is None # no more items left
-                
+
     ntrials = 1
     logging.info("Doing {:d} timed trials of fill_gap".format(ntrials))
-            
+
     data1 = np.arange(0, 3200)
     data2 = np.arange(3200, 0, -1)
     ntrials = 100 if b_run_timing else 1
@@ -498,26 +503,26 @@ def test_fill_gap(b_run_timing=False):
                 assert arr.shape == (len(data1), gaplen)
 
                 for blocksize in (1, 2, 13, 101, 200, 1000, 1001, 1024):
-                    idx=0
+                    idx = 0
                     for arr in fill_gap_gen(x0, data1, x1, data2, winsize=windowsize, blocksize=blocksize):
                         assert arr.shape[1] > 0
                         idx += arr.shape[1]
                     assert idx == gaplen
     logging.info("Done timed trials of fill_gap")
 
-              
+
 def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
-                  undersamp=False, combined=False, filter2d=True, resample=True, 
+                  undersamp=False, combined=False, filter2d=True, resample=True,
                   blank=True, trim=[None, None, None, None]):
     """ Filter a bxds file to doppler filtering and resampling to equal distances
-    (with spacing DX).  
-    
+    (with spacing DX).
+
     Data stored in file bxds_input is assumed to be in one or more contiguous
     *segments*.  These segments are read in as one or more blocks.
     Input blocks are filtered to produce output blocks, and blocks are read
     overlapping.
 
-    
+
     DX: distance in meters
     MS: number of samples per record
     NR: maximum width (in records) of blocks to be processed
@@ -530,19 +535,19 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
               for debugging or testing.  If true, don't do any doppler filtering.
               This is useful for computing total output data size.
 
-    resample: Perform spatial resampling using quadratic interpolation.  
+    resample: Perform spatial resampling using quadratic interpolation.
               (default true) -- normally this is only disabled
               for debugging or testing.
-    
-    
+
+
     """
     # Number of output blocks
     out = 0
 
     # Nc is an array of one-based indices to the nearest record in bxds corresponding
     # to each output record in the distance-resampled array.
-    # therefore it should be increasing, 
-    
+    # therefore it should be increasing,
+
     Nc = np.fromfile(os.path.join(geo_path, "Nc"), dtype=int, sep=" ")
     # Xo is an array of the along-track position of each record in the bxds, in meters.
     # by definition, the length of Xo should be the same as the length of bxds
@@ -556,7 +561,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
 
     # NumTears = Number of data tears
     NumTears = len(NRt) - 1
-    
+
     # x positions of output
     # Perform some checks on Nc
     try:
@@ -615,7 +620,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
         assert snm == 'RADnh3' or snm == 'RADnh5'
         HiCARS = 2
 
-    # Open Input file if HiCARS1. 
+    # Open Input file if HiCARS1.
     IFD = None
     f_read_block = None # function pointer to read blocks
     block_source = None # block generator for f_read_block
@@ -627,7 +632,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
     else: # HiCARS == 2
         # Construct the unfoc processor if HiCARS2
         if (channel in [1, 2]):
-            if args.combined:
+            if combined:
                 logging.debug("filter: Combining channels to make channel {:d}".format(channel))
                 channel_specs = unfoc.parse_channels('[1,%d,1,%d,1]' % (channel, channel+2))
             else:
@@ -735,7 +740,7 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
             if NB0 == 0:
                 # NOTE GNG: for not the first gap, we could try crossfading data in
                 S = f_read_block(block_source, MS, NumRead, (NB0+1), bxds_input)
-                # Initialize enough space for number of blocks to read (NumRead), 
+                # Initialize enough space for number of blocks to read (NumRead),
                 # plus overlap at the beginning (NRr//2).
                 signal = np.empty((MS1,int(NRr//2+NumRead)), dtype=complex)
                 # Pad the beginning of the block with the first block read
@@ -762,12 +767,12 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                     signal[:, N] = S[ftrim[0]:ftrim[1], NumRead-1]
 
             #pcheck.pcheck(signal, "signal")
-  
+
             # Clear top samples
             if blank and HiCARS == 2:
                 # HiCARS2
                 signal[0:250, :] = 0
-            elif blank: 
+            elif blank:
                 # HiCARS1
                 signal[0:50, :] = 0
 
@@ -812,13 +817,13 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 # Nii = int(math.ceil(Xo[NGWri-1]/DX)) + 1
                 # The floor appears to exist in the previous python version and matlab.
                 Nii = int(math.floor((Xo[NGWri-1]/DX)+0.99999)) + 1
-                
-                # in the case where this is the first block in the segment,  
+
+                # in the case where this is the first block in the segment,
                 # Nii could be larger than NiF, if the block extent is less than 1 meter. (0.99999)
             else:
                 # previous plus 1. easy
                 Nii = Nif + 1
-                
+
             # Convert the location into an output index.
             Nif = int(math.floor(Xo[NGWrf-1]/DX)) + 1
             output_block_len = Nif - Nii + 1
@@ -889,11 +894,11 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 # Alternatively for testing we fill with zeros.
                 signali.fill(0.0)
             # --------------------------------------------------
-            
+
             # If this is the first block and not the segment, then output a gap.
             if NT0 > 0 and NB0 == 0:
                 assert rec_prev is not None and rec_prev_idx is not None
-                
+
                 logging.debug("filter: FILL A NT={:d}/{:d} NB={:d}/{:d} Ni=[{:5d}, {:5d})".format(NT0+1, \
                               NumTears, NB0+1, NumNBlocks, rec_prev_idx + 1, Nii))
                 for ngapblock, sig_gap in enumerate(fill_gap_gen(rec_prev_idx, rec_prev, Nii, signali[:, 0], winsize=10)):
@@ -927,5 +932,3 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
 
 if __name__ == "__main__":
     main()
-
-

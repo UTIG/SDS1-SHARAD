@@ -20,6 +20,7 @@ nsqrt = np.sqrt
 
 
 def _coord_check(coord, cols):
+    """ Check column names for correctness and convert to numpy array if needed. """
     if isinstance(coord, (list, tuple, set)):
         ncoord = np.array(coord)
     elif isinstance(coord, pd.core.frame.DataFrame):
@@ -73,9 +74,7 @@ def ellipsoid(sph, axes=(0, 0, 0), radius=0, indeg=True, unit=1, **kwargs):
         else:
             return np.full(len(sph), 1000/unit * radius)
     else:
-        scl = 1.0
-        if indeg:
-            scl = deg
+        scl = deg if indeg else 1.0
         sph = np.reshape(sph, (-1, 2))
         clat = np.cos(sph[:, 0]*scl)
         slat = np.sin(sph[:, 0]*scl)
@@ -117,16 +116,23 @@ def sph2cart(coord, indeg=True,
 
     sph = _coord_check(coord, cols)
     cart = np.empty_like(sph, dtype=float)
+    if indeg: # if in degrees, convert to radians
+        sph1 = np.array(sph)
+        sph1[:, 0] *= deg
+        sph1[:, 1] *= deg
+    else:
+        sph1 = sph
 
-    scale = deg if indeg else 1.0
-    clat = ncos(sph[:, 0]*scale)
-    slat = nsin(sph[:, 0]*scale)
-    clon = ncos(sph[:, 1]*scale)
-    slon = nsin(sph[:, 1]*scale)
-    r = sph[:, 2] + ellipsoid(sph[:, 0:2], indeg=indeg, **kwargs)
-    cart[:, 0] = r * clon * clat
-    cart[:, 1] = r * slon * clat
-    cart[:, 2] = r * slat
+    r = sph[:, 2] + ellipsoid(sph1[:, 0:2], indeg=False, **kwargs)
+    clat = ncos(sph1[:, 0])
+    #cart[:, 0] = r * clat
+    #cart[:, 1] = cart[:, 0]
+    #cart[:, 0] *= ncos(sph1[:, 1])
+    #cart[:, 1] *= nsin(sph1[:, 1])
+    cart[:, 0] = r * ncos(sph1[:, 1]) * clat
+    cart[:, 1] = r * nsin(sph1[:, 1]) * clat
+    cart[:, 2] = r * nsin(sph1[:, 0])
+
     return cart
 
 
@@ -263,7 +269,7 @@ def test():
     inc = 0.5
     for lat1 in np.arange(-90.0, 90.0, inc):
         for lon1 in np.arange(-180.0, 180.0, inc):
-            coords1.append((lat1, lon1, 0))
+            coords1.append((lat1, lon1, 1000))
             coords2.append((lat1, lon1))
     print("calculating")
 
@@ -280,9 +286,15 @@ def test():
 
 
     y = latlon_profiles(np.array([coords1,coords3]))
-
+    epsa = 1e-5 # angle delta
+    epsh = 1e-3 # height delta
     c1 = cart2sph(sph2cart(coords1))
     #c2 = cart2sph(sph2cart(coords2))
+    assert (np.abs(c1[:, 0] - coords1[:, 0]) < epsa).all()
+    da = c1[:, 1] - coords1[:, 1]
+    da = (da + 180) % 360 - 180 # wrap deltas
+    assert (np.abs(da) < epsa).all()
+    assert (np.abs(c1[:, 2] - coords1[:, 2]) < epsh).all()
 
     #c1 = lsh2sph(sph2lsh(coords1))
     #c2 = cart2sph(sph2lsh(coords2))
@@ -295,14 +307,72 @@ def test():
     d1 = sph_dist(coords1, coords3, radius=radius, indeg=False)
     d1 = sph_dist(coords1, coords3, radius=radius, indeg=True)
     assert np.array_equal(coords1_orig, coords1)
+    
+def time_sph2cart(niter=100):
+    import timeit
+    # Run with a variety of dimensions
+    coords1 = []
+    coords2 = []
+    inc = 0.2
+    for lat1 in np.arange(-90.0, 90.0, inc):
+        for lon1 in np.arange(-180.0, 180.0, inc):
+            coords1.append((lat1, lon1, 1000))
+            coords2.append((lat1*deg, lon1*deg, 1000))
+    setupcode = """
+from __main__ import sph2cart
+import scipy.constants
+import numpy as np
+# Run with a variety of dimensions
+coords1 = []
+coords2 = []
+inc = 0.2
+for lat1 in np.arange(-90.0, 90.0, inc):
+    for lon1 in np.arange(-180.0, 180.0, inc):
+        coords1.append((lat1, lon1, 1000))
+        coords2.append((lat1*deg, lon1*deg, 1000))
+
+    """
+    #et1 = timeit.repeat('sph2cart(coords1, indeg=True)', setup=setupcode, number=4)
+    #et2 = timeit.repeat('sph2cart(coords2, indeg=False)', setup=setupcode, number=4)
+    #print('degrees: avg={:0.3f} sec, min={:0.3f} sec'.format(np.mean(et1), np.min(et1)))
+    #print('radians: avg={:0.3f} sec, min={:0.3f} sec'.format(np.mean(et2), np.min(et2)))
+
+    print("Starting timing (degrees)")
+    t0 = time.time()
+
+    coords1 = np.array(coords1)
+    for x in range(niter):
+        c1 = sph2cart(coords1, indeg=True)
+
+    print("Elapsed time {:0.2f}".format(time.time() - t0))
+    print("Starting timing (radians)")
+    t0 = time.time()
+
+    coords2 = np.array(coords2)
+    for x in range(niter):
+        c2 = sph2cart(coords2, indeg=False)
+
+    print("Elapsed time {:0.2f}".format(time.time() - t0))
+
+    epsa = 1e-5 # angle delta
+    epsh = 1e-3 # height delta
+    assert (np.abs(c1[:, 0] - c2[:, 0]) < epsa).all()
+    da = c1[:, 1] - c2[:, 1]
+    da = (da + 180) % 360 - 180 # wrap deltas
+    assert (np.abs(da) < epsa).all()
+    assert (np.abs(c1[:, 2] - c2[:, 2]) < epsh).all()
+
+
 
 def main():
-    test()            
+    test()
+    time_sph2cart(niter=30)
 
 
 if __name__ == "__main__":
     # execute only if run as a script
     import os
+    import time
     main()
 
 

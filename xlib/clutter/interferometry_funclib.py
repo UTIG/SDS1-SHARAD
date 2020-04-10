@@ -7,7 +7,7 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'library of functions required for interferometry'},
     '0.2':
-        {'date': 'February 01, 20202',
+        {'date': 'February 01, 2020',
          'author': 'Gregory Ng, UTIG',
          'info': 'Optimize algorithms, esp coregistration'},
 }
@@ -15,14 +15,15 @@ __history__ = {
 import sys
 import math
 import pytest
-from tkinter import *
 import logging
 import os
 import csv
+#from tkinter import *
 
 import pyfftw
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import pandas as pd
 from scipy import ndimage
 from scipy import integrate
@@ -706,6 +707,164 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
     return output
 
 
+def frequency_shift(data, upsample_factor, offset):
+    """ 
+    Shift a vector by a sub-sample amount, by upsampling by subsample_factor and taking the offset
+    function for interpolating a vector by padding the data in the frequency
+    domain.
+
+    Inputs:
+    ------------
+                 data: complex-valued range line
+      upsample_factor: factor by which the user wants to subsample the data by
+               offset: Shift offset in samples
+
+    Outputs:
+    ------------
+       shifted data vector
+    """
+    subsamp_b = frequency_interpolate(data, upsample_factor)
+    subsamp_b = np.roll(subsamp_b, int(offset))
+    return subsamp_b[np.arange(0, len(subsamp_b), upsample_factor)]
+
+def frequency_shift2(data, upsample_factor, offset, fudge=1.0):
+    """ 
+    Shift a vector by a sub-sample amount, by upsampling by subsample_factor and taking the offset
+    function for interpolating a vector by padding the data in the frequency
+    domain.
+
+    Inputs:
+    ------------
+                 data: complex-valued range line
+      upsample_factor: factor by which the user wants to subsample the data by
+               offset: Shift offset in samples
+
+    Outputs:
+    ------------
+       shifted data vector
+    """
+    # Calculate the kernel for shifted interpolation (a shifted sinc)
+    # TODO: pre-calculate this kernel, perhaps using analytic fourier transform
+    n1 = len(data)
+    m1 = n1 // 2 # + 1
+    t = np.roll(np.arange(m1 - n1, m1), m1)
+    #print('s4 n1={:d} t={:s}'.format(n1, str(list(t))))
+    foffset = float(offset) / float(upsample_factor) * fudge
+    h = np.sinc(t - foffset) # interpolation kernel
+
+    fh = np.fft.fft(h)
+    #---------------------------------------
+    norm = None #'ortho'
+    fdata = np.fft.fft(data, norm=norm)
+    return np.fft.ifft(fdata * fh, norm=norm)
+
+    #return scipy.ndimage.shift(data, offset/upsample_factor)
+
+
+
+def test_frequency_shift(plot=False):
+    dx = 0.2
+    x = np.arange(0, 2.0, dx)
+    y1 = 10*np.sin(2*np.pi*x)
+
+    s1 = np.array([np.mean(y1), np.std(y1)])
+    print(str(s1))
+
+    import mpl_toolkits.mplot3d as mplot3d
+    # minimize fudge factor
+    upsamp = 8
+    offset = 4
+    fudges =  np.arange(0.5, 1.3, 0.01)
+    out = np.empty((fudges.shape[0], upsamp, 3))
+
+    y1u = frequency_interpolate(y1, upsamp)
+    t1u = np.arange(0, 2.0, dx/upsamp)
+    if plot:
+        plt.clf()
+        plt.plot(x, y1, label='orig', marker='o')
+        plt.plot(t1u, y1u, label='upsamp', marker='x')
+        plt.show()
+
+    for i, fudge in enumerate(fudges):
+        for offset in range(upsamp):
+            y2 = frequency_shift(y1, upsamp, offset)
+            s2 = np.array([np.mean(y2), np.std(y2)])
+
+            y3 = frequency_shift2(y1, upsamp, offset, fudge=fudge)
+            s3 = np.array([np.mean(y3), np.std(y3)])
+            y4 = np.abs(y3 - y2)
+
+            out[i, offset, 0] = np.mean(y4)
+            out[i, offset, 1] = np.std(y4)
+            out[i, offset, 2] = np.max(y4)
+
+    if plot:
+        plt.clf()
+        #plt.plot(fudges, out[:, 0], label="avg", marker='o')
+        #plt.plot(fudges, out[:, 1], label="std", marker='o')
+        #plt.plot(fudges, out[:, 2], label="max", marker='o')
+        #plt.grid(True)
+        x, y = np.meshgrid(range(upsamp), fudges)
+        z = out[:, :, 0]
+        #print(x.shape)
+        #print(z.shape)
+        #fig = plt.figure()
+        ax = plt.axes(projection='3d')
+
+        ax.plot_surface(x, y, z, cmap='viridis', edgecolor='none', rstride=1, cstride=1, label="avg")
+        plt.xlabel('offset')
+        plt.ylabel('Fudge Factor')
+        ax.set_zlim3d(0, 0.5)  # np.max(z)
+        #plt.legend()
+        plt.title("Fudge Factor Offset Minimization")
+        plt.show()
+
+
+    for upsamp in np.arange(2, 10):
+        for offset in np.arange(0, upsamp):
+            y2 = frequency_shift(y1, upsamp, offset)
+            s2 = np.array([np.mean(y2), np.std(y2)])
+            print("{:0.0f}/{:0.0f} s2 {:s}".format(offset, upsamp, str(s2)))
+            #assert np.abs(s1[0] - s2[0]) < 1e-5 # mean matches original
+            #assert np.abs(s1[1] - s2[1]) < 1e-5 # std deviation matches original
+
+            y3 = frequency_shift2(y1, upsamp, offset)
+            s3 = np.array([np.mean(y3), np.std(y3)])
+            print("{:0.0f}/{:0.0f} s3 {:s}".format(offset, upsamp, str(s3)))
+            #assert np.abs(s1[0] - s3[0]) < 1e-5 # mean matches original
+            #assert np.abs(s1[1] - s3[1]) < 1e-5 # std deviation matches original
+            y4 = np.abs(y3 - y2)
+            s4 = np.array([np.mean(y4), np.std(y4), np.max(y4)])
+            print("{:0.0f}/{:0.0f} s4 {:s}".format(offset, upsamp, str(s4)))
+
+            if plot and offset > 0:
+                plt.clf()
+                plt.subplot(3,1,1)
+                plt.plot(x, y1, label='orig', marker='o', linewidth=0)
+                plt.plot(x, np.real(y2), label='y2real')
+                plt.plot(x, np.real(y3), label='y3real', marker='x', linewidth=0)
+                plt.legend()
+                plt.grid(True)
+                plt.title('{:0.0f} / {:0.0f}'.format(offset, upsamp))
+                plt.subplot(3,1,2);
+                plt.plot(x, y1, label='orig', marker='o', linewidth=0)
+                plt.plot(x, np.imag(y2), label='y2imag')
+                plt.plot(x, np.imag(y3), label='y3imag', marker='x', linewidth=0)
+                plt.legend()
+                plt.grid(True)
+
+                plt.subplot(3,1,3)
+                y4r = np.real(y3 - y2)
+                y4i = np.imag(y3 - y2)
+                plt.plot(x, y4r, label='y4real')
+                plt.plot(x, y4i, label='y4imag', marker='x', linewidth=0)
+                plt.title('{:0.0f} / {:0.0f} - Residual'.format(offset, upsamp))
+                plt.legend()
+                plt.grid(True)
+                plt.show()
+            
+
+
 def frequency_interpolate(data, subsample_factor):
     '''
     function for interpolating a vector by padding the data in the frequency
@@ -729,21 +888,24 @@ def frequency_interpolate(data, subsample_factor):
     # But we want to preserve value, not total signal energy
     return np.sqrt(subsample_factor)*np.fft.ifft(fft_int_shift, norm='ortho')
 
-def test_interpolate():
+def test_interpolate(bplot=False):
     """ Test equivalence of interpolation algorithms, and run with
-    a variety of input sizes """
-    bplot = True
-    
+    a variety of input sizes
+    Test that average value and amplitude of signals mathes
+    """
+
+    meanval = 0.0
+
     for repeatsize in (128, 255, 77):
         logging.debug("repeatsize = {:d}".format(repeatsize))
         # Series of step functions
         sig = np.repeat([0.5, 0., 1., 1., 0., 1., 0., 0., 1., 0.5], repeatsize)
-        sig -= sig.mean()
+        sig -= sig.mean() + meanval
         x = np.linspace(0, 100.0, len(sig))
         # noisy signal
         sig_noise = sig + 1e-3 * np.random.randn(len(sig))
         osi = 1 / 50e6 # original signal interval
-        for ifactor in (2,5, 10, 13, 21):
+        for ifactor in (2, 5, 10, 13, 21):
             x2 = np.linspace(0, max(x), len(sig_noise)*ifactor) # get interpolated indices
             sig_interp0 = np.interp(x2, x, sig_noise) # linear interpolation
             sig_interp1 = np.real(sinc_interpolate(sig_noise, osi, ifactor))
@@ -754,9 +916,29 @@ def test_interpolate():
             rms3 = np.sqrt(np.square(abs(sig_interp1 - sig_interp2)).mean())
             logging.info("interpolate: ifactor={:0.1f} RMS(lin-sinc)={:0.4g}"
                          " RMS(lin-freq)={:0.4g} RMS(sinc-freq)={:0.4g}".format(ifactor, rms1, rms2, rms3))
+
+
+            statso = np.array([np.mean(sig_noise), np.std(sig_noise)])
+            stats0 = np.array([np.mean(sig_interp0), np.std(sig_interp0)])
+            stats1 = np.array([np.mean(sig_interp1), np.std(sig_interp1)])
+            stats2 = np.array([np.mean(sig_interp2), np.std(sig_interp2)])
+
+            try:
+                #assert (np.abs(stats0 - stats1) < 1e-3).all()
+                assert (np.abs(stats1 - stats2) < 1e-2).all()
+                #assert (np.abs(statso - stats2) < 1e-3).all()
+            except AssertionError:
+                logging.error("statso = " + str(statso))
+                logging.error("stats0 = " + str(stats0))
+                logging.error("stats1 = " + str(stats1))
+                logging.error("stats2 = " + str(stats2))
+                raise
+
             try:
                 assert rms3 < 5e-4
             except AssertionError:
+                logging.error("repeatsize={:d} ifactor={:d} RMS interpolation "
+                              "difference: {:f} (limit {:f})".format(repeatsize, ifactor, rms3, 5e-4))
                 bplot = True
                 
             if bplot: #pragma: no cover
@@ -767,6 +949,88 @@ def test_interpolate():
                 plt.plot(abs(sig_interp1-sig_interp2))
                 plt.title("Sinc vs Frequency Interpolation error")
                 plt.show()
+
+def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_peakint=False, method=0):
+    '''
+    function for co-registering complex-valued fast time records.
+    This function finds the offset, but does not shift any input records.
+    from two radargrams as required to perform interferometry.
+
+    Meets requirements outlined in Castelletti et al. (2018)
+
+    TODO: coregistration should probably occur using either just the first half of the image,
+    or it should be done in a log-scaled domain.  Otherwise the only effective contribution
+    to the signal will be the echoes near the surface.  
+
+    Inputs:
+    -------------
+                     cmp_a: complex-valued input A radargram
+                     cmp_b: complex-valued input B radargram
+      orig_sample_interval: sampling interval of the input data (in seconds)
+           upsample_factor: Upsample radargrams by this factor, using sinc interpolation,
+                            before performing correlation.
+                     shift: Max shift to consider
+                 b_peakint: Perform peak interpolation when finding argmax of correlation.
+
+    Outputs:
+    -------------
+      shift_array: Array (same shape as cmp_a.shape[1]) containing mumber of samples
+                   (possibly non-integer) to offset each fast time record in cmp_a, to those in cmp_b, to
+                       have data best align between cmp_a and cmp_b.
+       qual_array: Array of quality factor of match. Higher is better match.
+    '''
+    shift2 = shift // (upsample_factor // 2)
+
+    # define the output
+    #coregB = np.empty_like(cmpB, dtype=complex)
+
+    shift_array = np.zeros(cmp_a.shape[1])
+    qual_array = np.zeros(cmp_a.shape[1])
+
+    for ii in range(cmp_a.shape[1]): #range(np.size(cmpA, axis=1)):
+        if method == 1:
+            # correlate in the non-subsampled domain
+            rho = np.abs(scipy.signal.correlate(cmp_a[:, ii], cmp_b[shift2:-(shift2-1), ii], mode='valid'))
+
+            # interpolate maximum between subsample points
+            x = np.argmax(rho)
+            p, _, _ = peakint.qint(rho, x)
+            x += p - (rho.shape[0] // 2)
+            to_shift = int(np.round(x * subsample_factor))
+            # subsample
+            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+        elif method == 2:
+            # subsample
+            subsampA = frequency_interpolate(cmp_a[:, ii], subsample_factor)
+            subsampB = frequency_interpolate(cmp_b[:, ii], subsample_factor)
+            a1 = subsampA - np.mean(cmp_a[:, ii])
+            b1 = subsampB[shift:-(shift-1)] - np.mean(cmp_b[:, ii])
+            sa = np.std(cmp_a[:, ii])
+            sb = np.std(cmp_b[:, ii])
+            if sa > 0:
+                a1 /= sa
+            if sb > 0:
+                b1 /= sb
+
+            # co-register and shift
+            rho = np.real(scipy.signal.correlate(a1, b1, mode='valid'))
+            if np.max(rho) > 0:
+                to_shift = np.argmax(rho) - shift
+            else:
+                to_shift = 0
+        else:
+            # subsample
+            subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
+            subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
+
+            # co-register and shift
+            rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
+            to_shift = np.argmax(rho) - shift
+
+        qual_array[ii] = np.max(rho)
+        shift_array[ii] = to_shift
+
+    return shift_array, qual_array
 
 
 def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300):
@@ -783,7 +1047,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
     Inputs:
     -------------
                       cmpA: complex-valued input A radargram
-                      cmpB: complex-valued input B radargram
+                      cmpB: complex-valued input B radargram (seconds)
       orig_sample_interval: sampling interval of the input data
           subsample_factor: factor used modify the original fast-time sampling
                             interval
@@ -795,59 +1059,18 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
     '''
 
     method = 0
-    shift2 = shift // (subsample_factor // 2)
+    #shift2 = shift // (subsample_factor // 2)
 
-    # define the output
+
+    shift_array, qual_array = coregister(cmpA, cmpB, orig_sample_interval, subsample_factor, shift, method=method)
+
+    # define the output and shift data.
+    # TODO: shift and pad, don't roll
     coregB = np.empty_like(cmpB, dtype=complex)
-
-    shift_array = np.zeros(cmpA.shape[1])
-    qual_array = np.zeros(cmpA.shape[1])
-
-    for ii in range(cmpA.shape[1]): #range(np.size(cmpA, axis=1)):
-        if method == 1:
-            # correlate in the non-subsampled domain
-            rho = np.abs(scipy.signal.correlate(cmpA[:, ii], cmpB[shift2:-(shift2-1), ii], mode='valid'))
-
-            # interpolate maximum between subsample points
-            x = np.argmax(rho)
-            p, _, _ = peakint.qint(rho, x)
-            x += p - (rho.shape[0] // 2)
-            to_shift = int(np.round(x * subsample_factor))
-            # subsample
-            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
-        elif method == 2:
-            # subsample
-            subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
-            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
-            a1 = subsampA - np.mean(cmpA[:, ii])
-            b1 = subsampB[shift:-(shift-1)] - np.mean(cmpB[:, ii])
-            sa = np.std(cmpA[:, ii])
-            sb = np.std(cmpB[:, ii])
-            if sa > 0:
-                a1 /= sa
-            if sb > 0:
-                b1 /= sb
-
-            # co-register and shift
-            rho = np.real(scipy.signal.correlate(a1, b1, mode='valid'))
-            if np.max(rho) > 0:
-                to_shift = np.argmax(rho) - shift
-            else:
-                to_shift = 0
-        else:
-            # subsample
-            subsampA = frequency_interpolate(cmpA[:, ii], subsample_factor)
-            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
-
-            # co-register and shift
-            rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
-            to_shift = np.argmax(rho) - shift
-
-        subsampB = np.roll(subsampB, to_shift)
-        qual_array[ii] = np.max(rho)
-        shift_array[ii] = to_shift
-        # remove subsampling
-        coregB[:, ii] = subsampB[np.arange(0, len(subsampB), subsample_factor)]
+    for ii in range(cmpB.shape[1]):
+        #subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+        #subsampB = np.roll(subsampB, int(shift_array[ii]))
+        coregB[:, ii] = frequency_shift(cmpB[:, ii], subsample_factor, shift_array[ii])
 
     #logging.info("x={:f} shift={:f}".format(x, shift2))
     logging.info("shift_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
@@ -1731,16 +1954,19 @@ def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
 def main():
     parser = argparse.ArgumentParser(description='Interferometry Function Library Test')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
+    parser.add_argument('--plot', action='store_true', help='Show debugging plots')
 
     args = parser.parse_args()
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
-    
+    #test_frequency_shift(plot=args.plot)
+    #sys.exit(0)
+
+    test_interpolate(bplot=args.plot)
     test_coregistration()
     test_load_marfa()
 
-    test_interpolate()
     test_load_pik1()
     test_raw_bxds_load()
     test_load_S2_bxds()

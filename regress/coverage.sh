@@ -7,6 +7,13 @@
 # ./coverage.sh
 # coverage3 report -m
 
+# A recommended report command, which excludes reporting of some external libraries:
+# coverage report -m --omit \
+# '/disk/kea/SDS/code/work/ngg/sds_master/xlib/rsr/*,\
+# /disk/kea/SDS/code/work/ngg/sds_master/xlib/subradar/*.py,\
+# /disk/kea/SDS/code/work/ngg/sds_master/SHARAD/data_visualization.py'
+
+
 
 S0=`basename $0`
 D0=`dirname $0`
@@ -18,7 +25,8 @@ RCFILE=`pwd`/.coveragerc
 FLAGS="--rcfile=$RCFILE"
 COV=coverage3
 
-
+# Turn off display variable for regressions. (prevent graph windows from activating)
+export DISPLAY=""
 
 rm -rf ./covdata/
  
@@ -45,6 +53,7 @@ $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
 
 for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py \
 ../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
+../xlib/clutter/peakint.py \
 ../xlib/misc/coord.py ../xlib/misc/prog.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
 ../xlib/subradar/roughness.py ../xlib/rng/icsim.py ../xlib/rot/mars.py \
 ../xlib/rsr/pdf.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
@@ -65,8 +74,9 @@ $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py -o ./covdata/
 
 echo $S0: CMD $COV run $FLAGS -a ../xlib/sar/smooth.py
 $COV run $FLAGS -a ../xlib/sar/smooth.py
-echo $S0: CMD $COV run $FLAGS -a ../MARFA/zfile.py
-$COV run $FLAGS -a ../MARFA/zfile.py
+# No longer here
+#echo $S0: CMD $COV run $FLAGS -a ../MARFA/zfile.py
+#$COV run $FLAGS -a ../MARFA/zfile.py
 
 RNGDATA=./covdata/rng_cmp/
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1 --ofmt none
@@ -115,8 +125,8 @@ $COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx
 
 
 echo "$S0: interferometry"
-$COV run $FLAGS -a ../MARFA/run_interferometry_ngg.py --pickfile ../MARFA/pick_FOI_NAQLK_JKB2j_ZY1b.npz --project GOG3 --line NAQLK/JKB2j/ZY1b/
-#$COV run $FLAGS -a ../MARFA/run_interferometry_ngg.py --pickfile ../MARFA/pick_FOI_NAQLK_JKB2j_ZY1b.npz --mode Reference --project GOG3 --line NAQLK/JKB2j/ZY1b/
+$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../MARFA/pick_FOI_NAQLK_JKB2j_ZY1b.npz --project GOG3 --line NAQLK/JKB2j/ZY1b/
+#$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../MARFA/pick_FOI_NAQLK_JKB2j_ZY1b.npz --mode Reference --project GOG3 --line NAQLK/JKB2j/ZY1b/
 
 echo "$S0: coverage tests completed."
 $COV report -m

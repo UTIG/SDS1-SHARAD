@@ -47,7 +47,7 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
     print(' ')
     print('FEATURE OF INTEREST SELECTION')
 
-    # Load the combined and focused 1m MARFA data product and stack to the 
+    # Load the combined and focused 1m MARFA data product and stack to the
     # desired trace spacing in preparation for feature detection and selection
     print('-- load combined and focused radar product')
     pth = os.path.join(path, 'S4_FOC/')
@@ -56,7 +56,7 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
         trim[3] = lim
     if debug and bplot:
         plt.figure()
-        plt.imshow(pwr_image, aspect='auto', cmap='gray');
+        plt.imshow(pwr_image, aspect='auto', cmap='gray')
         plt.title('power image at Fresnel trace spacing')
         plt.colorbar()
         plt.clim([0, 20])
@@ -106,32 +106,24 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
     # -----------------------------------------------------------------------------
     # Save if requested
     if savefile:
-        np.savez_compressed(savefile,
-            # metadata for pick
-            line=line,
-            chan=chan,
-            fresnel_stack=fresnel_stack,
-            trim=trim,
-
-            # actual pick data
-            FOI=FOI, SRF=SRF, 
-            Nf=Nf) # Nf is maybe not necessary
+        np.savez_compressed(savefile, \
+            # metadata for pick \
+            line=line, chan=chan, fresnel_stack=fresnel_stack, trim=trim, \
+            # actual pick data \
+            FOI=FOI, SRF=SRF, Nf=Nf) # Nf is maybe not necessary
         print('Saved picks to ' + savefile)
 
     # -----------------------------------------------------------------------------
 
-
-    
-
-
     return FOI, SRF, Nf
 
-def FOI_picklen(FOI):
-    Nf = 0
-    for ii in range(FOI.shape[1]):
-        if len(np.argwhere(FOI[:, ii] == 1)) >= 1:
-            Nf += 1
-    return Nf
+def FOI_picklen(foi):
+    """ Count the number of features in a pick """
+    nfeat = 0
+    for ii in range(foi.shape[1]):
+        if len(np.argwhere(foi[:, ii] == 1)) >= 1:
+            nfeat += 1
+    return nfeat
 
 
 # Some pre-defined trim parameters for commonly-used lines
@@ -170,9 +162,6 @@ def main():
     #parser.add_argument('--save', action='store_true', help='Save intermediate files')
     parser.add_argument('-o', '--output', help='Output pick filename (e.g., pick1.npz', required=True)
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
-    #parser.add_argument('--orig', default='/disk/kea/SDS/orig/xtra/SHARAD', help='Orig base directory')
-    #parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD', help='targ data base directory')
-    #parser.add_argument('--mode', default='Roll', choices=('Roll','Reference', 'none'), help='Interferogram Correction Mode')
 
     args = parser.parse_args()
 
@@ -185,17 +174,18 @@ def main():
 
     path = os.path.join('/disk/kea/WAIS/targ/xtra', args.project, 'FOC/Best_Versions')
 
-    trim = TRIMS.get(line.rstrip('/'), trim['__DEFAULT__'])
+    trim = TRIMS.get(line.rstrip('/'), TRIMS['__DEFAULT__'])
 
 
-    FOI, SRF, Nf = select_foi_and_srf(line=line, path=path, chan=CHANNELS[gain], fresnel_stack=args.fresnelstack,
-                                      trim=trim, bplot=args.plot, debug=debug, savefile=args.output)
+    #FOI, SRF, Nf =
+    select_foi_and_srf(line=line, path=path, chan=CHANNELS[gain], fresnel_stack=args.fresnelstack,
+                       trim=trim, bplot=args.plot, debug=debug, savefile=args.output)
 
     # Show command line to use this pick including other params
-    cmd = ' '.join('run_interferometry.py', '--project', args.project, 
-                   '--line', args.line, '--pick', pickfile)
+    cmd = ' '.join(['run_interferometry.py', '--project', args.project,
+                   '--line', args.line, '--pick', args.output])
     print("CMD: " + cmd)
-    
-    
+
+
 if __name__ == "__main__":
     main()

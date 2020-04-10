@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 __authors__ = ['Kirk Scanlan, kirk.scanlan@utexas.edu']
 __version__ = '1.0'
 __history__ = {
@@ -6,7 +7,8 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'interactive interface picker'}}
 
-def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=False):
+def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=False,
+           featurename='reflection of interest'):
     '''
     algorithm for picking interface indices
     '''
@@ -55,7 +57,7 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
                            aspect='auto')
             #fM = plt.get_current_fig_manager()
             #fM.window.showMaximized()
-            plt.title('pick upper bounds of the reflection of interest - enter to end')
+            plt.title('pick upper bounds of the {:s} - enter to end'.format(featurename))
             #plt.clim([cmin, cmax])
             #plt.show()
             top = np.rint(plt.ginput(-1, show_clicks=True, timeout=-1, mouse_pop=3)).astype(int)
@@ -70,7 +72,7 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
                            aspect='auto')
             #fM = plt.get_current_fig_manager()
             #fM.window.showMaximized()
-            plt.title('pick lower bounds of the reflection of interest - enter to end')
+            plt.title('pick lower bounds of the {:s} - enter to end'.format(featurename))
             #plt.clim([cmin, cmax])
             #plt.show()
             bottom = np.rint(plt.ginput(-1, show_clicks=True, timeout=-1, mouse_pop=3)).astype(int)
@@ -128,7 +130,8 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
         kk += 1
 
         # query whether to continue picking
-        if messagebox.askyesno("Python", "Quit picking?"):
+        q = "Finish picking {:s}?".format(featurename)
+        if messagebox.askyesno("Python", msg):
             quit_picking = 'Yes'
 
     if plt_final:
