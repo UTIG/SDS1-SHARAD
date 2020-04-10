@@ -65,7 +65,9 @@ done
 
 
 $COV run $FLAGS -a ../xlib/misc/hdf_test.py -o ./covdata/
-$COV run $FLAGS -a  ../xlib/rdr/solar_longitude.py
+$COV run $FLAGS -a ../xlib/rdr/solar_longitude.py
+$COV run $FLAGS -a ../xlib/misc/prog_test.py
+
 echo $S0: CMD $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
 $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
 
