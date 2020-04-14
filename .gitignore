@@ -24,3 +24,4 @@ lookup.txt
 
 # Coverage files
 .coverage
+coverage*.txt

@@ -7,14 +7,16 @@ __history__ = {
          'author': 'Kirk Scanlan, UTIG',
          'info': 'interactive interface picker'}}
 
+import matplotlib.pyplot as plt
+import numpy as np
+from tkinter import messagebox
+
+
 def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=False,
            featurename='reflection of interest'):
     '''
     algorithm for picking interface indices
     '''
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from tkinter import messagebox
 
     if len(interfaces) == 0:
         kk = 0
@@ -131,7 +133,7 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
 
         # query whether to continue picking
         q = "Finish picking {:s}?".format(featurename)
-        if messagebox.askyesno("Python", msg):
+        if messagebox.askyesno("Python", q):
             quit_picking = 'Yes'
 
     if plt_final:
@@ -149,11 +151,8 @@ def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=Fa
 
 def remover(data, interfaces, color='viridis', plt_final=False):
     '''
-    algorithm for picking interface indices
+    algorithm for removing interface indices
     '''
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from tkinter import messagebox
 
     kk = 1
     quit_picking = 'No'
@@ -274,9 +273,6 @@ def remover_mac(data, interfaces, color='viridis', plt_final=False):
     non-interactive algorithm for removing picked interfaces when working on
     mac
     '''
-    import matplotlib.pyplot as plt
-    import numpy as np
-    
     cmin = np.ceil(np.min(data) / 5) * 5
     cmax = np.floor(np.max(data) / 5) * 5
 

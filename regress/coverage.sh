@@ -54,7 +54,7 @@ $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
 for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py \
 ../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
 ../xlib/clutter/peakint.py \
-../xlib/misc/coord.py ../xlib/misc/prog.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
+../xlib/misc/coord.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
 ../xlib/subradar/roughness.py ../xlib/rng/icsim.py ../xlib/rot/mars.py \
 ../xlib/rsr/pdf.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
 do
@@ -127,8 +127,10 @@ $COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx
 
 
 echo "$S0: interferometry"
-$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../MARFA/pick_FOI_NAQLK_JKB2j_ZY1b.npz --project GOG3 --line NAQLK/JKB2j/ZY1b/
-#$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../MARFA/pick_FOI_NAQLK_JKB2j_ZY1b.npz --mode Reference --project GOG3 --line NAQLK/JKB2j/ZY1b/
+$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../regress/pick_FOI_NAQLK_JKB2j_ZY1b.npz --project GOG3 --line NAQLK/JKB2j/ZY1b/ --plot
+$COV run $FLAGS -a ../MARFA/run_interferometry.py --mode Reference --project GOG3 --line NAQLK/JKB2j/ZY1b/ \
+                 --pickfile ../regress/pick_FOI_NAQLK_JKB2j_ZY1b.npz \
+                 --refpickfile ../regress/pick_ref_FOI_NAQLK_JKB2j_ZY1b.npz --plot
 
 echo "$S0: coverage tests completed."
 $COV report -m
