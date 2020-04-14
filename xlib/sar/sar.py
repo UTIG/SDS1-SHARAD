@@ -349,8 +349,8 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt,
     -------------
      sar_data: SAR focused radar data
       pst_trc: range line numbers of posted SAR-corrected range lines
+    Note: GN -- no test cases run for looks == 0 or looks == 1
     '''
-
     # interpolate the positional vectors as required
     tlp, _ = smooth.smooth(tlp)
     vt, _ = smooth.smooth(vt)
@@ -361,12 +361,12 @@ def delay_doppler_v1(data, dpst, La, dBW, tlp, et, scrad, tpgpy, rxwot, vt,
     pst_trc, pst_et = sar_posting(dpst, La, int(len(data)), tlp, et)
     del pst_et
 
-    ## define the number of looks
-    looks = int(np.round(2 * La * dBW))
-    if looks == 0:
-        looks = 1
-    elif looks % 2 == 0:
-        looks = looks - 1
+    ## define the number of looks, which should be an odd number
+    looks = min(1, int(np.round(2 * La * dBW)))
+    looks -= 1 if (looks % 2 == 0) else 0
+
+
+
 
     logging.debug("{:s}: Number of looks in delay Doppler "
                   "SAR processing is {:d}".format(debugtag, looks))
@@ -572,11 +572,11 @@ def matched_filter(data, dpst, La, Er, af0, recal_int, tlp, et, rxwot, comb_ml=T
     #tlp = vector_interp(tlp)
 
     ## define the number of looks
-    looks = int(np.round(2 * La * af0))
-    if looks == 0:
-        looks = 1
-    elif looks % 2 == 0:
-        looks = looks - 1
+    looks = min(int(np.round(2 * La * af0)), 1)
+    looks -= 1 if (looks % 2 == 0) else 0
+
+
+
     print('Number of looks in matched filter SAR processing is', looks)
 
     # predefine output and start sar processor
