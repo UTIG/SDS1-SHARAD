@@ -80,6 +80,11 @@ $COV run $FLAGS -a ../xlib/sar/smooth.py
 #echo $S0: CMD $COV run $FLAGS -a ../MARFA/zfile.py
 #$COV run $FLAGS -a ../MARFA/zfile.py
 
+$COV run $FLAGS -a  ../SHARAD/data_visualization.py --selftest
+$COV run $FLAGS -a  ../SHARAD/data_visualization.py --product cmp
+$COV run $FLAGS -a  ../SHARAD/data_visualization.py --input '/disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr10xxx/edr1058901/5m/3 range lines/30km/e_1058901_001_ss19_700_a_s.h5'
+
+
 RNGDATA=./covdata/rng_cmp/
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1 --ofmt none
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1
