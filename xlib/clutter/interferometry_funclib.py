@@ -182,7 +182,7 @@ def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
         data = np.transpose(np.reshape(data, (ncol, nsamp))) / 10000
     elif IQ == 'phs':
         data = np.transpose(np.reshape(data, (ncol, nsamp))) / 2**24
-    else:
+    else: # pragma: no-cover
         raise ValueError("Invalid value for IQ: '{:s}'".format(IQ))
 
     return data
@@ -203,7 +203,7 @@ def test_load_pik1():
 
     for channel in list_channels:
         for IQ in ('mag','phs'):
-            load_pik1(line, channel, pth=pth, IQ='mag')
+            load_pik1(line, channel, pth=pth, IQ=IQ)
 
         with pytest.raises(ValueError):
             load_pik1(line, channel, pth=pth, IQ='invalidtype')
@@ -266,10 +266,10 @@ def convert_to_complex(magnitude, phase, mag_dB=True, pwr_flag=True):
 
     # get magnitudes out of dB if they are
     if mag_dB:
-        if pwr_flag:
-            magnitude = 10 ** (magnitude / 20)
-        else:
-            magnitude = 10 ** (magnitude / 10)
+        scalef = 20 if pwr_flag else 10
+        magnitude = 10 ** (magnitude / scalef)
+
+
 
     # calculate the complex values
     cmp = magnitude * np.exp(1j * phase)
@@ -294,17 +294,15 @@ def convert_to_magphs(cmp, mag_dB=True, pwr_flag=True):
 
     # calculate magnitudes
     if mag_dB:
-        if pwr_flag:
-            magnitude = 20 * np.log10(np.abs(cmp))
-        else:
-            magnitude = 10 * np.log10(np.abs(cmp))
+        scale = 20 if pwr_flag else 10
+        magnitude = scale * np.log10(np.abs(cmp))
 
     # calculate the phases
     phase = np.angle(cmp)
 
     return magnitude, phase
 
-def stack(data, fresnel, datatype='float'):
+def stack(data, fresnel, datatype=float):
     '''
     stacking data to a new trace posting interval
 
@@ -323,16 +321,13 @@ def stack(data, fresnel, datatype='float'):
 
     # incoherently stack to desired trace spacing
     indices = np.arange(np.floor(fresnel / 2) + 1, np.size(data, axis=1), fresnel) - 1
-    if np.size(data, axis=1) - indices[-1] < np.floor(fresnel / 2):
-        col = len(indices) - 1
-    else:
-        col = len(indices)
+    col = len(indices)
+    if data.shape[1] - indices[-1] < np.floor(fresnel / 2):
+        col -= 1
 
     # pre-define the output
-    if datatype == 'complex':
-        output = np.zeros((np.size(data, axis=0), col), dtype=complex)
-    elif datatype == 'float':
-        output = np.zeros((np.size(data, axis=0), col), dtype=float)
+    output = np.zeros((np.size(data, axis=0), col), dtype=datatype)
+
 
     # perform stacking
     for ii in range(col):
@@ -411,7 +406,7 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
 
     # make sure the new trace spacing passed is odd
     if fresnel % 2 != 1:
-        frensel = fresnel - 1
+        frensel -= 1
 
     # calculate correlation map and average (multi-look) if desired
     if fresnel != 1:
@@ -421,8 +416,8 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
         #bottomB = np.divide(stack(np.square(np.abs(cmpB)), fresnel), fresnel)
         
         # setup bounds for each multilook window (output range line in middle)
-        indices = np.arange(np.floor(fresnel / 2) + 1, np.size(cmpA, axis=1), fresnel) - 1
-        if np.size(cmpA, axis=1) - indices[-1] < np.floor(fresnel / 2):
+        indices = np.arange(np.floor(fresnel / 2) + 1, cmpA.shape[1], fresnel) - 1
+        if cmpA.shape[1] - indices[-1] < np.floor(fresnel / 2):
             col = len(indices) - 1
         else:
             col = len(indices)
@@ -465,8 +460,8 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
                 bottom = np.sqrt(np.multiply(tbot_am, tbot_bm))
                 corrmap[0:-1, ii] = np.mean(np.abs(np.divide(ttopm, bottom)), axis=1)
                 del ttopm, tbot_am, tbot_bm, bottom
-                
-    else:
+
+    else: # fresnel == 1
         top = np.multiply(cmpA, np.conj(cmpB))
         bottomA = np.square(np.abs(cmpA))
         bottomB = np.square(np.abs(cmpB))
@@ -503,7 +498,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
 
     # make sure the new trace spacing passed is odd
     if fresnel % 2 != 1:
-        fresnel = fresnel - 1
+        fresnel -= 1
 
     # calculate interferogram
     if fresnel <= 1:
@@ -514,7 +509,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
     else:
         # setup bounds for each multilook window (output range line in middle)
         indices = np.arange(np.floor(fresnel / 2) + 1, np.size(cmpA, axis=1), fresnel) - 1
-        if np.size(cmpA, axis=1) - indices[-1] < np.floor(fresnel / 2):
+        if cmpA.shape[1] - indices[-1] < np.floor(fresnel / 2):
             col = len(indices) - 1
         else:
             col = len(indices)
@@ -724,10 +719,10 @@ def frequency_shift(data, upsample_factor, offset):
        shifted data vector
     """
     subsamp_b = frequency_interpolate(data, upsample_factor)
-    subsamp_b = np.roll(subsamp_b, int(offset))
-    return subsamp_b[np.arange(0, len(subsamp_b), upsample_factor)]
+    subsamp_b = np.roll(subsamp_b, int(offset)) # TODO: can we do this without rolling?
+    return subsamp_b[np.arange(0, len(subsamp_b), upsample_factor)] # subsamp_b[offset, len(subsamp_b), upsample_factor]
 
-def frequency_shift2(data, upsample_factor, offset, fudge=1.0):
+def frequency_shift2(data, upsample_factor, offset, ts, fudge=1.0):
     """ 
     Shift a vector by a sub-sample amount, by upsampling by subsample_factor and taking the offset
     function for interpolating a vector by padding the data in the frequency
@@ -738,6 +733,7 @@ def frequency_shift2(data, upsample_factor, offset, fudge=1.0):
                  data: complex-valued range line
       upsample_factor: factor by which the user wants to subsample the data by
                offset: Shift offset in samples
+                   ts: sampling time (1 / fs)
 
     Outputs:
     ------------
@@ -749,120 +745,129 @@ def frequency_shift2(data, upsample_factor, offset, fudge=1.0):
     m1 = n1 // 2 # + 1
     t = np.roll(np.arange(m1 - n1, m1), m1)
     #print('s4 n1={:d} t={:s}'.format(n1, str(list(t))))
-    foffset = float(offset) / float(upsample_factor) * fudge
-    h = np.sinc(t - foffset) # interpolation kernel
+    foffset = float(offset) / float(upsample_factor)# * fudge
+    # periodic sum from N = -inf to + inf
+    h = np.zeros(t.shape)
+    runrange = 10000 // len(t)
+    for N in range(-runrange, runrange):
+        offset1 = foffset + float(N*len(t))
+        h += np.sinc(t - offset1) # interpolation kernel
 
-    fh = np.fft.fft(h)
+    if True:
+        print("t: ", t)
+        print("h: ", h)
+        print("sum(h)={:f} sum(h^2) ={:f}".format(np.sum(h), np.sum(h*h)))
+        plt.clf()
+        plt.plot(t, h, marker='o', linewidth=0)
+        t2 = np.arange(m1 - n1, m1, 0.01)
+        plt.plot(t2, np.sinc(t2 - foffset))
+        plt.grid(True)
+        plt.title('offset = {:0.2f}'.format(foffset))
+        plt.legend()
+        #plt.show()
+
     #---------------------------------------
-    norm = None #'ortho'
+    norm = None # 'ortho'
+    fh = np.fft.fft(h, norm=norm)
+    fh2 = np.exp(1j*2*np.pi*-foffset * t / len(t))
+    fh2[len(t)//2] = 0
+    if True:
+        plt.clf()
+        plt.subplot(2,1,1)
+        plt.plot(np.abs(fh), marker='o')
+        plt.plot(np.abs(fh2), marker='x')
+        plt.title('offset = {:0.2f}'.format(foffset))
+        plt.subplot(2,1,2)
+        plt.plot(np.angle(fh), marker='o')
+        plt.plot(np.angle(fh2), marker='x')
+        plt.title('offset = {:0.2f}'.format(foffset))
+        plt.show()
+
+    #print(np.abs(fh))
     fdata = np.fft.fft(data, norm=norm)
-    return np.fft.ifft(fdata * fh, norm=norm)
+    return np.fft.ifft(fdata * fh2, norm=norm)
 
     #return scipy.ndimage.shift(data, offset/upsample_factor)
 
 
 
+def fshiftfunc(x, offset=0.0):
+    #logging.info("offset={:f} x={:s}".format(offset, str(x)))
+    return 10*np.sin(2*np.pi*x + offset)
+
 def test_frequency_shift(plot=False):
     dx = 0.2
-    x = np.arange(0, 2.0, dx)
-    y1 = 10*np.sin(2*np.pi*x)
+    x1 = np.arange(0, 2.0, dx)
+    #x1 = x1[0:-1]
+    y1 = fshiftfunc(x1)
 
     s1 = np.array([np.mean(y1), np.std(y1)])
     print(str(s1))
 
-    import mpl_toolkits.mplot3d as mplot3d
-    # minimize fudge factor
-    upsamp = 8
-    offset = 4
-    fudges =  np.arange(0.5, 1.3, 0.01)
-    out = np.empty((fudges.shape[0], upsamp, 3))
 
+    upsamp = 8
+    offset = 0
+
+    x2 = np.arange(0, 2.0, dx/upsamp)
+    y2 = fshiftfunc(x2)
     y1u = frequency_interpolate(y1, upsamp)
     t1u = np.arange(0, 2.0, dx/upsamp)
-    if plot:
-        plt.clf()
-        plt.plot(x, y1, label='orig', marker='o')
-        plt.plot(t1u, y1u, label='upsamp', marker='x')
-        plt.show()
-
-    for i, fudge in enumerate(fudges):
-        for offset in range(upsamp):
-            y2 = frequency_shift(y1, upsamp, offset)
-            s2 = np.array([np.mean(y2), np.std(y2)])
-
-            y3 = frequency_shift2(y1, upsamp, offset, fudge=fudge)
-            s3 = np.array([np.mean(y3), np.std(y3)])
-            y4 = np.abs(y3 - y2)
-
-            out[i, offset, 0] = np.mean(y4)
-            out[i, offset, 1] = np.std(y4)
-            out[i, offset, 2] = np.max(y4)
+    #t1u = t1u[0:-1]
 
     if plot:
-        plt.clf()
-        #plt.plot(fudges, out[:, 0], label="avg", marker='o')
-        #plt.plot(fudges, out[:, 1], label="std", marker='o')
-        #plt.plot(fudges, out[:, 2], label="max", marker='o')
-        #plt.grid(True)
-        x, y = np.meshgrid(range(upsamp), fudges)
-        z = out[:, :, 0]
-        #print(x.shape)
-        #print(z.shape)
-        #fig = plt.figure()
-        ax = plt.axes(projection='3d')
+        plt.plot(t1u, y1u, label="interp")
+        plt.plot(x1, y1, label="1x samp")
+        plt.plot(x2, y2, label="2x samp")
+        plt.legend()
+        plt.grid(True)
 
-        ax.plot_surface(x, y, z, cmap='viridis', edgecolor='none', rstride=1, cstride=1, label="avg")
-        plt.xlabel('offset')
-        plt.ylabel('Fudge Factor')
-        ax.set_zlim3d(0, 0.5)  # np.max(z)
-        #plt.legend()
-        plt.title("Fudge Factor Offset Minimization")
-        plt.show()
-
-
-    for upsamp in np.arange(2, 10):
+    for upsamp in (4,):#np.arange(2, 10):
         for offset in np.arange(0, upsamp):
-            y2 = frequency_shift(y1, upsamp, offset)
-            s2 = np.array([np.mean(y2), np.std(y2)])
-            print("{:0.0f}/{:0.0f} s2 {:s}".format(offset, upsamp, str(s2)))
+            # Compute the actual functional value with a shift
+            logging.info("offset dx = {:f}".format(dx*offset/upsamp))
+            y2 = fshiftfunc(x1 - dx*offset/upsamp)
+
+            y3 = frequency_shift(y1, upsamp, offset)
+            #s3 = np.array([np.mean(y2), np.std(y2)])
+            #logging.debug("{:0.0f}/{:0.0f} s3 {:s}".format(offset, upsamp, str(s2)))
             #assert np.abs(s1[0] - s2[0]) < 1e-5 # mean matches original
             #assert np.abs(s1[1] - s2[1]) < 1e-5 # std deviation matches original
 
-            y3 = frequency_shift2(y1, upsamp, offset)
-            s3 = np.array([np.mean(y3), np.std(y3)])
-            print("{:0.0f}/{:0.0f} s3 {:s}".format(offset, upsamp, str(s3)))
+            y4 = frequency_shift2(y1, upsamp, offset, ts=dx)
+            #s4 = np.array([np.mean(y3), np.std(y3)])
+            #logging.debug("{:0.0f}/{:0.0f} s3 {:s}".format(offset, upsamp, str(s3)))
             #assert np.abs(s1[0] - s3[0]) < 1e-5 # mean matches original
             #assert np.abs(s1[1] - s3[1]) < 1e-5 # std deviation matches original
-            y4 = np.abs(y3 - y2)
-            s4 = np.array([np.mean(y4), np.std(y4), np.max(y4)])
-            print("{:0.0f}/{:0.0f} s4 {:s}".format(offset, upsamp, str(s4)))
+            #y4 = np.abs(y3 - y2)
+            #s4 = np.array([np.mean(y4), np.std(y4), np.max(y4)])
+            #logging.debug("{:0.0f}/{:0.0f} s4 {:s}".format(offset, upsamp, str(s4)))
 
             if plot and offset > 0:
                 plt.clf()
                 plt.subplot(3,1,1)
-                plt.plot(x, y1, label='orig', marker='o', linewidth=0)
-                plt.plot(x, np.real(y2), label='y2real')
-                plt.plot(x, np.real(y3), label='y3real', marker='x', linewidth=0)
+                plt.plot(x1, y1, label='orig', marker='o', linewidth=0)
+                plt.plot(x1, np.real(y2), label='y2real')
+                plt.plot(x1, np.real(y3), label='y3real', marker='x', linewidth=0)
+                plt.plot(x1, np.real(y4), label='y4real', marker='v', linewidth=0)
                 plt.legend()
                 plt.grid(True)
                 plt.title('{:0.0f} / {:0.0f}'.format(offset, upsamp))
                 plt.subplot(3,1,2);
-                plt.plot(x, y1, label='orig', marker='o', linewidth=0)
-                plt.plot(x, np.imag(y2), label='y2imag')
-                plt.plot(x, np.imag(y3), label='y3imag', marker='x', linewidth=0)
+                plt.plot(x1, np.zeros_like(x1), label='orig', marker='.', linewidth=0)
+                plt.plot(x1, np.imag(y2), label='y2imag')
+                plt.plot(x1, np.imag(y3), label='y3imag', marker='x', linewidth=0)
+                plt.plot(x1, np.imag(y4), label='y4imag', marker='v', linewidth=0)
                 plt.legend()
                 plt.grid(True)
 
-                plt.subplot(3,1,3)
-                y4r = np.real(y3 - y2)
-                y4i = np.imag(y3 - y2)
-                plt.plot(x, y4r, label='y4real')
-                plt.plot(x, y4i, label='y4imag', marker='x', linewidth=0)
-                plt.title('{:0.0f} / {:0.0f} - Residual'.format(offset, upsamp))
+                plt.subplot(3, 1, 3)
+                plt.plot(x1, np.real(y3 - y2), label='y3 - y2', marker='x', linewidth=1, color='g')
+                plt.plot(x1, np.real(y4 - y2), label='y4 - y2', marker='v', linewidth=1, color='r')
+                plt.title('{:0.0f} / {:0.0f} - Real Residual'.format(offset, upsamp))
                 plt.legend()
                 plt.grid(True)
                 plt.show()
-            
+
 
 
 def frequency_interpolate(data, subsample_factor):
@@ -882,8 +887,9 @@ def frequency_interpolate(data, subsample_factor):
     fft = np.fft.fft(data, norm='ortho')
     fft_shift = np.fft.fftshift(fft)
     x = int((len(data) * subsample_factor - len(data)) / 2)
+    logging.debug("frequency_interpolate: length={:d}, pad={:d}".format(len(data), x))
     fft_int = np.pad(fft_shift, (x, x), 'constant', constant_values=(0, 0))
-    fft_int_shift = np.fft.fftshift(fft_int)
+    fft_int_shift = np.fft.ifftshift(fft_int)
     # Without the np.sqrt(subsample_factor), this is an energy-preserving function.
     # But we want to preserve value, not total signal energy
     return np.sqrt(subsample_factor)*np.fft.ifft(fft_int_shift, norm='ortho')
@@ -1529,15 +1535,15 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
             C[ii] = np.argmax(R) - N
 
 
-    else:
+    else: # pragma: no-cover
         raise ValueError('Unrecognized method {:s}'.format(method))
 
     return C
 
 def phase_stability_adjustment(data, stability):
     '''
-    application of chirp stability assessment results to the actual data.
-    simply a roll of the data by some number of samples.
+    Apply chirp stability adjustment results to actual data.
+    simply a roll of the data by some number of integer samples.
 
     Inputs:
     ---------------
@@ -1549,8 +1555,8 @@ def phase_stability_adjustment(data, stability):
        chirp stability corrected complex-valued radar data
     '''
 
-    out = np.zeros((len(data), np.size(data, axis=1)), dtype=complex)
-    for ii in range(np.size(data, axis=1)):
+    out = np.zeros(data.shape, dtype=complex)
+    for ii in range(data.shape[1]):
         out[:, ii] = np.roll(data[:, ii], int(stability[ii]))
 
     return out
@@ -1712,8 +1718,8 @@ def azimuth_pixel2pixel_coherence(data, FOI, roll_range=100, ft_step=1):
 
     # define the pixel-to-pixel distances to test
     rolls = np.arange(0, roll_range + 1)
-
     # calculate the pixel-to-pixel coherence
+    # TODO: these two loops (i and j) should probably be reversed to reduce calls to np.roll
     rho = np.zeros((len(ft_samples), len(rolls)), dtype=float)
     for ii in range(len(ft_samples)):
         cmp1 = data[ft_samples[ii], :]
@@ -1960,8 +1966,8 @@ def main():
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
-    #test_frequency_shift(plot=args.plot)
-    #sys.exit(0)
+    test_frequency_shift(plot=args.plot)
+    sys.exit(0)
 
     test_interpolate(bplot=args.plot)
     test_coregistration()
