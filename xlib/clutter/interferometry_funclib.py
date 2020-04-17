@@ -712,7 +712,7 @@ def frequency_shift(data, upsample_factor, offset):
     ------------
                  data: complex-valued range line
       upsample_factor: factor by which the user wants to subsample the data by
-               offset: Shift offset in samples
+               offset: Shift offset in units of samples
 
     Outputs:
     ------------
@@ -722,7 +722,7 @@ def frequency_shift(data, upsample_factor, offset):
     subsamp_b = np.roll(subsamp_b, int(offset)) # TODO: can we do this without rolling?
     return subsamp_b[np.arange(0, len(subsamp_b), upsample_factor)] # subsamp_b[offset, len(subsamp_b), upsample_factor]
 
-def frequency_shift2(data, upsample_factor, offset, ts, fudge=1.0):
+def frequency_shift2(data, foffset):
     """ 
     Shift a vector by a sub-sample amount, by upsampling by subsample_factor and taking the offset
     function for interpolating a vector by padding the data in the frequency
@@ -732,141 +732,74 @@ def frequency_shift2(data, upsample_factor, offset, ts, fudge=1.0):
     ------------
                  data: complex-valued range line
       upsample_factor: factor by which the user wants to subsample the data by
-               offset: Shift offset in samples
-                   ts: sampling time (1 / fs)
+               offset: Shift offset (delay) in units of samples
 
     Outputs:
     ------------
        shifted data vector
     """
-    # Calculate the kernel for shifted interpolation (a shifted sinc)
-    # TODO: pre-calculate this kernel, perhaps using analytic fourier transform
+    # Calculate the kernel for shifted interpolation (a shifted sinc), or rect in frequency domain
     n1 = len(data)
-    m1 = n1 // 2 # + 1
-    t = np.roll(np.arange(m1 - n1, m1), m1)
-    #print('s4 n1={:d} t={:s}'.format(n1, str(list(t))))
-    foffset = float(offset) / float(upsample_factor)# * fudge
-    # periodic sum from N = -inf to + inf
-    h = np.zeros(t.shape)
-    runrange = 10000 // len(t)
-    for N in range(-runrange, runrange):
-        offset1 = foffset + float(N*len(t))
-        h += np.sinc(t - offset1) # interpolation kernel
+    m1 = n1 // 2
+    wn = 2*np.pi*(-foffset/n1)
+    t = np.arange(m1 - n1, m1)
+    fh = np.fft.fftshift(np.exp(wn*1j * t))
+    fh[m1] = 0 # lowpass filter
 
-    if True:
-        print("t: ", t)
-        print("h: ", h)
-        print("sum(h)={:f} sum(h^2) ={:f}".format(np.sum(h), np.sum(h*h)))
-        plt.clf()
-        plt.plot(t, h, marker='o', linewidth=0)
-        t2 = np.arange(m1 - n1, m1, 0.01)
-        plt.plot(t2, np.sinc(t2 - foffset))
-        plt.grid(True)
-        plt.title('offset = {:0.2f}'.format(foffset))
-        plt.legend()
-        #plt.show()
-
-    #---------------------------------------
-    norm = None # 'ortho'
-    fh = np.fft.fft(h, norm=norm)
-    fh2 = np.exp(1j*2*np.pi*-foffset * t / len(t))
-    fh2[len(t)//2] = 0
-    if True:
-        plt.clf()
-        plt.subplot(2,1,1)
-        plt.plot(np.abs(fh), marker='o')
-        plt.plot(np.abs(fh2), marker='x')
-        plt.title('offset = {:0.2f}'.format(foffset))
-        plt.subplot(2,1,2)
-        plt.plot(np.angle(fh), marker='o')
-        plt.plot(np.angle(fh2), marker='x')
-        plt.title('offset = {:0.2f}'.format(foffset))
-        plt.show()
-
-    #print(np.abs(fh))
-    fdata = np.fft.fft(data, norm=norm)
-    return np.fft.ifft(fdata * fh2, norm=norm)
-
-    #return scipy.ndimage.shift(data, offset/upsample_factor)
-
+    return np.fft.ifft(np.fft.fft(data) * fh)
 
 
 def fshiftfunc(x, offset=0.0):
-    #logging.info("offset={:f} x={:s}".format(offset, str(x)))
+    # Function to use for testing frequency shift
     return 10*np.sin(2*np.pi*x + offset)
 
 def test_frequency_shift(plot=False):
-    dx = 0.2
-    x1 = np.arange(0, 2.0, dx)
-    #x1 = x1[0:-1]
-    y1 = fshiftfunc(x1)
+    for dx in (0.2, 0.1, 0.05):
+        x1 = np.arange(0, 2.0, dx)
+        y1 = fshiftfunc(x1)
 
-    s1 = np.array([np.mean(y1), np.std(y1)])
-    print(str(s1))
+        for upsamp in np.arange(2, 10):
+            for offset in np.arange(0, upsamp):
+                # Compute the actual functional value with a shift
+                y2 = fshiftfunc(x1 - dx*offset/upsamp)  # calculate upsampled sine directly
+                y3 = frequency_shift(y1, upsamp, offset) # calculate by old method
+                y4 = frequency_shift2(y1, offset/upsamp) # calculate by new method
 
+                try:
+                    assert (np.abs(y2 - y3) < 1e-6).all()
+                    assert (np.abs(y2 - y4) < 1e-6).all()
+                except AssertionError as e: #pragma: no cover
+                    logging.warning("Assert error with upsamp={:d} offset={:f}".format(upsamp, offset))
+                    print(e)
+                    plot = True
 
-    upsamp = 8
-    offset = 0
+                if plot or offset == 0 and upsamp == 2: # calculate at least once, for coverage
+                    plt.clf()
+                    plt.subplot(3,1,1)
+                    plt.plot(x1, y1, label='orig', marker='o', linewidth=0)
+                    plt.plot(x1, np.real(y2), label='y2real')
+                    plt.plot(x1, np.real(y3), label='y3real', marker='x', linewidth=0)
+                    plt.plot(x1, np.real(y4), label='y4real', marker='v', linewidth=0)
+                    plt.legend()
+                    plt.grid(True)
+                    plt.title('{:0.0f} / {:0.0f}'.format(offset, upsamp))
+                    plt.subplot(3,1,2);
+                    plt.plot(x1, np.zeros_like(x1), label='orig', marker='.', linewidth=0)
+                    plt.plot(x1, np.imag(y2), label='y2imag')
+                    plt.plot(x1, np.imag(y3), label='y3imag', marker='x', linewidth=0)
+                    plt.plot(x1, np.imag(y4), label='y4imag', marker='v', linewidth=0)
+                    plt.legend()
+                    plt.grid(True)
 
-    x2 = np.arange(0, 2.0, dx/upsamp)
-    y2 = fshiftfunc(x2)
-    y1u = frequency_interpolate(y1, upsamp)
-    t1u = np.arange(0, 2.0, dx/upsamp)
-    #t1u = t1u[0:-1]
+                    plt.subplot(3, 1, 3)
+                    plt.plot(x1, np.real(y3 - y2), label='y3 - y2', marker='x', linewidth=1, color='g')
+                    plt.plot(x1, np.real(y4 - y2), label='y4 - y2', marker='v', linewidth=1, color='r')
+                    plt.title('{:0.0f} / {:0.0f} - Real Residual'.format(offset, upsamp))
+                    plt.legend()
+                    plt.grid(True)
 
-    if plot:
-        plt.plot(t1u, y1u, label="interp")
-        plt.plot(x1, y1, label="1x samp")
-        plt.plot(x2, y2, label="2x samp")
-        plt.legend()
-        plt.grid(True)
-
-    for upsamp in (4,):#np.arange(2, 10):
-        for offset in np.arange(0, upsamp):
-            # Compute the actual functional value with a shift
-            logging.info("offset dx = {:f}".format(dx*offset/upsamp))
-            y2 = fshiftfunc(x1 - dx*offset/upsamp)
-
-            y3 = frequency_shift(y1, upsamp, offset)
-            #s3 = np.array([np.mean(y2), np.std(y2)])
-            #logging.debug("{:0.0f}/{:0.0f} s3 {:s}".format(offset, upsamp, str(s2)))
-            #assert np.abs(s1[0] - s2[0]) < 1e-5 # mean matches original
-            #assert np.abs(s1[1] - s2[1]) < 1e-5 # std deviation matches original
-
-            y4 = frequency_shift2(y1, upsamp, offset, ts=dx)
-            #s4 = np.array([np.mean(y3), np.std(y3)])
-            #logging.debug("{:0.0f}/{:0.0f} s3 {:s}".format(offset, upsamp, str(s3)))
-            #assert np.abs(s1[0] - s3[0]) < 1e-5 # mean matches original
-            #assert np.abs(s1[1] - s3[1]) < 1e-5 # std deviation matches original
-            #y4 = np.abs(y3 - y2)
-            #s4 = np.array([np.mean(y4), np.std(y4), np.max(y4)])
-            #logging.debug("{:0.0f}/{:0.0f} s4 {:s}".format(offset, upsamp, str(s4)))
-
-            if plot and offset > 0:
-                plt.clf()
-                plt.subplot(3,1,1)
-                plt.plot(x1, y1, label='orig', marker='o', linewidth=0)
-                plt.plot(x1, np.real(y2), label='y2real')
-                plt.plot(x1, np.real(y3), label='y3real', marker='x', linewidth=0)
-                plt.plot(x1, np.real(y4), label='y4real', marker='v', linewidth=0)
-                plt.legend()
-                plt.grid(True)
-                plt.title('{:0.0f} / {:0.0f}'.format(offset, upsamp))
-                plt.subplot(3,1,2);
-                plt.plot(x1, np.zeros_like(x1), label='orig', marker='.', linewidth=0)
-                plt.plot(x1, np.imag(y2), label='y2imag')
-                plt.plot(x1, np.imag(y3), label='y3imag', marker='x', linewidth=0)
-                plt.plot(x1, np.imag(y4), label='y4imag', marker='v', linewidth=0)
-                plt.legend()
-                plt.grid(True)
-
-                plt.subplot(3, 1, 3)
-                plt.plot(x1, np.real(y3 - y2), label='y3 - y2', marker='x', linewidth=1, color='g')
-                plt.plot(x1, np.real(y4 - y2), label='y4 - y2', marker='v', linewidth=1, color='r')
-                plt.title('{:0.0f} / {:0.0f} - Real Residual'.format(offset, upsamp))
-                plt.legend()
-                plt.grid(True)
-                plt.show()
+                if plot:
+                    plt.show()
 
 
 
@@ -887,7 +820,6 @@ def frequency_interpolate(data, subsample_factor):
     fft = np.fft.fft(data, norm='ortho')
     fft_shift = np.fft.fftshift(fft)
     x = int((len(data) * subsample_factor - len(data)) / 2)
-    logging.debug("frequency_interpolate: length={:d}, pad={:d}".format(len(data), x))
     fft_int = np.pad(fft_shift, (x, x), 'constant', constant_values=(0, 0))
     fft_int_shift = np.fft.ifftshift(fft_int)
     # Without the np.sqrt(subsample_factor), this is an energy-preserving function.
@@ -1967,7 +1899,6 @@ def main():
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
     test_frequency_shift(plot=args.plot)
-    sys.exit(0)
 
     test_interpolate(bplot=args.plot)
     test_coregistration()
