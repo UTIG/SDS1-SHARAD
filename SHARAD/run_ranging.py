@@ -132,16 +132,18 @@ def main():
         out = rlist[:, 1:3]
     else:
         for i, result in enumerate(rlist):
-            for j, t in enumerate(process_list):
-                if str(int(result[0])) in t['inpath']:
-                    logging.info("Found result for {:s}".format(str(result[0])))
-                    out[j] = result[1:3]
+            if result[0] is not None:
+                for j, t in enumerate(process_list):
+                    if str(int(result[0])) in t['inpath']:
+                        logging.info("Found result for {:s}".format(str(result[0])))
+                        out[j] = result[1:3]
+            else:
+                out[j] = [0,0]
 
-    logging.warning("Code is incomplete!  TODO Finish collecting results")
-    sys.exit(0)
+    #logging.warning("Code is incomplete!  TODO Finish collecting results")
+    #sys.exit(0)
     # GNG 2020-03-25 it doesn't run past this point. The
     # outputs aren't documented!
-    print("output: ", out)
     delta_ranges = out[0::2,1] - out[1::2,1]
     print('rms', np.sqrt(np.var(delta_ranges)))
     import matplotlib
