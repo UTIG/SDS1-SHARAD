@@ -20,7 +20,12 @@ __history__ = {
     '1.0':
         {'date': 'February 21 2019',
          'author': 'Kirk Scanlan, UTIG',
-         'info': 'data visualization GUI'}}
+         'info': 'data visualization GUI'},
+    '1.1':
+        {'date': 'April 15, 2020',
+         'author': 'Gregory Ng, UTIG',
+         'info': 'refactor separating GUI inputs from plotting'},
+}
 
 import sys
 import os
@@ -62,12 +67,12 @@ class MsgBoxChooseFocusType:
     """ Instantiate a class of the focus type window """
     choices = ('Delay Doppler v1', 'Matched Filter', 'Delay Doppler v2')
 
-    def __init__(self, default=choices[0], width="144p"): # width=144 pts
+    def __init__(self, default=choices[0]):
         self.master = tk.Tk()
         self.master.title('Select Data Type')
         self.variable = tk.StringVar(self.master)
         self.variable.set(default)
-        self.sel_foctype  = tk.OptionMenu(self.master, self.variable, *MsgBoxChooseFocusType.choices)
+        self.sel_foctype = tk.OptionMenu(self.master, self.variable, *MsgBoxChooseFocusType.choices)
         self.sel_foctype.pack()
 
         self.btn_select = tk.Button(self.master, text='Select', command=self.master.quit)
@@ -83,9 +88,9 @@ class MsgBoxSelectParams:
         self.master = tk.Tk()
         self.master.title('Select Parameters')
         self.entries = []
-        tk.Label(self.master, text=prompt, justify=tk.LEFT).grid(row=0, column=0, columnspan=2)
+        tk.Label(self.master, text=prompt).grid(row=0, column=0, columnspan=2)
         for i, name in enumerate(names):
-            lbl = tk.Label(self.master, text=name, justify=tk.LEFT).grid(row=i+1, column=0)
+            lbl = tk.Label(self.master, text=name).grid(row=i+1, column=0)
             txt = tk.Entry(self.master)
             txt.grid(row=i+1, column=1)
             self.entries.append((lbl, txt))
@@ -138,7 +143,7 @@ def main():
 
     if args.product == 'foc':
         if args.input is None:
-            proc_info, datapath = get_foc_data(datapath, datafile)
+            proc_info, datapath = get_foc_datapath(datapath, datafile)
         else:
             proc_info, datapath = os.path.basename(args.input), args.input
 
@@ -217,7 +222,7 @@ def main():
 
 
 
-def get_foc_data(datapath, datafile):
+def get_foc_datapath(datapath, datafile):
     # define specific SAR focuser type
     foc_type = MsgBoxChooseFocusType().get_foc_type()
 
