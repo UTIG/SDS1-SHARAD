@@ -53,7 +53,31 @@ import interferometry_funclib as fl
 import interface_picker as ip
 import pick_interferometry as pickint
 
+class Radargram:
+    """ A radargram is an array of radar records and a collection of fast time shifts
+    along with fast time shifts due to a variety of effects. Passing these together allows us to
+    encapsulate all information together"""
+    def __init__(self, ft_shift_chirp=None, ft_shift_coreg=None):
+        # Radar records: an n x m samples, where n is fast time axis and m is slow time axis
+        self.records = None
+        # Fast time shifts
+        # Correction due to chirp stability ( 1xm numpy array)
+        self.ft_shift_chirp = ft_shift_chirp
+        # Correction due to coregistration ( 1xm numpy array)
+        self.ft_shift_coreg = ft_shift_coreg
 
+    def apply_ft_shifts(self):
+        """ Apply fast time shifts, and return shifts that were applied.
+        once a set of shifts is applied, it is removed and returned. """
+        ft_shift_total = self.ft_shift_chirp + self.ft_shift_coreg
+
+        # Shift data
+
+
+        # Clear shifts
+        self.ft_shift_chirp = None
+        self.ft_shift_coreg = None
+        return ft_shift_total
 
 def main():
 
@@ -102,11 +126,10 @@ def main():
 
     path = '/disk/kea/WAIS/targ/xtra/' + project + '/FOC/Best_Versions/'
     if project in ('SRH1', 'ICP9', 'ICP10'):
-        rawpath = '/disk/kea/WAIS/orig/xlob/' + line + 'RADnh5/'
-        chirp_bp = True
+        snm, chirp_bp = 'RADnh5', True
     else:
-        rawpath = '/disk/kea/WAIS/orig/xlob/' + line + 'RADnh3/'
-        chirp_bp = False
+        snm, chirp_bp = 'RADnh3', False
+    rawpath = os.path.join('/disk/kea/WAIS/orig/xlob', line.rstrip('/'), snm) + '/'
     tregpath = os.path.join('/disk/kea/WAIS/targ/treg', line,  'TRJ_JKB0/')
     chirppath = path + 'S4_FOC/'
     print('chirppath = ' + chirppath)
@@ -252,6 +275,11 @@ def main():
             assert False
         cmp_a = fl.convert_to_complex(*fl.load_marfa(line, chan1, pth=path + 'S4_FOC/', trim=trim))
         cmp_b = fl.convert_to_complex(*fl.load_marfa(line, chan2, pth=path + 'S4_FOC/', trim=trim))
+
+        # TODO: complete reorganization to use Radargram class. GNG
+        #rdr_a = Radargram(cmp_a, ft_shift_chirp=stabilityA)
+        #rdr_b = Radargram(cmp_b, ft_shift_chirp=stabilityB)
+
 
         if bplot and debug:
             mag_a, phs_a = fl.convert_to_magphs(cmp_a)
@@ -400,8 +428,6 @@ def main():
     elif interferogram_correction_mode == 'Reference':
 
         roll_ang = np.zeros((np.size(cmp_a3, axis=1)), dtype=float)
-
-        #reference = np.transpose(np.load('SRH_Y81a_referencepicks_15Stack.npy'))
         pth = os.path.join(path, 'S4_FOC/')
 
         pwr_image, _ = fl.load_power_image(line, channel=pickint.CHANNELS[gain], trim=trim, fresnel=args.fresnelstack, mode='averaged', pth=pth)
@@ -409,12 +435,10 @@ def main():
             # Pick reference surface from the combined power image
             print('-- pick reference surface')
             reference = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
-
             savefile = 'run_interferometry_referencepicks.npz'
             np.savez_compressed(savefile, reference)
             logging.debug("Cached reference surface pick to " + savefile)
         else:
-            # Load from previous pick
             logging.info("Load reference surface pick from " + args.refpickfile)
             with np.load(args.refpickfile) as refpicks:
                 # Load first variable
@@ -489,12 +513,12 @@ def main():
         plt.title('HSV image with interferogram in Hue and correlation in Values\n Saturation set to 1')
         plt.show()
 
-    # save correlation map
-    if bsave:
-        plt.savefig('ri_ngg_corrmap.png', dpi=600)
-        out_filename = 'ri_ngg__corrmap.npz'
-        np.savez(out_filename, corrmap=corrmap)
-        print("Saved " + out_filename)
+    ## save correlation map
+    #if bsave:
+    #    plt.savefig('ri_corrmap.png', dpi=600)
+    #    out_filename = 'ri_corrmap.npz'
+    #    np.savez(out_filename, corrmap=corrmap)
+    #    print("Saved " + out_filename)
 
 
     # Extract feature-of-interest interferometric phase and correlation 
