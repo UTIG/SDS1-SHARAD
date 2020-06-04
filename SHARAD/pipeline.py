@@ -8,6 +8,7 @@ __history__ = {
          'author': 'Scott Kempf, UTIG',
          'info': 'First release.'}}
 
+# TODO: Use $SDS paths
 # TODO: Call processors.
 # TODO: Make RSR more like the others.
 # TODO: Parameters for SAR processing (these change the output path).
