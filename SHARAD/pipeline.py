@@ -175,7 +175,6 @@ def main():
                 if (attr[0] == "Prefix"):
                     # Must come before Outdir
                     prefix = attr[1] + "/"
-                    outdir = os.path.join(path_outroot, path_file, attr[1])
                 if (attr[0] == "Outdir"):
                     # Must come before Output
                     outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
@@ -198,7 +197,10 @@ def main():
             elif (intimes[-1][0] < outtimes[0][0]):
                 print('Up to date.')
             else:
-                print('Ready to process.')
+                if (outtimes[0][0] == -1):
+                    print('Ready to process (no output).')
+                else:
+                    print('Ready to process (old output).')
                 print(output)
                 logging.debug("Adding " + infile)
                 process_list.append(infile)
