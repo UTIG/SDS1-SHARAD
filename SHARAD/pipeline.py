@@ -76,7 +76,7 @@ Processors = [
      ("Library", "xlib/subradar/roughness.py"),
      ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
      ("Prefix", "rsr"),
-     ("Outdir", "beta5"),
+     ("Outdir", "cmp"),
      #("Outrsr", "rsr_%s.npy")
      ("Output", ".txt")
     ],
