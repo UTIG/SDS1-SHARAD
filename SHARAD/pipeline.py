@@ -88,7 +88,7 @@ Processors = [
      ("Processor", "run_sar2.py"),
      ("Library", "xlib/sar/sar.py"), ("Library", "xlib/sar/smooth.py"),
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
-     ("Prefix", "for"),
+     ("Prefix", "foc"),
      ("Outdir", "5m/5 range lines/40km"),
      ("Output", "_s.h5")
     ],
