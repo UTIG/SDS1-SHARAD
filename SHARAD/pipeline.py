@@ -14,6 +14,7 @@ __history__ = {
 # TODO: Parameters for SAR processing (these change the output path).
 # TODO: Manual vs automatic pipeline
 # TODO: Parallelism
+# TODO: handle "rng", "srf", "sza"
 
 import sys
 import os
@@ -45,6 +46,7 @@ Processors = [
      ("Input","_s.dat"),
      ("Processor", "run_rng_cmp.py"), ("Library", "xlib/cmp/pds3lbl.py"),
      ("Library", "xlib/cmp/plotting.py"), ("Library", "xlib/cmp/rng_cmp.py"),
+     ("Prefix", "cmp"),
      ("Outdir", "ion"),
      ("Output", "_s.h5"),
      ("Output", "_s_TECU.txt")
@@ -55,6 +57,7 @@ Processors = [
      ("Input", "_s_TECU.txt"),
      ("Processor", "run_altimetry.py"),
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
+     ("Prefix", "alt"),
      ("Outdir", "beta5"),
      ("Output", "_a.h5")
     ],
@@ -70,6 +73,7 @@ Processors = [
      ("Library", "xlib/subradar/invert.py"),
      ("Library", "xlib/subradar/roughness.py"),
      ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
+     ("Prefix", "rsr"),
      ("Outdir", "beta5"),
      ("Outrsr", "rsr_%s.npy")
     ],
@@ -80,6 +84,7 @@ Processors = [
      ("Processor", "run_sar2.py"),
      ("Library", "xlib/sar/sar.py"), ("Library", "xlib/sar/smooth.py"),
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
+     ("Prefix", "for"),
      ("Outdir", "5m/5 range lines/40km"),
      ("Output", "_s.h5")
     ],
@@ -147,6 +152,7 @@ def main():
             orbit = m.group(1)
             intimes = []
             outtimes = []
+            prefix = ""
             for attr in prod:
                 if (attr[0] == "Name"):
                     logging.info("Considering: " + attr[1])
@@ -166,8 +172,13 @@ def main():
                     if (not args.ignorelibs):
                         libfile = os.path.join('../',attr[1])
                         intimes.append(getmtime(libfile))
-                if (attr[0] == "Outdir"):
+                if (attr[0] == "Prefix"):
+                    # Must come before Outdir
+                    prefix = attr[1] + "/"
                     outdir = os.path.join(path_outroot, path_file, attr[1])
+                if (attr[0] == "Outdir"):
+                    # Must come before Output
+                    outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
                 if (attr[0] == "Output"):
                     output = os.path.join(outdir, data_file+attr[1])
                     outtimes.append(getmtime((output)))
