@@ -19,4 +19,4 @@ then
     git clone https://github.com/cgrima/subradar
 fi
 
-git --git-dir $D0/subradar/.git --work-tree=$D0/subradar checkout fae4b33325732cf08daf1a265d092d9aa8c5aeca
+git --git-dir $D0/subradar/.git --work-tree=$D0/subradar checkout 4d44e74a6ce3741e3f63a2ae275f6265bd788894
