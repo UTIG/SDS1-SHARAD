@@ -52,6 +52,7 @@ Processors = [
      ("Output", "_s_TECU.txt")
     ],
     [("Name","Run Altimetry"),
+     ("InPrefix", "cmp"),
      ("Indir", "ion"),
      ("Input", "_s.h5"),
      ("Input", "_s_TECU.txt"),
@@ -62,6 +63,7 @@ Processors = [
      ("Output", "_a.h5")
     ],
     [("Name","Run RSR"),
+     ("InPrefix", "cmp"),
      ("Indir", "ion"),
      ("Input", "_s.h5"),
      ("Processor", "run_rsr.py"),
@@ -75,9 +77,11 @@ Processors = [
      ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
      ("Prefix", "rsr"),
      ("Outdir", "beta5"),
-     ("Outrsr", "rsr_%s.npy")
+     #("Outrsr", "rsr_%s.npy")
+     ("Output", ".txt")
     ],
     [("Name","Run SAR"),
+     ("InPrefix", "cmp"),
      ("Indir", "ion"),
      ("Input", "_s.h5"),
      ("Input", "_s_TECU.txt"),
@@ -115,6 +119,8 @@ def main():
                         help="Maximum number of tracks to process")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on libraries")
+    parser.add_argument('--ignoretimes', action='store_true',
+                        help="Do not any times")
 
     args = parser.parse_args()
 
@@ -153,11 +159,14 @@ def main():
             intimes = []
             outtimes = []
             prefix = ""
+            inprefix = ""
             for attr in prod:
                 if (attr[0] == "Name"):
                     logging.info("Considering: " + attr[1])
+                if (attr[0] == "InPrefix"):
+                    prefix = attr[1] + '/'
                 if (attr[0] == "Indir"):
-                    indir = os.path.join(path_outroot, path_file, attr[1])
+                    indir = os.path.join(path_outroot, prefix, path_file, attr[1])
                 if (attr[0] == "Input"):
                     # FIXME: This might be better if absolute paths are detected
                     if (attr[1] == '_a.dat' or attr[1] == '_s.dat'):
@@ -174,7 +183,7 @@ def main():
                         intimes.append(getmtime(libfile))
                 if (attr[0] == "Prefix"):
                     # Must come before Outdir
-                    prefix = attr[1] + "/"
+                    prefix = attr[1] + '/'
                 if (attr[0] == "Outdir"):
                     # Must come before Output
                     outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
@@ -197,13 +206,14 @@ def main():
             elif (intimes[-1][0] < outtimes[0][0]):
                 print('Up to date.')
             else:
-                if (outtimes[0][0] == -1):
-                    print('Ready to process (no output).')
-                else:
-                    print('Ready to process (old output).')
-                print(output)
-                logging.debug("Adding " + infile)
-                process_list.append(infile)
+                if not args.ignoretimes or outtimes[0][0] == -1:
+                    if (outtimes[0][0] == -1):
+                        print('Ready to process (no output).')
+                    else:
+                        print('Ready to process (old output).')
+                    print(output)
+                    logging.debug("Adding " + infile)
+                    process_list.append(infile)
         else:
             logging.debug('File already processed. Skipping ' + infile)
 
