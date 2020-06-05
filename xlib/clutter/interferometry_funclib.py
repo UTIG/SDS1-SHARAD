@@ -934,13 +934,13 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
             x = np.argmax(rho)
             p, _, _ = peakint.qint(rho, x)
             x += p - (rho.shape[0] // 2)
-            to_shift = int(np.round(x * subsample_factor))
+            to_shift = int(np.round(x * upsample_factor))
             # subsample
-            subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+            #subsampB = frequency_interpolate(cmpB[:, ii], upsample_factor)
         elif method == 2:
             # subsample
-            subsampA = frequency_interpolate(cmp_a[:, ii], subsample_factor)
-            subsampB = frequency_interpolate(cmp_b[:, ii], subsample_factor)
+            subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
+            subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
             a1 = subsampA - np.mean(cmp_a[:, ii])
             b1 = subsampB[shift:-(shift-1)] - np.mean(cmp_b[:, ii])
             sa = np.std(cmp_a[:, ii])
@@ -971,10 +971,9 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
     return shift_array, qual_array
 
 
-def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300):
+def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300, method=1):
     '''
     function for sub-sampling and coregistering complex-valued range lines
-        tempB = np.mean(np.square(np.abs(subsampA))) # GNG: move this out?
     from two radargrams as required to perform interferometry. Follows the
     steps outlines in Castelletti et al. (2018)
 
@@ -989,6 +988,8 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
       orig_sample_interval: sampling interval of the input data
           subsample_factor: factor used modify the original fast-time sampling
                             interval
+                     shift: 
+                    method: coregistration algorithm (0, 1, or 2) described in coregister() function
 
     Outputs:
     -------------
@@ -996,7 +997,6 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
        coregB: coregistered complex-valued B radargram
     '''
 
-    method = 0
     #shift2 = shift // (subsample_factor // 2)
 
 
@@ -1008,7 +1008,8 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
     for ii in range(cmpB.shape[1]):
         #subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
         #subsampB = np.roll(subsampB, int(shift_array[ii]))
-        coregB[:, ii] = frequency_shift(cmpB[:, ii], subsample_factor, shift_array[ii])
+        #coregB[:, ii] = frequency_shift(cmpB[:, ii], subsample_factor, shift_array[ii])
+        coregB[:, ii] = frequency_shift2(cmpB[:, ii], shift_array[ii] / subsample_factor)
 
     #logging.info("x={:f} shift={:f}".format(x, shift2))
     logging.info("shift_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
@@ -1104,7 +1105,7 @@ def load_roll(treg_path, s1_path):
 
     # load the timing and alongtrack position associated with each range line
     # from the S1_POS folder
-    fn = s1_path + 'ztim_xyhd'
+    fn = os.path.join(s1_path, 'ztim_xyhd')
     logging.debug("Reading " + fn)
     S1_ztim = []
     S1_dist = []
