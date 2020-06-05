@@ -11,7 +11,7 @@ then
 fi
 
 # Check out stable revision
-git --git-dir $D0/rsr/.git --work-tree=$D0/rsr checkout 6b3f77c8c7bf4b89a50e190e47715e348eda976c
+git --git-dir $D0/rsr/.git --work-tree=$D0/rsr checkout 94edf185465ce2e5719bf6aaa0fd9e5e8acac419
 
 
 if [ ! -d $D0/subradar ]
