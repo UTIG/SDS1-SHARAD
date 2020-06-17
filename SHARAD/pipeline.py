@@ -8,11 +8,11 @@ __history__ = {
          'author': 'Scott Kempf, UTIG',
          'info': 'First release.'}}
 
+# TODO: handle "rng", "srf", "sza"
 # TODO: Call processors.
-# TODO: Parameters for SAR processing (these change the output path).
+# TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
 # TODO: Parallelism
-# TODO: handle "rng", "srf", "sza"
 
 import sys
 import os
