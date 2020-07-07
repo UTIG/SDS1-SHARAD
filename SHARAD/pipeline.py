@@ -3,12 +3,17 @@
 __authors__ = ['Scott Kempf, scottk@ig.utexas.edu']
 __version__ = '1.1'
 __history__ = {
+    '1.1':
+        {'date': 'July 7 2020',
+         'author': 'Scott Kempf, UTIG',
+         'info': 'Detection is working.'}
     '1.0':
         {'date': 'October 9 2019',
          'author': 'Scott Kempf, UTIG',
-         'info': 'First release.'}}
+         'info': 'First release.'}
+}
 
-# TODO: handle "srf", "sza"
+# TODO: handle "srf"
 # TODO: Call processors.
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
