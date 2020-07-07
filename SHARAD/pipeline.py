@@ -80,7 +80,6 @@ Processors = [
      ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
      ("Prefix", "rsr"),
      ("Outdir", "cmp"),
-     #("Outrsr", "rsr_%s.npy")
      ("Output", ".txt")
     ],
     [("Name","Run SAR"),
@@ -207,11 +206,6 @@ def main():
                 if (attr[0] == "Output"):
                     output = os.path.join(outdir, data_file+attr[1])
                     outtimes.append(getmtime((output)))
-                if (attr[0] == "Outrsr"):
-                    # Ugly special case for RSR
-                    # FIXME these should probably be in outdir not path_outroot
-                    output = os.path.join(path_outroot, attr[1] % orbit)
-                    outtimes.append(getmtime((output)))
             if (len(intimes) == 0):
                 logging.error("No inputs for process")
             intimes.sort(key = lambda x: x[0])
@@ -230,7 +224,7 @@ def main():
                         print('Ready to process (old output).')
                     print(output)
                     logging.debug("Adding " + infile)
-                    process_list.append(infile)
+                    process_list.append(infile)  #FIXME
         else:
             logging.debug('File already processed. Skipping ' + infile)
 
