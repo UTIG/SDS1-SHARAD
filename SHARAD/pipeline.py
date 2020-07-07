@@ -8,7 +8,7 @@ __history__ = {
          'author': 'Scott Kempf, UTIG',
          'info': 'First release.'}}
 
-# TODO: handle "rng", "srf", "sza"
+# TODO: handle "srf", "sza"
 # TODO: Call processors.
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
@@ -90,6 +90,17 @@ Processors = [
      ("Outdir", "5m/5 range lines/40km"),
      ("Output", "_s.h5")
     ],
+    [("Name","Run Ranging"),
+     ("InPrefix", "cmp"),
+     ("Indir", "ion"),
+     ("Input", "_s.h5"),
+     ("Input", "_s_TECU.txt"),
+     ("Processor", "run_ranging.py"),
+     ("Library", "xlib/misc/hdf.py"), ("Library", "xlib/rng/icd.py"),
+     ("Prefix", "rng"),
+     ("Outdir", "icd"),
+     ("Output", "_a.cluttergram.npy")
+    ],
 ]
 
 def getmtime(path):
@@ -146,6 +157,9 @@ def main():
 
     SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
     for prod in Processors:
+        indir = ''
+        proc = ''
+        outdir = ''
         for i, infile in enumerate(lookup):
             path_file = infile.replace(SHARADroot, '')
             data_file = os.path.basename(path_file).replace('_a.dat', '')
@@ -156,8 +170,8 @@ def main():
             orbit = m.group(1)
             intimes = []
             outtimes = []
-            prefix = ""
-            inprefix = ""
+            prefix = ''
+            inprefix = ''
             for attr in prod:
                 if (attr[0] == "Name"):
                     logging.info("Considering: " + attr[1])
