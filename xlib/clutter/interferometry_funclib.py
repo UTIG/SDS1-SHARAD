@@ -894,7 +894,7 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
     This function finds the offset, but does not shift any input records.
     from two radargrams as required to perform interferometry.
 
-    Meets requirements outlined in Castelletti et al. (2018)
+    Meets requirements outlined in Castelletti et al. (2018), of having resolution at least 1/10 of sample
 
     TODO: coregistration should probably occur using either just the first half of the image,
     or it should be done in a log-scaled domain.  Otherwise the only effective contribution
@@ -915,48 +915,149 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
       shift_array: Array (same shape as cmp_a.shape[1]) containing mumber of samples
                    (possibly non-integer) to offset each fast time record in cmp_a, to those in cmp_b, to
                        have data best align between cmp_a and cmp_b.
+                   Note that this array expresses the shift in units of the upsampled samples.
+
        qual_array: Array of quality factor of match. Higher is better match.
     '''
     shift2 = shift // (upsample_factor // 2)
-
+    puf = 1 # pre-upsampling factor
     # define the output
     #coregB = np.empty_like(cmpB, dtype=complex)
 
     shift_array = np.zeros(cmp_a.shape[1])
     qual_array = np.zeros(cmp_a.shape[1])
-
-    for ii in range(cmp_a.shape[1]): #range(np.size(cmpA, axis=1)):
-        if method == 1:
-            # correlate in the non-subsampled domain
-            rho = np.abs(scipy.signal.correlate(cmp_a[:, ii], cmp_b[shift2:-(shift2-1), ii], mode='valid'))
-
-            # interpolate maximum between subsample points
-            x = np.argmax(rho)
-            p, _, _ = peakint.qint(rho, x)
-            x += p - (rho.shape[0] // 2)
-            to_shift = int(np.round(x * upsample_factor))
-            # subsample
-            #subsampB = frequency_interpolate(cmpB[:, ii], upsample_factor)
-        elif method == 2:
+    qual_array2 = None #np.zeros(cmp_a.shape[1])
+    logging.debug("coregister: upsample_factor={:f} shift={:d}".format(upsample_factor, shift))
+    qual_threshold = 4.0 # adaptive filtering threshold
+    for ii in range(cmp_a.shape[1]):
+        if method == 4:
+            # method == 4 -- adaptive windowing.
+            # TODO: be more efficient with stacking and interpolation
             # subsample
             subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
             subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
-            a1 = subsampA - np.mean(cmp_a[:, ii])
-            b1 = subsampB[shift:-(shift-1)] - np.mean(cmp_b[:, ii])
+
+            for jj in range(16):
+                if jj > 0:
+                    # If not the first round, add neighboring traces
+                    i1 = ii - jj
+                    if i1 >= 0:
+                        subsampA += frequency_interpolate(cmp_a[:, i1], upsample_factor)
+                        subsampB += frequency_interpolate(cmp_b[:, i1], upsample_factor)
+                    i1 = ii + jj
+                    if i1 < cmp_a.shape[1]:
+                        subsampA += frequency_interpolate(cmp_a[:, i1], upsample_factor)
+                        subsampB += frequency_interpolate(cmp_b[:, i1], upsample_factor)
+
+
+                # co-register and shift
+                rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
+                to_shift = np.argmax(rho) - shift
+                y = np.max(rho)
+                q = y / np.mean(rho)
+                if q >= qual_threshold: # if quality is good enough
+                    break
+
+        elif method == 3:
+            logging.debug("Calculating method 3: zncc, subsample")
+
+            # correlate in the non-subsampled domain
+            #rho = np.abs(scipy.signal.correlate(cmp_a[:, ii], cmp_b[shift2:-(shift2-1), ii], mode='valid'))
+            # puf = 1
+            #-------------------------------------------------------------
+            # with puf >= 2, method 1 is better
+            #if upsample_factor % 5 == 0:
+            #    puf = np.gcd(10, upsample_factor)
+            #else:
+            #    puf = np.gcd(2, upsample_factor)
+            puf = upsample_factor
+            #assert upsample_factor % 2 == 0
+
+            subsampA = frequency_interpolate(cmp_a[:, ii], puf)
+            subsampB = frequency_interpolate(cmp_b[:, ii], puf)
+
+            u1, u2 =  np.mean(cmp_a[:, ii]), np.mean(cmp_b[:, ii])
+            #u1, u2 = 0, 0
+            a1 = subsampA - u1
+            b1 = subsampB[shift:-(shift-1)] - u2
+            #b1 = subsampB[shift2:-(shift2-1)] - u2
             sa = np.std(cmp_a[:, ii])
             sb = np.std(cmp_b[:, ii])
+            #sa, sb = -1, -1
+            if sa > 0:
+                a1 /= sa
+            if sb > 0:
+                b1 /= sb
+            rho = np.abs(scipy.signal.correlate(a1, b1, mode='valid'))
+            #-------------------------------------------------------------
+
+            # interpolate maximum between subsample points
+            x = np.argmax(rho)
+            p, y, _ = peakint.qint(rho, x)
+            x += p
+            assert shift == rho.shape[0] // 2
+            x -= (rho.shape[0] // 2)
+            #to_shift = int(np.round(x * upsample_factor / puf)) # round to nearest subsample
+            to_shift = x
+            # assert np.max(rho) >= 0
+            #to_shift =  x - shift
+            # subsample
+            #subsampB = frequency_interpolate(cmpB[:, ii], upsample_factor)
+        elif method == 2:
+            logging.debug("Calculating method 2: no zncc, subsample")
+            # upsampling, yes subsample adjustment, no zero norm cross corr (zncc)
+            puf = upsample_factor
+            #assert upsample_factor % 2 == 0
+
+            subsampA = frequency_interpolate(cmp_a[:, ii], puf)
+            subsampB = frequency_interpolate(cmp_b[:, ii], puf)
+
+            #u1, u2 =  np.mean(cmp_a[:, ii]), np.mean(cmp_b[:, ii])
+            u1, u2 = 0, 0
+            a1 = subsampA - u1
+            b1 = subsampB[shift:-(shift-1)] - u2
+            #b1 = subsampB[shift2:-(shift2-1)] - u2
+            rho = np.abs(scipy.signal.correlate(a1, b1, mode='valid'))
+            #-------------------------------------------------------------
+
+            # interpolate maximum between subsample points
+            x = np.argmax(rho)
+            p, y, _ = peakint.qint(rho, x)
+            x += p
+            assert shift == rho.shape[0] // 2
+            x -= (rho.shape[0] // 2)
+            to_shift = x
+        elif method == 1:
+            logging.debug("Calculating method 1: zncc, no subsample")
+            # subsample and run a zero-norm crosscorrelation, but no subsample detection
+            # disabling both and making the real an abs makes this match method == 0
+            # even though abs seems wrong...
+            subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
+            subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
+            u1, u2 =  np.mean(cmp_a[:, ii]), np.mean(cmp_b[:, ii])
+            #u1, u2 = 0.0, 0.0 # skip for testing
+            a1 = subsampA - u1
+            b1 = subsampB[shift:-(shift-1)] - u2
+            sa = np.std(cmp_a[:, ii])
+            sb = np.std(cmp_b[:, ii])
+            #sa, sb = -1, -1 # skip for testing
             if sa > 0:
                 a1 /= sa
             if sb > 0:
                 b1 /= sb
 
             # co-register and shift
-            rho = np.real(scipy.signal.correlate(a1, b1, mode='valid'))
-            if np.max(rho) > 0:
+            # abs seems wrong, but it seems to perform better with low SNR.
+            rho = np.abs(scipy.signal.correlate(a1, b1, mode='valid'))
+            if np.max(rho) >= 0:
                 to_shift = np.argmax(rho) - shift
+                y = np.max(rho)
             else:
+                assert False
                 to_shift = 0
+                y = 0
         else:
+            # method == 0
             # subsample
             subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
             subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
@@ -964,11 +1065,16 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
             # co-register and shift
             rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
             to_shift = np.argmax(rho) - shift
+            y = np.max(rho)
 
-        qual_array[ii] = np.max(rho)
+        qual_array[ii] = y / np.mean(rho)
+
+        if qual_array2 is None:
+            qual_array2 = np.empty((cmp_a.shape[1], len(rho)))
+        qual_array2[ii] = rho #y / (2*shift) # normalize by the length of the kernel #np.median(rho)
         shift_array[ii] = to_shift
 
-    return shift_array, qual_array
+    return shift_array, qual_array, qual_array2
 
 
 def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300, method=1):
@@ -978,8 +1084,8 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
     steps outlines in Castelletti et al. (2018)
 
     TODO: coregistration should probably occur using either just the first half of the image,
-    or it should be done in a log-scaled domain.  Otherwise the only effective contribution
-    to the signal will be the echoes near the surface.  
+    or it should be done in a log-scaled domain (is it already log-scaled?).  Otherwise the only
+    effective contribution to the signal will be the echoes near the surface.  
 
     Inputs:
     -------------
@@ -1000,7 +1106,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
     #shift2 = shift // (subsample_factor // 2)
 
 
-    shift_array, qual_array = coregister(cmpA, cmpB, orig_sample_interval, subsample_factor, shift, method=method)
+    shift_array, qual_array, qual_array2 = coregister(cmpA, cmpB, orig_sample_interval, subsample_factor, shift, method=method)
 
     # define the output and shift data.
     # TODO: shift and pad, don't roll
@@ -1012,13 +1118,16 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
         coregB[:, ii] = frequency_shift2(cmpB[:, ii], shift_array[ii] / subsample_factor)
 
     #logging.info("x={:f} shift={:f}".format(x, shift2))
+    # Convert from upsampled units to original shift units
+    shift_array /= subsample_factor
+
     logging.info("shift_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
                 np.mean(shift_array), np.median(shift_array), np.std(shift_array),
                 np.min(shift_array), np.max(shift_array)))
     logging.info(" qual_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
                 np.mean(qual_array), np.median(qual_array), np.std(qual_array),
                 np.min(qual_array), np.max(qual_array)))
-    return cmpA, coregB, shift_array, qual_array
+    return cmpA, coregB, shift_array, qual_array, qual_array2
 
 
 def test_coregistration():

@@ -8,7 +8,20 @@ import glob
 import logging
 
 import numpy as np
+import matplotlib
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+
+# TODO:
+# bar plot of max error, RMSE error between method 0 ifactor 80, and result for all methods
+# add linear scale /log scale  y labels to "Coregistration quality"
+# 
+
+# longer term
+# use derivative for coregistration
+# use adaptive stacking (while qual < thresh, blocksize += 1)
+
 # Compare interferograms between methods
 
 def organize_subdirs(rootdir):
@@ -88,8 +101,11 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
     ifvals = [2, 4, 10, 40, 80]
     # make one figure per method. multiple ifactors per plot
     #fig1, axs = plt.subplots(2, 1)
-    fig1 = plt.figure()
+    figsize=(8, 10)
+    fig1 = plt.figure(figsize=figsize)
     ax_all = fig1.gca() # = plt.subplots(nrows, ncols)
+    fig4 = plt.figure(figsize=figsize) # bar plot of average/max
+    ax_bar = fig4.gca()
 
     # Plot signal energy
     #ax_all = axs[0]
@@ -99,11 +115,12 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
     #qkey, qlabel = 'qual2', 'max / size'
     rhoplots = []
     rhofigs = []
+    coregdiffplots = []
     for ii, method in enumerate(methods):
         # One figure per method, two plots, coregistration quality and offset comparison
-        fig2, axs2 = plt.subplots(3, 1)
+        fig2, axs2 = plt.subplots(4, 1, figsize=figsize)
         # coregistration plots
-        fig3, axs3 = plt.subplots(len(ifvals), 1, sharex=True, sharey=True)
+        fig3, axs3 = plt.subplots(len(ifvals), 1, sharex=True, sharey=True, figsize=figsize)
         rhofigs.append([fig2, fig3])
         # Plot coregistration quality per method
         ax1 = axs2[0]
@@ -116,8 +133,8 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
                 # Not sure if we should divide by ifactor
                 ifactor = info['ifactor']
                 #ifactor = 1
-                y = coregdata[name][qkey] / ifactor * coregdata[name]['qual']
-                #ax1.plot(x, y, label="method {:d}, ifactor {:d}".format(info['method'], info['ifactor']), linewidth=1, alpha=0.8)
+                y = coregdata[name][qkey]# / ifactor * coregdata[name]['qual']
+                ax1.plot(x, y, label="method {:d}, ifactor {:d}".format(info['method'], info['ifactor']), linewidth=1, alpha=0.8)
                 ax_all.plot(x, y, label="method {:d}, ifactor {:d}".format(info['method'], info['ifactor']), linewidth=1, alpha=0.8)
                 jj = ifvals.index(info['ifactor'])
                 rho = coregdata[name]['qual2'].T
@@ -125,6 +142,7 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
                 # left right bottom top
                 print("rho.shape {:s}: {:s}".format(name, str(rho.shape)))
                 extent = (0, xmax, 0, rho.shape[0] / ifactor)
+                # disable for speed
                 axs3[jj].imshow(rho, aspect='auto', extent=extent)
                 #y = coregdata[name]['shift_array']*ifactor + len(rho) / 2
                 y = coregdata[name]['shift_array'] + rho.shape[0] / ifactor / 2
@@ -146,33 +164,76 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
         for name, info in datadict.items():
             if info['method'] == method and info['ifactor'] in ifvals:
                 plotnames.append(name)
-        for name in sorted(plotnames, reverse=True):
+        offsets = [] # average offset
+        xlabels = []
+        for name in sorted(plotnames, reverse=False):
             x = np.arange(0, len(coregdata[name]['shift_array']))
             shiftdelta = coregdata[name]['shift_array'] - coregdata[name0]['shift_array']
             # condition for plotting on semilogy
             shiftdelta = np.abs(shiftdelta) + 1e-9
-            ax1.semilogy(x, shiftdelta, label=name[5:])
-            axs2[2].plot(x, shiftdelta, label=name[5:])
+            ax1.semilogy(x, shiftdelta, label=name[5:], marker='.', markersize=1.25, linewidth=0.0)
+            axs2[2].plot(x, shiftdelta, label=name[5:], marker='.', markersize=1.25, linewidth=0.0)
+
+            shiftdelta = np.nanmedian(np.abs(coregdata[name]['shift_array'] - coregdata[name0]['shift_array']))
+            offsets.append(shiftdelta)
+            xlabels.append(name[5:])
+
+        x = range(len(offsets))
+        axs2[3].bar(x, offsets)
+        axs2[3].set_xticks(x)
+        axs2[3].set_xticklabels(xlabels)
+        axs2[3].grid(True)
+        axs2[3].set_ylabel('Med. diff (samples)')
+        coregdiffplots.append(axs2[3])
+
         # TODO: plot match quality?
 
+        axs2[2].set_ylabel('Coreg Diff (Samples)')
         ax1.set_title("Method {:d} vs {:s}".format(method, name0))
         ax1.legend(loc="right")
         ax1.grid(True)
-        ax1.set_ylabel('Coregistration Difference (Samples)')
+        ax1.set_ylabel('Coreg Diff (Samples)')
         ax1.set_ylim(bottom=1e-4)
 
     rangey = [np.floor(rangey[0]), np.ceil(rangey[1])]
     urange = np.median(y)
-    rangey = [urange - 4.0, urange + 4.0]
+    dy = 2.0
+    rangey = [urange - dy, urange + dy]
+
+
+    #####################################
+    # Save unzoomed
+    for ax in rhoplots:
+        pass #ax.set_ylim(*rangey)
+        # limit x range to first part for checking)
+        #ax.set_xlim([5, 2500])
+    for ii, (fig2, fig3) in enumerate(rhofigs):
+        name = "rho_method{:d}.png".format(ii)
+        fig3.savefig(name, dpi=300)
+        logging.info("Saved " + name)
+    #####################################
+
+
+
     logging.info("Setting y limits to " + str(rangey))
     for ax in rhoplots:
         ax.set_ylim(*rangey)
         # limit x range to first part for checking)
         ax.set_xlim([5, 2500])
+
+    maxylim = max([ax.get_ylim()[1] for ax in coregdiffplots])
+
+    for ax in coregdiffplots:
+        ax.set_ylim([0, maxylim])
+
     for ii, (fig2, fig3) in enumerate(rhofigs):
-        name = "rho_method{:d}.png".format(ii)
+        name = "rho_method{:d}_zoom.png".format(ii)
         fig3.savefig(name, dpi=300)
+        name = "stats_method{:d}.png".format(ii)
+        fig2.savefig(name, dpi=300)
         logging.info("Saved " + name)
+
+
 
     ax1 = ax_all
     ax1.legend(loc='right')
@@ -256,14 +317,15 @@ def main():
 
 
     fig_combined = diffimages(interferograms_all, 'coregmethod0_if80')
-    fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if80', methods=[0, 1, 2, 3])
+    fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if80', methods=[0, 1, 2, 3, 4])
+    #fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if10', methods=[0, 1, 2, 3])
     #return
     #print("Doing remaining interferograms ")
     #compare_all(interferograms, names)
 
     
 
-    #plt.show()
+    plt.show()
 
 
 
