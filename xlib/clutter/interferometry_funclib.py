@@ -670,7 +670,7 @@ def empirical_sample_mean(N, Nf, iphi, gamma, phi_m=0):
 
 
 
-def sinc_interpolate(data, orig_sample_interval, subsample_factor):
+def sinc_interpolate(data, orig_sample_interval, upsample_factor):
     '''
     function for interpolating a vector using a sinc interpolation kernel
 
@@ -678,7 +678,7 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
     ------------
                       data: input data vector
       orig_sample_interval: sampling interval of the input data
-          subsample_factor: factor used to subsample the input data at
+          upsample_factor: factor used to subsample the input data at
 
     Outputs:
     ------------
@@ -689,9 +689,9 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
     # gigantic sinc matrix
 
     # define sample vectors
-    new_sample_interval = orig_sample_interval / subsample_factor
+    new_sample_interval = orig_sample_interval / upsample_factor
     orig_t = np.linspace(0, (len(data) - 1) * orig_sample_interval, len(data))
-    nsamples_new = len(data) * subsample_factor
+    nsamples_new = len(data) * upsample_factor
     new_t = np.linspace(0, (nsamples_new - 1) * new_sample_interval, nsamples_new)
 
     # perform the interpolation
@@ -704,7 +704,7 @@ def sinc_interpolate(data, orig_sample_interval, subsample_factor):
 
 def frequency_shift(data, upsample_factor, offset):
     """ 
-    Shift a vector by a sub-sample amount, by upsampling by subsample_factor and taking the offset
+    Shift a vector by a sub-sample amount, by upsampling by upsample_factor and taking the offset
     function for interpolating a vector by padding the data in the frequency
     domain.
 
@@ -724,7 +724,7 @@ def frequency_shift(data, upsample_factor, offset):
 
 def frequency_shift2(data, foffset):
     """ 
-    Shift a vector by a sub-sample amount, by upsampling by subsample_factor and taking the offset
+    Shift a vector by a sub-sample amount, by upsampling by upsample_factor and taking the offset
     function for interpolating a vector by padding the data in the frequency
     domain.
 
@@ -803,7 +803,7 @@ def test_frequency_shift(plot=False):
 
 
 
-def frequency_interpolate(data, subsample_factor):
+def frequency_interpolate(data, upsample_factor):
     '''
     function for interpolating a vector by padding the data in the frequency
     domain.
@@ -811,7 +811,7 @@ def frequency_interpolate(data, subsample_factor):
     Inputs:
     ------------
                   data: complex-valued range line
-      subsample_factor: factor by which the user wants to subsample the data by
+      upsample_factor: factor by which the user wants to subsample the data by
 
     Outputs:
     ------------
@@ -819,12 +819,12 @@ def frequency_interpolate(data, subsample_factor):
     '''
     fft = np.fft.fft(data, norm='ortho')
     fft_shift = np.fft.fftshift(fft)
-    x = int((len(data) * subsample_factor - len(data)) / 2)
+    x = int((len(data) * upsample_factor - len(data)) / 2)
     fft_int = np.pad(fft_shift, (x, x), 'constant', constant_values=(0, 0))
     fft_int_shift = np.fft.ifftshift(fft_int)
-    # Without the np.sqrt(subsample_factor), this is an energy-preserving function.
+    # Without the np.sqrt(upsample_factor), this is an energy-preserving function.
     # But we want to preserve value, not total signal energy
-    return np.sqrt(subsample_factor)*np.fft.ifft(fft_int_shift, norm='ortho')
+    return np.sqrt(upsample_factor)*np.fft.ifft(fft_int_shift, norm='ortho')
 
 def test_interpolate(bplot=False):
     """ Test equivalence of interpolation algorithms, and run with
@@ -912,7 +912,7 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
     Meets requirements outlined in Castelletti et al. (2018), of having resolution at least 1/10 of sample
 
     TODO: coregistration should probably occur using either just the first half of the image,
-    or it should be done in a log-scaled domain.  Otherwise the only effective contribution
+    or it should be done in a (further) log-scaled domain.  Otherwise the only effective contribution
     to the signal will be the echoes near the surface.  
 
     Inputs:
@@ -939,53 +939,39 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
 
        qual_array: Array of quality factor of match. Higher is better match.
     '''
-    shift2 = shift // (upsample_factor // 2)
-    puf = 1 # pre-upsampling factor
-    # define the output
-    #coregB = np.empty_like(cmpB, dtype=complex)
 
     shift_array = np.zeros(cmp_a.shape[1])
     qual_array = np.zeros(cmp_a.shape[1])
     qual_array2 = None #np.zeros(cmp_a.shape[1])
     logging.debug("coregister: upsample_factor={:f} shift={:d}".format(upsample_factor, shift))
-    qual_threshold = 4.0 # adaptive filtering threshold
+    #---------------------------------
+    # adaptive windowing parameters
+    awin_qual_threshold = 4.0    # adaptive windowing quality threshold
+    awin_maxwin = 16             # maximum window size
 
+
+    # if bit 2 is set, perform adaptive windowing
+    maxwin = awin_maxwin if (method & 0x4) else 1
 
     for ii in range(cmp_a.shape[1]):
-        data_a = cmp_a[:, ii]
-        data_b = cmp_b[:, ii]
+        data_a, data_b = cmp_a[:, ii], cmp_b[:, ii]
 
-
-        # if bit 2 is set, perform adaptive windowing
-        maxwin = 16 if (method & 0x4) else 1
-        stackcount = 1 # number of stacks done
+        stackcount = 1 # number of stacks done for adaptive windowing
         for jj in range(maxwin):
-
             if jj > 0:
                 # If not the first round, add neighboring traces
-                if jj == 1: # if doing adaptive window, always use ZNCC
-                    pass
-                    #data_a, data_b = norm_radargrams(cmp_a[:, ii], cmp_b[:, ii])
-                i1 = ii - jj
-                if i1 >= 0:
-                    rdra, rdrb = cmp_a[:, i1], cmp_b[:, i1]
-                    #rdra, rdrb = norm_radargrams(cmp_a[:, i1], cmp_b[:, i1])
-                    data_a += rdra
-                    data_b += rdrb
-                    stackcount += 1
-                i1 = ii + jj
-                if i1 < cmp_a.shape[1]:
-                    rdra, rdrb = cmp_a[:, i1], cmp_b[:, i1]
-                    #rdra, rdrb = norm_radargrams(cmp_a[:, i1], cmp_b[:, i1])
-                    data_a += rdra
-                    data_b += rdrb
-                    stackcount += 1
+                for kk in (ii - jj, ii + jj):
+                    if 0 <= kk < cmp_a.shape[1]:
+                        data_a += cmp_a[:, kk]
+                        data_b += cmp_b[:, kk]
+                        stackcount += 1
 
             subsampA = frequency_interpolate(data_a, upsample_factor)
             subsampB = frequency_interpolate(data_b, upsample_factor)
 
             if method & 0x1 or jj > 0:
-                # perform normalization for zero-norm cross correlation
+                # perform normalization for adaptive windowing,
+                # or if requested with feature bit flags.
                 subsampA, subsampB = norm_radargrams(subsampA, subsampB)
 
             # co-register and shift
@@ -1003,54 +989,21 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
 
             # if quality is good enough, quit adaptive window loop
             q = y / np.mean(rho)
-
-            if q >= qual_threshold:
+            if q >= awin_qual_threshold:
                 break
 
-            if ii == 399 or ii == 400: # show info for this trace
-                i1 = ii - jj
-                aout = np.vstack([cmp_a[:, i1], cmp_b[:, i1]])
-                print("jj={:d} i1={:d} cmp {:s}".format(jj, i1, str(aout)))
-                i1 = ii + jj
-                aout = np.vstack([cmp_a[:, i1], cmp_b[:, i1]])
-                print("jj={:d} i1={:d} cmp {:s}".format(jj, i1, str(aout)))
-                #print(data_a.shape)
-                #print(aout.shape)
-                aout = np.vstack([data_a, data_b])
-                assert aout.shape[1] == cmp_a.shape[0]
-                print("jj={:d} data {:s}".format(jj, str(aout)))
-
-
         # end adaptive window loop
-        logging.debug("coreg: ii={:4d} stacks={:2d} shift={:7.2f} qual={:0.2f}"
-                      "".format(ii, stackcount, to_shift / upsample_factor, y / np.mean(rho)))
-        if ii == 399 or ii == 400:
-            aout = np.vstack([data_a, data_b])
-            print(data_a.shape)
-            print(aout.shape)
-            assert aout.shape[1] == cmp_a.shape[0]
-            print("aout: " , str(abs(aout)))
-            print("rho: " , str(abs(rho)))
-            logging.info("ii={:d} adaptive stack size: {:d}".format(ii, stackcount ))
-
-        qual_array[ii] = y / np.mean(rho)
+        qual_array[ii] = q
 
         if qual_array2 is None:
             qual_array2 = np.empty((cmp_a.shape[1], len(rho)))
-        qual_array2[ii] = rho #y / (2*shift) # normalize by the length of the kernel #np.median(rho)
+        qual_array2[ii] = rho
         shift_array[ii] = to_shift
-
-    logging.info("Coregister method={:d} upsample_factor={:d} range: {:0.2f} {:0.2f}"
-                  "".format(method, upsample_factor, np.min(qual_array2), np.max(qual_array2)))
-    # find coordinates of the max
-    maxpos = ind = np.unravel_index(np.argmax(qual_array2, axis=None), qual_array2.shape)
-    logging.info("Coregister method={:d} upsample_factor={:d} maxpos: {:s}"
-                  "".format(method, upsample_factor, str(maxpos)))
 
     return shift_array, qual_array, qual_array2
 
 
-def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300, method=1):
+def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300, method=1):
     '''
     function for sub-sampling and coregistering complex-valued range lines
     from two radargrams as required to perform interferometry. Follows the
@@ -1065,7 +1018,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
                       cmpA: complex-valued input A radargram
                       cmpB: complex-valued input B radargram (seconds)
       orig_sample_interval: sampling interval of the input data
-          subsample_factor: factor used modify the original fast-time sampling
+          upsample_factor: factor used modify the original fast-time sampling
                             interval
                      shift: 
                     method: coregistration algorithm (0, 1, or 2) described in coregister() function
@@ -1076,23 +1029,23 @@ def coregistration(cmpA, cmpB, orig_sample_interval, subsample_factor, shift=300
        coregB: coregistered complex-valued B radargram
     '''
 
-    #shift2 = shift // (subsample_factor // 2)
+    #shift2 = shift // (upsample_factor // 2)
 
 
-    shift_array, qual_array, qual_array2 = coregister(cmpA, cmpB, orig_sample_interval, subsample_factor, shift, method=method)
+    shift_array, qual_array, qual_array2 = coregister(cmpA, cmpB, orig_sample_interval, upsample_factor, shift, method=method)
 
     # define the output and shift data.
     # TODO: shift and pad, don't roll
     coregB = np.empty_like(cmpB, dtype=complex)
     for ii in range(cmpB.shape[1]):
-        #subsampB = frequency_interpolate(cmpB[:, ii], subsample_factor)
+        #subsampB = frequency_interpolate(cmpB[:, ii], upsample_factor)
         #subsampB = np.roll(subsampB, int(shift_array[ii]))
-        #coregB[:, ii] = frequency_shift(cmpB[:, ii], subsample_factor, shift_array[ii])
-        coregB[:, ii] = frequency_shift2(cmpB[:, ii], shift_array[ii] / subsample_factor)
+        #coregB[:, ii] = frequency_shift(cmpB[:, ii], upsample_factor, shift_array[ii])
+        coregB[:, ii] = frequency_shift2(cmpB[:, ii], shift_array[ii] / upsample_factor)
 
     #logging.info("x={:f} shift={:f}".format(x, shift2))
     # Convert from upsampled units to original shift units
-    shift_array /= subsample_factor
+    shift_array /= upsample_factor
 
     logging.info("shift_array: mean={:0.3f}, median={:0.1f} std={:0.3f} min={:0.1f} max={:0.1f}".format(
                 np.mean(shift_array), np.median(shift_array), np.std(shift_array),
@@ -1117,7 +1070,7 @@ def test_coregistration():
         cmpb = convert_to_complex(*load_marfa(line, chans[1], pth=path, trim=trim))
         logging.info("Coregistration done loading data")
         # orig_sample_interval is unused; TODO: remove
-        cmpa3, cmpb3, shift_array, qual_array = coregistration(cmpa, cmpb, orig_sample_interval=None, subsample_factor=10)
+        cmpa3, cmpb3, shift_array, qual_array = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=10)
 
 
 def read_ztim(filename, field_names=None):
