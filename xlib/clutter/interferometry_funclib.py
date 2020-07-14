@@ -888,6 +888,21 @@ def test_interpolate(bplot=False):
                 plt.title("Sinc vs Frequency Interpolation error")
                 plt.show()
 
+def norm_radargrams(a, b):
+    """ subtract mean and divide standard deviation for two radargrams """
+    ua, ub = np.mean(a), np.mean(b)
+    sa, sb = np.std(a), np.std(b)
+    assert sa >= 0 and sb >= 0
+    a1 = a - ua
+    b1 = b - ub
+
+    if sa >= 0:
+        a1 /= sa
+    if sb >= 0:
+        b1 /= sb
+
+    return a1, b1
+
 def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_peakint=False, method=0):
     '''
     function for co-registering complex-valued fast time records.
@@ -909,6 +924,11 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
                             before performing correlation.
                      shift: Max shift to consider
                  b_peakint: Perform peak interpolation when finding argmax of correlation.
+                    method: default 0 -- feature flags for coregistration algorithm
+
+                            bit 0 - zero-norm cross correlation
+                            bit 1 - subsample interpolation
+                            bit 2 - constant quality adaptive windowing
 
     Outputs:
     -------------
@@ -929,143 +949,89 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
     qual_array2 = None #np.zeros(cmp_a.shape[1])
     logging.debug("coregister: upsample_factor={:f} shift={:d}".format(upsample_factor, shift))
     qual_threshold = 4.0 # adaptive filtering threshold
+
+
     for ii in range(cmp_a.shape[1]):
-        if method == 4:
-            # method == 4 -- adaptive windowing.
-            # TODO: be more efficient with stacking and interpolation
-            # subsample
-            subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
-            subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
-
-            for jj in range(16):
-                if jj > 0:
-                    # If not the first round, add neighboring traces
-                    i1 = ii - jj
-                    if i1 >= 0:
-                        subsampA += frequency_interpolate(cmp_a[:, i1], upsample_factor)
-                        subsampB += frequency_interpolate(cmp_b[:, i1], upsample_factor)
-                    i1 = ii + jj
-                    if i1 < cmp_a.shape[1]:
-                        subsampA += frequency_interpolate(cmp_a[:, i1], upsample_factor)
-                        subsampB += frequency_interpolate(cmp_b[:, i1], upsample_factor)
+        data_a = cmp_a[:, ii]
+        data_b = cmp_b[:, ii]
 
 
-                # co-register and shift
-                rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
-                to_shift = np.argmax(rho) - shift
-                y = np.max(rho)
-                q = y / np.mean(rho)
-                if q >= qual_threshold: # if quality is good enough
-                    break
+        # if bit 2 is set, perform adaptive windowing
+        maxwin = 16 if (method & 0x4) else 1
+        stackcount = 1 # number of stacks done
+        for jj in range(maxwin):
 
-        elif method == 3:
-            logging.debug("Calculating method 3: zncc, subsample")
+            if jj > 0:
+                # If not the first round, add neighboring traces
+                if jj == 1: # if doing adaptive window, always use ZNCC
+                    pass
+                    #data_a, data_b = norm_radargrams(cmp_a[:, ii], cmp_b[:, ii])
+                i1 = ii - jj
+                if i1 >= 0:
+                    rdra, rdrb = cmp_a[:, i1], cmp_b[:, i1]
+                    #rdra, rdrb = norm_radargrams(cmp_a[:, i1], cmp_b[:, i1])
+                    data_a += rdra
+                    data_b += rdrb
+                    stackcount += 1
+                i1 = ii + jj
+                if i1 < cmp_a.shape[1]:
+                    rdra, rdrb = cmp_a[:, i1], cmp_b[:, i1]
+                    #rdra, rdrb = norm_radargrams(cmp_a[:, i1], cmp_b[:, i1])
+                    data_a += rdra
+                    data_b += rdrb
+                    stackcount += 1
 
-            # correlate in the non-subsampled domain
-            #rho = np.abs(scipy.signal.correlate(cmp_a[:, ii], cmp_b[shift2:-(shift2-1), ii], mode='valid'))
-            # puf = 1
-            #-------------------------------------------------------------
-            # with puf >= 2, method 1 is better
-            #if upsample_factor % 5 == 0:
-            #    puf = np.gcd(10, upsample_factor)
-            #else:
-            #    puf = np.gcd(2, upsample_factor)
-            puf = upsample_factor
-            #assert upsample_factor % 2 == 0
+            subsampA = frequency_interpolate(data_a, upsample_factor)
+            subsampB = frequency_interpolate(data_b, upsample_factor)
 
-            subsampA = frequency_interpolate(cmp_a[:, ii], puf)
-            subsampB = frequency_interpolate(cmp_b[:, ii], puf)
-
-            u1, u2 =  np.mean(cmp_a[:, ii]), np.mean(cmp_b[:, ii])
-            #u1, u2 = 0, 0
-            a1 = subsampA - u1
-            b1 = subsampB[shift:-(shift-1)] - u2
-            #b1 = subsampB[shift2:-(shift2-1)] - u2
-            sa = np.std(cmp_a[:, ii])
-            sb = np.std(cmp_b[:, ii])
-            #sa, sb = -1, -1
-            if sa > 0:
-                a1 /= sa
-            if sb > 0:
-                b1 /= sb
-            rho = np.abs(scipy.signal.correlate(a1, b1, mode='valid'))
-            #-------------------------------------------------------------
-
-            # interpolate maximum between subsample points
-            x = np.argmax(rho)
-            p, y, _ = peakint.qint(rho, x)
-            x += p
-            assert shift == rho.shape[0] // 2
-            x -= (rho.shape[0] // 2)
-            #to_shift = int(np.round(x * upsample_factor / puf)) # round to nearest subsample
-            to_shift = x
-            # assert np.max(rho) >= 0
-            #to_shift =  x - shift
-            # subsample
-            #subsampB = frequency_interpolate(cmpB[:, ii], upsample_factor)
-        elif method == 2:
-            logging.debug("Calculating method 2: no zncc, subsample")
-            # upsampling, yes subsample adjustment, no zero norm cross corr (zncc)
-            puf = upsample_factor
-            #assert upsample_factor % 2 == 0
-
-            subsampA = frequency_interpolate(cmp_a[:, ii], puf)
-            subsampB = frequency_interpolate(cmp_b[:, ii], puf)
-
-            #u1, u2 =  np.mean(cmp_a[:, ii]), np.mean(cmp_b[:, ii])
-            u1, u2 = 0, 0
-            a1 = subsampA - u1
-            b1 = subsampB[shift:-(shift-1)] - u2
-            #b1 = subsampB[shift2:-(shift2-1)] - u2
-            rho = np.abs(scipy.signal.correlate(a1, b1, mode='valid'))
-            #-------------------------------------------------------------
-
-            # interpolate maximum between subsample points
-            x = np.argmax(rho)
-            p, y, _ = peakint.qint(rho, x)
-            x += p
-            assert shift == rho.shape[0] // 2
-            x -= (rho.shape[0] // 2)
-            to_shift = x
-        elif method == 1:
-            logging.debug("Calculating method 1: zncc, no subsample")
-            # subsample and run a zero-norm crosscorrelation, but no subsample detection
-            # disabling both and making the real an abs makes this match method == 0
-            # even though abs seems wrong...
-            subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
-            subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
-            u1, u2 =  np.mean(cmp_a[:, ii]), np.mean(cmp_b[:, ii])
-            #u1, u2 = 0.0, 0.0 # skip for testing
-            a1 = subsampA - u1
-            b1 = subsampB[shift:-(shift-1)] - u2
-            sa = np.std(cmp_a[:, ii])
-            sb = np.std(cmp_b[:, ii])
-            #sa, sb = -1, -1 # skip for testing
-            if sa > 0:
-                a1 /= sa
-            if sb > 0:
-                b1 /= sb
-
-            # co-register and shift
-            # abs seems wrong, but it seems to perform better with low SNR.
-            rho = np.abs(scipy.signal.correlate(a1, b1, mode='valid'))
-            if np.max(rho) >= 0:
-                to_shift = np.argmax(rho) - shift
-                y = np.max(rho)
-            else:
-                assert False
-                to_shift = 0
-                y = 0
-        else:
-            # method == 0
-            # subsample
-            subsampA = frequency_interpolate(cmp_a[:, ii], upsample_factor)
-            subsampB = frequency_interpolate(cmp_b[:, ii], upsample_factor)
+            if method & 0x1 or jj > 0:
+                # perform normalization for zero-norm cross correlation
+                subsampA, subsampB = norm_radargrams(subsampA, subsampB)
 
             # co-register and shift
             rho = np.abs(scipy.signal.correlate(subsampA, subsampB[shift:-(shift-1)], mode='valid'))
-            to_shift = np.argmax(rho) - shift
-            y = np.max(rho)
+
+            if method & 0x2:
+                # if bit 1 is set, perform subsample interpolation
+                # interpolate maximum between subsample points
+                x = np.argmax(rho)
+                p, y, _ = peakint.qint(rho, x)
+                to_shift = x + p - shift
+            else:
+                to_shift = np.argmax(rho) - shift
+                y = np.max(rho)
+
+            # if quality is good enough, quit adaptive window loop
+            q = y / np.mean(rho)
+
+            if q >= qual_threshold:
+                break
+
+            if ii == 399 or ii == 400: # show info for this trace
+                i1 = ii - jj
+                aout = np.vstack([cmp_a[:, i1], cmp_b[:, i1]])
+                print("jj={:d} i1={:d} cmp {:s}".format(jj, i1, str(aout)))
+                i1 = ii + jj
+                aout = np.vstack([cmp_a[:, i1], cmp_b[:, i1]])
+                print("jj={:d} i1={:d} cmp {:s}".format(jj, i1, str(aout)))
+                #print(data_a.shape)
+                #print(aout.shape)
+                aout = np.vstack([data_a, data_b])
+                assert aout.shape[1] == cmp_a.shape[0]
+                print("jj={:d} data {:s}".format(jj, str(aout)))
+
+
+        # end adaptive window loop
+        logging.debug("coreg: ii={:4d} stacks={:2d} shift={:7.2f} qual={:0.2f}"
+                      "".format(ii, stackcount, to_shift / upsample_factor, y / np.mean(rho)))
+        if ii == 399 or ii == 400:
+            aout = np.vstack([data_a, data_b])
+            print(data_a.shape)
+            print(aout.shape)
+            assert aout.shape[1] == cmp_a.shape[0]
+            print("aout: " , str(abs(aout)))
+            print("rho: " , str(abs(rho)))
+            logging.info("ii={:d} adaptive stack size: {:d}".format(ii, stackcount ))
 
         qual_array[ii] = y / np.mean(rho)
 
@@ -1073,6 +1039,13 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
             qual_array2 = np.empty((cmp_a.shape[1], len(rho)))
         qual_array2[ii] = rho #y / (2*shift) # normalize by the length of the kernel #np.median(rho)
         shift_array[ii] = to_shift
+
+    logging.info("Coregister method={:d} upsample_factor={:d} range: {:0.2f} {:0.2f}"
+                  "".format(method, upsample_factor, np.min(qual_array2), np.max(qual_array2)))
+    # find coordinates of the max
+    maxpos = ind = np.unravel_index(np.argmax(qual_array2, axis=None), qual_array2.shape)
+    logging.info("Coregister method={:d} upsample_factor={:d} maxpos: {:s}"
+                  "".format(method, upsample_factor, str(maxpos)))
 
     return shift_array, qual_array, qual_array2
 
