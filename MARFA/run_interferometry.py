@@ -105,7 +105,7 @@ def main():
     parser.add_argument('--mode', default='Roll', choices=('Roll','Reference', 'none'),
                         help='Interferogram Correction Mode')
     # TODO: make coregistration algorithm flag a more friendly string name
-    parser.add_argument('--coregmethod', default=1, type=int, choices=(0, 1, 2, 3, 4),
+    parser.add_argument('--coregmethod', default=1, type=int, choices=range(8),
                         help="Override coregistration algorithm")
     parser.add_argument('--coregifactor', default=10, type=int,
                         help="Coregistration interpolation factor")
@@ -116,6 +116,8 @@ def main():
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
+    # Set default number of decimal places to display for numpy arrays
+    np.set_printoptions(precision=3)
 
     project = args.project #'GOG3'
     line = args.line

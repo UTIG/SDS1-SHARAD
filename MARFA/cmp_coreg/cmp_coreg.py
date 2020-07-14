@@ -14,13 +14,11 @@ import matplotlib.pyplot as plt
 
 
 # TODO:
-# bar plot of max error, RMSE error between method 0 ifactor 80, and result for all methods
-# add linear scale /log scale  y labels to "Coregistration quality"
-# 
-
-# longer term
-# use derivative for coregistration
-# use adaptive stacking (while qual < thresh, blocksize += 1)
+# evaluate bias between feature zncc. histogram showing offsets
+# difference between corresponding zncc/non-zncc algorithms for each ifactor
+# (method 0 vs 1, 2 v 3, 4 vs 5, 6 vs 7)
+# difference between corresponding  adaptive/nonadaptive
+# If there is bias, is it significant, is it more accurate
 
 # Compare interferograms between methods
 
@@ -317,7 +315,7 @@ def main():
 
 
     fig_combined = diffimages(interferograms_all, 'coregmethod0_if80')
-    fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if80', methods=[0, 1, 2, 3, 4])
+    fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if80', methods=range(8))
     #fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if10', methods=[0, 1, 2, 3])
     #return
     #print("Doing remaining interferograms ")

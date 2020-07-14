@@ -3,7 +3,7 @@ S0=`basename $0`
 export DISPLAY=''
 #rm -rf coregmethod{0,1,2}
 #mkdir -p coregmethod{0,1,2}
-METHODS=$1
+METHODS=$*
 
 for METHOD in $METHODS
 do
