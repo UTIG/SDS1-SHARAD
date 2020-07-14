@@ -3,14 +3,19 @@
 __authors__ = ['Scott Kempf, scottk@ig.utexas.edu']
 __version__ = '1.1'
 __history__ = {
+    '1.1':
+        {'date': 'July 7 2020',
+         'author': 'Scott Kempf, UTIG',
+         'info': 'Detection is working.'}
     '1.0':
         {'date': 'October 9 2019',
          'author': 'Scott Kempf, UTIG',
-         'info': 'First release.'}}
+         'info': 'First release.'}
+}
 
+# TODO: handle "srf"
 # TODO: Call processors.
-# TODO: Make RSR more like the others.
-# TODO: Parameters for SAR processing (these change the output path).
+# TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
 # TODO: Parallelism
 
@@ -44,20 +49,24 @@ Processors = [
      ("Input","_s.dat"),
      ("Processor", "run_rng_cmp.py"), ("Library", "xlib/cmp/pds3lbl.py"),
      ("Library", "xlib/cmp/plotting.py"), ("Library", "xlib/cmp/rng_cmp.py"),
+     ("Prefix", "cmp"),
      ("Outdir", "ion"),
      ("Output", "_s.h5"),
      ("Output", "_s_TECU.txt")
     ],
     [("Name","Run Altimetry"),
+     ("InPrefix", "cmp"),
      ("Indir", "ion"),
      ("Input", "_s.h5"),
      ("Input", "_s_TECU.txt"),
      ("Processor", "run_altimetry.py"),
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
+     ("Prefix", "alt"),
      ("Outdir", "beta5"),
      ("Output", "_a.h5")
     ],
     [("Name","Run RSR"),
+     ("InPrefix", "cmp"),
      ("Indir", "ion"),
      ("Input", "_s.h5"),
      ("Processor", "run_rsr.py"),
@@ -69,18 +78,32 @@ Processors = [
      ("Library", "xlib/subradar/invert.py"),
      ("Library", "xlib/subradar/roughness.py"),
      ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
-     ("Outdir", "beta5"),
-     ("Outrsr", "rsr_%s.npy")
+     ("Prefix", "rsr"),
+     ("Outdir", "cmp"),
+     ("Output", ".txt")
     ],
     [("Name","Run SAR"),
+     ("InPrefix", "cmp"),
      ("Indir", "ion"),
      ("Input", "_s.h5"),
      ("Input", "_s_TECU.txt"),
      ("Processor", "run_sar2.py"),
      ("Library", "xlib/sar/sar.py"), ("Library", "xlib/sar/smooth.py"),
      ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
+     ("Prefix", "foc"),
      ("Outdir", "5m/5 range lines/40km"),
      ("Output", "_s.h5")
+    ],
+    [("Name","Run Ranging"),
+     ("InPrefix", "cmp"),
+     ("Indir", "ion"),
+     ("Input", "_s.h5"),
+     ("Input", "_s_TECU.txt"),
+     ("Processor", "run_ranging.py"),
+     ("Library", "xlib/misc/hdf.py"), ("Library", "xlib/rng/icd.py"),
+     ("Prefix", "rng"),
+     ("Outdir", "icd"),
+     ("Output", "_a.cluttergram.npy")
     ],
 ]
 
@@ -109,6 +132,8 @@ def main():
                         help="Maximum number of tracks to process")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on libraries")
+    parser.add_argument('--ignoretimes', action='store_true',
+                        help="Do not any times")
 
     args = parser.parse_args()
 
@@ -136,6 +161,9 @@ def main():
 
     SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
     for prod in Processors:
+        indir = ''
+        proc = ''
+        outdir = ''
         for i, infile in enumerate(lookup):
             path_file = infile.replace(SHARADroot, '')
             data_file = os.path.basename(path_file).replace('_a.dat', '')
@@ -146,11 +174,15 @@ def main():
             orbit = m.group(1)
             intimes = []
             outtimes = []
+            prefix = ''
+            inprefix = ''
             for attr in prod:
                 if (attr[0] == "Name"):
                     logging.info("Considering: " + attr[1])
+                if (attr[0] == "InPrefix"):
+                    prefix = attr[1] + '/'
                 if (attr[0] == "Indir"):
-                    indir = os.path.join(path_outroot, path_file, attr[1])
+                    indir = os.path.join(path_outroot, prefix, path_file, attr[1])
                 if (attr[0] == "Input"):
                     # FIXME: This might be better if absolute paths are detected
                     if (attr[1] == '_a.dat' or attr[1] == '_s.dat'):
@@ -165,15 +197,14 @@ def main():
                     if (not args.ignorelibs):
                         libfile = os.path.join('../',attr[1])
                         intimes.append(getmtime(libfile))
+                if (attr[0] == "Prefix"):
+                    # Must come before Outdir
+                    prefix = attr[1] + '/'
                 if (attr[0] == "Outdir"):
-                    outdir = os.path.join(path_outroot, path_file, attr[1])
+                    # Must come before Output
+                    outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
                 if (attr[0] == "Output"):
                     output = os.path.join(outdir, data_file+attr[1])
-                    outtimes.append(getmtime((output)))
-                if (attr[0] == "Outrsr"):
-                    # Ugly special case for RSR
-                    # FIXME these should probably be in outdir not path_outroot
-                    output = os.path.join(path_outroot, attr[1] % orbit)
                     outtimes.append(getmtime((output)))
             if (len(intimes) == 0):
                 logging.error("No inputs for process")
@@ -186,10 +217,14 @@ def main():
             elif (intimes[-1][0] < outtimes[0][0]):
                 print('Up to date.')
             else:
-                print('Ready to process.')
-                print(output)
-                logging.debug("Adding " + infile)
-                process_list.append(infile)
+                if not args.ignoretimes or outtimes[0][0] == -1:
+                    if (outtimes[0][0] == -1):
+                        print('Ready to process (no output).')
+                    else:
+                        print('Ready to process (old output).')
+                    print(output)
+                    logging.debug("Adding " + infile)
+                    process_list.append(infile)  #FIXME
         else:
             logging.debug('File already processed. Skipping ' + infile)
 

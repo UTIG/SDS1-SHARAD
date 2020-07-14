@@ -32,6 +32,7 @@ def main():
     global args, DO_CLUTTER_ONLY
     parser = argparse.ArgumentParser(description='Run SHARAD ranging processing')
     parser.add_argument('-o','--output', help="Output base directory")
+    parser.add_argument('--qcdir', help="Quality control output directory")
     parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','csv','none'),
                         help="Output file format")
     parser.add_argument('--tracklist', default="xover_idx.dat",
@@ -58,9 +59,6 @@ def main():
 
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_ranging: [%(levelname)-7s] %(message)s")
-
-    # Set number of cores
-    nb_cores = args.jobs
 
     # Build list of processes
     logging.info('build task list')
@@ -105,19 +103,22 @@ def main():
         logging.info("Limiting to first {:d} tracks".format(args.maxtracks))
         process_list = process_list[0:args.maxtracks]
 
+    if len(process_list) % 2 != 0:
+        raise ValueError("Must have an even number of tracks for crossovers!")
+
     if args.dryrun:
         sys.exit(0)
 
     logging.info("Start processing {:d} tracks".format(len(process_list)) )
 
-    rlist = []
-    if nb_cores <= 1:
+    rlist = [] # result list
+    if args.jobs <= 1:
         for i, t in enumerate(process_list):
             result = process_rng(**t)
             rlist.append(result) # tuple of two numbers
             logging.info("Finished task {:d} of {:d}".format(i+1, len(process_list)))
     else:
-        pool = multiprocessing.Pool(nb_cores)
+        pool = multiprocessing.Pool(args.jobs)
         results = [pool.apply_async(process_rng, [], t) for t in process_list]
         for i, result in enumerate(results):
             rlist.append(result.get())
@@ -125,25 +126,27 @@ def main():
     logging.info('done with tasks.')
 
 
-    rlist = np.array(rlist)
+    """When using multiprocessing the 
+    results are returned in random order. Since always two tracks have to be compared
+    per crossover I found it convenient for testing if the output is listed in the
+    same order as the input, although this is not strictly necessary. But the first
+    two tracks are then x-over 1, track 3 and 4 x-over 2, and so on... The error
+    seems to happen if an error at some track occurs. Then he cannot find it in the
+    input. 
+
+    Why these specific tracks are not going through needs further investigation. There
+    seems to be some array length issue.
+    """
+
     out = np.zeros((len(rlist), 2))
     # Sort results
-    if nb_cores <= 1:
-        out = rlist[:, 1:3]
-    else:
-        for i, result in enumerate(rlist):
-            for j, t in enumerate(process_list):
-                if str(int(result[0])) in t['inpath']:
-                    logging.info("Found result for {:s}".format(str(result[0])))
-                    out[j] = result[1:3]
+    for result in rlist:
+        ii = result['tasknum'] - 1
+        out[ii, :] = result['result'][0:2]
 
-    logging.warning("Code is incomplete!  TODO Finish collecting results")
-    sys.exit(0)
-    # GNG 2020-03-25 it doesn't run past this point. The
-    # outputs aren't documented!
-    print("output: ", out)
-    delta_ranges = out[0::2,1] - out[1::2,1]
-    print('rms', np.sqrt(np.var(delta_ranges)))
+    delta_ranges = out[0::2, 1] - out[1::2, 1]
+    logging.debug("rms={:0.4f}".format(np.nanstd(delta_ranges)))
+
     import matplotlib
     font = {'family' : 'serif',
             'size'   : 24}
@@ -156,17 +159,35 @@ def main():
     ax.set_xlabel('Xover Number')
     ax.set_ylabel('Ranging Residual [m]')
     plt.grid()
-    #plt.savefig('ranging_result.pdf')
     plt.tight_layout()
+
+    if args.qcdir:
+        # Save debugging outputs to qc directory if requested
+        logging.debug("Saving qc to " + args.qcdir)
+        if not os.path.exists(args.qcdir):
+            os.makedirs(args.qcdir)
+        np.save(os.path.join(args.qcdir, 'ranging_result.npy'), rlist)
+        plt.savefig(os.path.join(args.qcdir, 'ranging_result.pdf'))
+
     plt.show()
 
-    np.save('ranging_result.npy', rlist)
 
 def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0, clutterfile=None,
                 b_noprogress=False, bplot=False, maxechoes=0):
 
     """
     TODO: describe input and output parameters
+    inpath : path to source data file, relative to EDR path root
+    idx_start, idx_end: index range of track to process
+    save_format: Unused?
+    tasknum: Task number to uniquely identify this job for multiprocessing
+    clutterfile: path to clutter simulation file, if already completed. None = run clutter sim
+    b_noprogress: if True, don't print status progress bar
+    bplot: if True, show qc plots
+    maxechoes: ?
+
+    output:
+    If an error, a tuple with None
     """
 
     try:
@@ -227,10 +248,10 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
         result = np.zeros((20, 3))
         for co_sim in range(12, 25):
 
-            logging.debug("{:s}: icd_ranging co_sim={:d}".format(taskname, co_sim))
+            logging.debug("{:s}: icd_ranging(co_sim={:d})".format(taskname, co_sim))
             #ranging_func = icd.icd_ranging_3
 
-
+            # icd_ranging_cg3 returns delta, dz, min(md)
             result[co_sim-5] = icd.icd_ranging_cg3\
                               (cmp_path, dtm_path, science_path, label_path, \
                                inpath, aux_label,
@@ -240,7 +261,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
                                #cluttergram_path=clutter_load_path, save_clutter_path=clutter_save_path,
                                do_progress=not b_noprogress, maxechoes=maxechoes)
             j = co_sim - 5
-            logging.info("result[{:d}] = {:f} {:f} {:f}".format(j, \
+            logging.info("{:s}: result[{:d}] = {:f} {:f} {:f}".format(taskname, j, \
                result[j][0], result[j][1], result[j][2]))
 
         if bplot:
@@ -253,13 +274,26 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
         amin = np.argmin(result[:,2])
         min_result = result[amin]
         print("min: " + str(amin))
-        return (obn, min_result[0], min_result[1])
+
+        return {
+            'inpath': inpath,
+            'obn': obn,
+            'tasknum': tasknum,
+            'result': result[amin]
+        }
+        #return (obn, min_result[0], min_result[1])
 
     except Exception:
         taskname = "task{:03d}".format(tasknum)
         for line in traceback.format_exc().split("\n"):
             logging.error('{:s}: {:s}'.format(taskname, line) )
-        return (None, None)
+        #return (None, None)
+        return {
+            'inpath': inpath,
+            'obn': obn,
+            'tasknum': tasknum,
+            'result': np.array([float('nan'), float('nan')])
+        }
 
 if __name__ == "__main__":
     # execute only if run as a script
