@@ -65,7 +65,7 @@ def plot_diff(ax, interferogram1, interferogram2, name1, name2):
         im.set_clim([-180, 180])
     ax.set_title(title)
 
-    #filename = "cmp_coreg_{:d}.png".format(ii+1)
+    #filename = "cmp_coreg_{:s}-{:s}.png".format(name1, name2)
     #print("Saving plot " + filename)
     #plt.savefig(filename, dpi=150)
 
@@ -275,6 +275,41 @@ def compare_all(interferograms, names):
 
     fig_combined.savefig('cmp_coreg_all.png')
 
+def compare_interferogram(interferograms, baseline_name, names):
+
+    #ncombo = math.factorial(len(interferograms)) // 2
+    #fig_combined, ax = plt.subplots(1, ncombo)
+    fig = plt.figure()
+    name1 = baseline_name
+    j1 = names.index(name1)
+    for ii, name2 in enumerate(names):
+        print("{:2d}: Comparing {:s} and {:s}".format(ii+1, name1, name2))
+        plt.clf()
+
+        delta_ang =  np.unwrap(interferograms[name1] - interferograms[name2], axis=0)
+        delta_ang = (delta_ang + np.pi) % (2 * np.pi) - np.pi
+
+        plt.imshow(np.degrees(delta_ang), cmap='hsv', aspect='auto')
+        plt.clim([-180, 180])
+        #plt.subplot(313); plt.imshow(np.rad2deg(int_image), aspect='auto', cmap='hsv');
+        cbar = plt.colorbar()
+        #plt.clabel('Radians')
+        title = "{:2d} {:s} vs {:s}".format(ii+1, name1, name2)
+        plt.title(title)
+        cbar.set_label('Degrees')
+        plt.ylabel('Fast Time (samples)')
+        plt.ylabel('Slow Time (samples)')
+
+        #title = "[{:2d}] {:s} vs {:s}".format(ii+1, name1, name2)
+        #ax[ii].imshow(np.degrees(delta_ang), cmap='hsv')
+        #for im in ax[ii].get_images():
+        #    im.set_clim([-180, 180])
+        #ax[ii].set_title(title)
+
+        filename = "cmp_interferogram_{:s}-{:s}.png".format(name1, name2)
+        print("Saving plot " + filename)
+        plt.savefig(filename, dpi=150)
+
 
 
 def main():
@@ -313,13 +348,16 @@ def main():
                 loaded_data[k] = data[k]
             shift_arrs[info['name']] = loaded_data
 
+    compare_interferogram(interferograms_all, 'coregmethod0_if80', sorted(datadict.keys()))
+    exit()
 
-    fig_combined = diffimages(interferograms_all, 'coregmethod0_if80')
-    fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if80', methods=range(8))
+    fig_combined = diffimages(interferograms_all, 'coregmethod2_if80')
+    fig_shift = diffshift(shift_arrs, datadict, 'coregmethod2_if80', methods=range(8))
     #fig_shift = diffshift(shift_arrs, datadict, 'coregmethod0_if10', methods=[0, 1, 2, 3])
     #return
     #print("Doing remaining interferograms ")
     #compare_all(interferograms, names)
+
 
     
 
