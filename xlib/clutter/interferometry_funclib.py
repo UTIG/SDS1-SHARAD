@@ -903,17 +903,13 @@ def norm_radargrams(a, b):
 
     return a1, b1
 
-def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_peakint=False, method=0):
+def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, method=0):
     '''
     function for co-registering complex-valued fast time records.
     This function finds the offset, but does not shift any input records.
     from two radargrams as required to perform interferometry.
 
     Meets requirements outlined in Castelletti et al. (2018), of having resolution at least 1/10 of sample
-
-    TODO: coregistration should probably occur using either just the first half of the image,
-    or it should be done in a (further) log-scaled domain.  Otherwise the only effective contribution
-    to the signal will be the echoes near the surface.  
 
     Inputs:
     -------------
@@ -923,11 +919,10 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
            upsample_factor: Upsample radargrams by this factor, using sinc interpolation,
                             before performing correlation.
                      shift: Max shift to consider
-                 b_peakint: Perform peak interpolation when finding argmax of correlation.
                     method: default 0 -- feature flags for coregistration algorithm
 
                             bit 0 - zero-norm cross correlation
-                            bit 1 - subsample interpolation
+                            bit 1 - subsample peak interpolation
                             bit 2 - constant quality adaptive windowing
 
     Outputs:
@@ -954,7 +949,7 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
     maxwin = awin_maxwin if (method & 0x4) else 1
 
     for ii in range(cmp_a.shape[1]):
-        data_a, data_b = cmp_a[:, ii], cmp_b[:, ii]
+        data_a, data_b = np.copy(cmp_a[:, ii]), np.copy(cmp_b[:, ii])
 
         stackcount = 1 # number of stacks done for adaptive windowing
         for jj in range(maxwin):
@@ -1003,7 +998,7 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, b_pea
     return shift_array, qual_array, qual_array2
 
 
-def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300, method=1):
+def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300, method=0):
     '''
     function for sub-sampling and coregistering complex-valued range lines
     from two radargrams as required to perform interferometry. Follows the
@@ -1021,7 +1016,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300,
           upsample_factor: factor used modify the original fast-time sampling
                             interval
                      shift: 
-                    method: coregistration algorithm (0, 1, or 2) described in coregister() function
+                    method: coregistration algorithm method described in coregister() function
 
     Outputs:
     -------------
@@ -1029,21 +1024,13 @@ def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300,
        coregB: coregistered complex-valued B radargram
     '''
 
-    #shift2 = shift // (upsample_factor // 2)
-
-
     shift_array, qual_array, qual_array2 = coregister(cmpA, cmpB, orig_sample_interval, upsample_factor, shift, method=method)
 
     # define the output and shift data.
-    # TODO: shift and pad, don't roll
     coregB = np.empty_like(cmpB, dtype=complex)
     for ii in range(cmpB.shape[1]):
-        #subsampB = frequency_interpolate(cmpB[:, ii], upsample_factor)
-        #subsampB = np.roll(subsampB, int(shift_array[ii]))
-        #coregB[:, ii] = frequency_shift(cmpB[:, ii], upsample_factor, shift_array[ii])
         coregB[:, ii] = frequency_shift2(cmpB[:, ii], shift_array[ii] / upsample_factor)
 
-    #logging.info("x={:f} shift={:f}".format(x, shift2))
     # Convert from upsampled units to original shift units
     shift_array /= upsample_factor
 
@@ -1070,7 +1057,8 @@ def test_coregistration():
         cmpb = convert_to_complex(*load_marfa(line, chans[1], pth=path, trim=trim))
         logging.info("Coregistration done loading data")
         # orig_sample_interval is unused; TODO: remove
-        cmpa3, cmpb3, shift_array, qual_array = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=10)
+        for method in (0, 7):
+            _ = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=10)
 
 
 def read_ztim(filename, field_names=None):
