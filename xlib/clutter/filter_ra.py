@@ -121,7 +121,8 @@ def main():
     with open(OutName, "wb") as OFD:
         for signalim in filter_ra_gen(InName, geo_path, DX, MS, NR, NRr, channel, \
             undersamp=undersamp, combined=combined, filter2d=(not args.nofilter2d)):
-            np.real(signalim).astype('<i2').T.tofile(OFD)
+            x = np.clip(np.real(signalim), -32768, 32767)
+            x.astype('<i2').T.tofile(OFD)
 
 def read_stackgen_block(stackgen, MS, NumRead, NB, filename="?", short_read_severity=logging.INFO):
     block = np.empty((MS, NumRead))
