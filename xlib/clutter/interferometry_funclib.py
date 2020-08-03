@@ -18,9 +18,10 @@ import pytest
 import logging
 import os
 import csv
+import argparse
+import glob
 #from tkinter import *
 
-import pyfftw
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -903,13 +904,14 @@ def norm_radargrams(a, b):
 
     return a1, b1
 
-def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, method=0):
+def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, method=0x0):
     '''
     function for co-registering complex-valued fast time records.
     This function finds the offset, but does not shift any input records.
     from two radargrams as required to perform interferometry.
 
-    Meets requirements outlined in Castelletti et al. (2018), of having resolution at least 1/10 of sample
+    Meets requirements outlined in Castelletti et al. (2018), of having resolution at
+    least 1/10 of sample
 
     Inputs:
     -------------
@@ -919,11 +921,26 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, metho
            upsample_factor: Upsample radargrams by this factor, using sinc interpolation,
                             before performing correlation.
                      shift: Max shift to consider
-                    method: default 0 -- feature flags for coregistration algorithm
+                    method: feature flags for coregistration algorithm
+                            default=0x0
 
-                            bit 0 - zero-norm cross correlation
+                            bit 0 - zero-normalized cross correlation (ZNCC)
                             bit 1 - subsample peak interpolation
-                            bit 2 - constant quality adaptive windowing
+                            bit 2 - constant quality adaptive windowing (CQAW)
+
+                            ZNCC:
+                            subtract out the mean and divide by std deviation of traces
+                            before performing cross correlation
+
+                            subsample peak interpolation:
+                            Use qint to interpolate peak to a sub-sample location
+
+                            CQAW:
+                             evalutes the quality of the coregistration, determined
+                            by the ratio of the peak correlation to the average correlation.
+                            If this ratio is below a threshold of 4.0, it incorporates the two
+                            neighboring traces until this value is above the threshold,
+                            up to a limit of 16 iterations.
 
     Outputs:
     -------------
@@ -1057,8 +1074,9 @@ def test_coregistration():
         cmpb = convert_to_complex(*load_marfa(line, chans[1], pth=path, trim=trim))
         logging.info("Coregistration done loading data")
         # orig_sample_interval is unused; TODO: remove
-        for method in (0, 7):
-            _ = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=10)
+        for ifactor in range(1, 2, 4):
+            for method in (0, 7):
+                _ = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=ifactor)
 
 
 def read_ztim(filename, field_names=None):
@@ -1922,10 +1940,6 @@ def main():
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
-    test_frequency_shift(plot=args.plot)
-
-    test_interpolate(bplot=args.plot)
-    test_coregistration()
     test_load_marfa()
 
     test_load_pik1()
@@ -1933,10 +1947,11 @@ def main():
     test_load_S2_bxds()
     test_load_power_image()
     test_denoise_and_dechirp()
+    test_frequency_shift(plot=args.plot)
+    test_interpolate(bplot=args.plot)
+    test_coregistration()
 
 
 if __name__ == "__main__":
-    import argparse
-    import glob
     main()
 
