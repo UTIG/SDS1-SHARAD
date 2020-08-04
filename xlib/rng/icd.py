@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 authors__ = ['Gregor Steinbruegge (UTIG), gregor@ig.utexas.edu']
 
 __version__ = '0.1'
@@ -11,16 +12,22 @@ __history__ = {
          'author': 'Gregor Steinbruegge, UTIG',
          'info': 'Integrated the clutter simulation code and updated documentation'}}
 
-import numpy as np
 import sys
+import os
 import logging
-sys.path.append('../../xlib')
-import cmp.pds3lbl as pds3
+
+import numpy as np
 import scipy.signal
 import scipy.constants
 from scipy.io import loadmat
 import pandas as pd
 import matplotlib.pyplot as plt
+
+xlib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if xlib_path not in sys.path:
+    sys.path.append(xlib_path)
+
+import cmp.pds3lbl as pds3
 import rng.icsim as icsim
 import clutter.peakint as peakint
 
@@ -225,7 +232,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
 
     #============================
     # Assertions about input dimensions
-    assert idx_start > 0
+    assert idx_start >= 0
     assert idx_end > 0
     assert idx_end - idx_start >= 800
 
@@ -377,7 +384,13 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
         for i in range(-w_range, w_range, 1):
             if np.abs(i - i_interp) > ifactor: # 1 sample radius
                 continue # Don't calculate for outside the window around the minimum
-            md1[i + w_range] = mean_abs_diff_shifted(i, sim_ipl[average:-average], data_ipl[average:-average])
+            try:
+                md1[i + w_range] = mean_abs_diff_shifted(i, sim_ipl[average:-average], data_ipl[average:-average])
+            except ValueError: # pragma: no cover
+                print("ValueError:") # we can probably get rid of this.
+                print(f"mean_abs_diff_shifted({i}, sim_ipl[{average}:{-average}], data_ipl[{average}:{-average}])")
+                print(f"sim_ipl={sim_ipl.shape}, data_ipl=({data_ipl.shape})")
+                raise
             mask[i + w_range] = 0
         md1 += mask*max(md) # set unchecked to max
         del data_ipl, sim_ipl
@@ -499,6 +512,7 @@ def mean_abs_diff_shifted(x, a, b):
     This is meant as an optimized, slightly-modified replacement for the above subtract(x, a, b) function
     """
     assert a.shape == b.shape
+    assert len(a.shape) >= 2 #and a.shape[1] 
     roll_x = int(x)
     # simple case
     if roll_x == 0:
@@ -507,12 +521,32 @@ def mean_abs_diff_shifted(x, a, b):
     i1 = max(0, roll_x)
     i2 = min(roll_x + b.shape[1], b.shape[1])
     blen = i2 - i1 # length of section of b to be used
-    return np.mean(np.abs(a[:][0:blen] -  b[:][i1:i2]))
+    try:
+        return np.mean(np.abs(a[:, 0:blen] -  b[:, i1:i2]))
+    except ValueError:
+        print(f"np.mean(np.abs(a[:][0:{blen}] -  b[:][{i1}:{i2}])")
+        print(f"a.shape={a.shape} b={b.shape}")
+        raise
 
+def test_mad():
+
+    # mean_abs_diff_shifted(1, sim_ipl[30:-30], data_ipl[30:-30])
+    # sim_ipl=(5293, 8000), data_ipl=((5293, 8000))
+    sim_ipl = np.random.normal(size=(5293, 8000))
+    data_ipl = np.random.normal(size=(5293, 8000))
+    mean_abs_diff_shifted(1, sim_ipl[30:-30], data_ipl[30:-30])
+
+
+    for alen in (3, 10, 11, 100, 1000):
+        aa = np.random.normal(size=(alen, alen))
+        ab = np.random.normal(size=(alen, alen))
+        for sh in range(-alen+1, alen-1):
+            mean_abs_diff_shifted(sh, aa, ab)
 
 def main():
     test_running_mean()
     test_shift_ft_arr()
+    test_mad()
     #gen_or_load_cluttergram()
 
 if __name__ == "__main__":
