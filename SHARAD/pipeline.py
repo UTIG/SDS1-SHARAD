@@ -6,7 +6,7 @@ __history__ = {
     '1.1':
         {'date': 'July 7 2020',
          'author': 'Scott Kempf, UTIG',
-         'info': 'Detection is working.'}
+         'info': 'Detection is working.'},
     '1.0':
         {'date': 'October 9 2019',
          'author': 'Scott Kempf, UTIG',
