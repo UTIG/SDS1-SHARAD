@@ -322,23 +322,22 @@ def get_radar_stream(filename):
         # read header
         buff = fd.read(fmtlen)
         if len(buff) < fmtlen:
-            raise Exception("Unable to read %d bytes from %s."
+            raise IOError("Unable to read %d bytes from %s."
                             % (fmtlen, filename))
-
-# ****************************************************************************            
-#        return 'RADnh3'
 
         # TODO: This check should only  happen once, not every read!!
         # Check it then set a flag and move the file pointer back to the start!
         # Check the version byte and see if it is RADnh3 or RADnh5
-        v = buff[6]
+        try:
+            v = ord(buff[6]) # python 2
+        except TypeError:
+            v = int(buff[6]) # python 3
         if v == 5:
             return "RADnh5"
         elif v == 0 or v == 255:
             return "RADnh3"
         else:
-            raise Exception("Can't determine stream for file %s" % filename)
-# ****************************************************************************
+            raise ValueError("Can't determine stream for file %s" % filename)
 
 # Read individual traces out of RADnh3 or RADnh5 file
 # TODO: This doesn't yet filter on channels, which should be OK - the
