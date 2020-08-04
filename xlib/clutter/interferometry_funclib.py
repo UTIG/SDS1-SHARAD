@@ -72,7 +72,7 @@ def load_and_trim(infile, trim, nsamp=3200):
     fsamples = fbytes // 4
     ncols = fsamples // nsamp
     fullbytes = ncols * nsamp * 4
-    if fullbytes != fbytes:
+    if fullbytes != fbytes: # pragma: no cover
         msg = "{:s} has extra bytes -- {:d} traces" \
               " + {:d} extra bytes, {:d} bytes total".format(infile, ncols, fbytes - fullbytes, fbytes)
         logging.warning(msg)
@@ -87,14 +87,29 @@ def load_and_trim(infile, trim, nsamp=3200):
 def test_load_marfa():
     line = 'DEV2/JKB2t/Y81a'
     path = '/disk/kea/WAIS/targ/xtra/SRH1/FOC/Best_Versions/S4_FOC'
-    mag, phs = load_marfa(line, '1', pth=path)
+    mag0, phs0 = load_marfa(line, '1', pth=path)
 
-    assert mag.shape == phs.shape
+    assert mag0.shape == phs0.shape
 
     # Test a file that has a bad length
     line = 'ICP10/JKB2u/F01T01a'
     path = '/disk/kea/WAIS/targ/xtra/ICP10/FOC/Best_Versions/S4_FOC'
     mag, phs = load_marfa(line, '1', pth=path)
+    return mag0, phs0
+
+def test_stacked_power_image(mag, phs):
+    logging.info("test_stacked_power_image()")
+    assert mag.shape == phs.shape
+    cmpA = convert_to_complex(mag, phs)
+    cmpB = convert_to_complex(mag, -phs)
+    rollphase = np.random.normal(loc=0, scale=0.1, size=(cmpA.shape[1],))
+    for fresnel_stack in (1, 4, 15):
+        for method in ('averaged', 'summed'):
+            _ = stacked_power_image(mag, phs, mag, phs, fresnel_stack, method)
+
+            _ = stacked_correlation_map(cmpA, cmpB, fresnel_stack)
+            _ = stacked_interferogram(cmpA, cmpB, fresnel_stack, rollphase)
+
 
 
 def load_S2_bxds(pth, channel, nsamp=3200):
@@ -183,7 +198,7 @@ def load_pik1(line, channel, pth='./Test Data/MARFA/', nsamp=3200, IQ='mag'):
         data = np.transpose(np.reshape(data, (ncol, nsamp))) / 10000
     elif IQ == 'phs':
         data = np.transpose(np.reshape(data, (ncol, nsamp))) / 2**24
-    else: # pragma: no-cover
+    else: # pragma: no cover
         raise ValueError("Invalid value for IQ: '{:s}'".format(IQ))
 
     return data
@@ -407,7 +422,7 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
 
     # make sure the new trace spacing passed is odd
     if fresnel % 2 != 1:
-        frensel -= 1
+        fresnel -= 1
 
     # calculate correlation map and average (multi-look) if desired
     if fresnel != 1:
@@ -799,7 +814,7 @@ def test_frequency_shift(plot=False):
                     plt.legend()
                     plt.grid(True)
 
-                if plot:
+                if plot: # pragma: no cover
                     plt.show()
 
 
@@ -866,7 +881,7 @@ def test_interpolate(bplot=False):
                 #assert (np.abs(stats0 - stats1) < 1e-3).all()
                 assert (np.abs(stats1 - stats2) < 1e-2).all()
                 #assert (np.abs(statso - stats2) < 1e-3).all()
-            except AssertionError:
+            except AssertionError: # pragma: no cover
                 logging.error("statso = " + str(statso))
                 logging.error("stats0 = " + str(stats0))
                 logging.error("stats1 = " + str(stats1))
@@ -875,7 +890,7 @@ def test_interpolate(bplot=False):
 
             try:
                 assert rms3 < 5e-4
-            except AssertionError:
+            except AssertionError: # pragma: no cover
                 logging.error("repeatsize={:d} ifactor={:d} RMS interpolation "
                               "difference: {:f} (limit {:f})".format(repeatsize, ifactor, rms3, 5e-4))
                 bplot = True
@@ -981,7 +996,7 @@ def coregister(cmp_a, cmp_b, orig_sample_interval, upsample_factor, shift, metho
             subsampA = frequency_interpolate(data_a, upsample_factor)
             subsampB = frequency_interpolate(data_b, upsample_factor)
 
-            if method & 0x1 or jj > 0:
+            if (method & 0x1) or jj > 0:
                 # perform normalization for adaptive windowing,
                 # or if requested with feature bit flags.
                 subsampA, subsampB = norm_radargrams(subsampA, subsampB)
@@ -1076,7 +1091,7 @@ def test_coregistration():
         # orig_sample_interval is unused; TODO: remove
         for ifactor in range(1, 2, 4):
             for method in (0, 7):
-                _ = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=ifactor)
+                _ = coregistration(cmpa, cmpb, orig_sample_interval=None, upsample_factor=ifactor, method=method)
 
 
 def read_ztim(filename, field_names=None):
@@ -1305,12 +1320,8 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     logging.debug("sigwin = " + str(sigwin))
 
     # load the bxds datasets
-    if gain == 'low':
-        chans = ['5', '7']
-    elif gain == 'high':
-        chans = ['6', '8']
-    else:
-        raise ValueError('Unknown gain ' + gain)
+    chanlist = {'low': ['5', '7'], 'high': ['6', '8']}
+    chans = chanlist[gain]
 
     # TODO: reduce max mem usage by streaming
 
@@ -1393,8 +1404,13 @@ def test_load_power_image():
     trim = [0, 1000, 0, 0]
     #chirpwin = [0, 200]
     fresnel_stack = 15
+    method = 'summed'
 
     for line in ('DEV2/JKB2t/Y81a/', 'DEV2/JKB2t/Y81a'): # allow either
+        img = load_power_image(line, '1', trim, fresnel_stack, method, pth=path)
+
+    line = 'DEV2/JKB2t/Y81a'
+    for fresnel_stack in (1, 2, 15):
         for method in ('averaged','summed'):
             img = load_power_image(line, '1', trim, fresnel_stack, method, pth=path)
 
@@ -1420,7 +1436,6 @@ def dechirp(trace, refchirp, do_cinterp, output_samples=3200, detrend='linear'):
     trace = np.roll(trace, -shifter)
 
     if detrend:
-        #DFT = np.fft.fft(trace)
         DFT = np.fft.fft(signal.detrend(trace, type=detrend))
     else:
         DFT = np.fft.fft(trace)
@@ -1476,8 +1491,7 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
         ii = 1
         if ii == 1:
         #for ii in range(np.size(data, axis=1)):
-            Cxy, f = signal.coherence(np.angle(reference),
-                                      np.angle(data[:, ii]), fs,
+            Cxy, f = signal.coherence(np.angle(reference), np.angle(data[:, ii]), fs,
                                       nperseg=len(reference))
     elif method == 'xcorr':
 
@@ -1509,7 +1523,7 @@ def chirp_phase_stability(reference, data, method='coherence', fs=50E6, rollval=
             C[ii] = np.argmax(R) - N
 
 
-    else: # pragma: no-cover
+    else: # pragma: no cover
         raise ValueError('Unrecognized method {:s}'.format(method))
 
     return C
@@ -1639,9 +1653,7 @@ def complex_correlation_coefficient(cmp1, cmp2):
 
     tempA = np.mean(np.multiply(cmp1, np.conj(cmp2)))
     tempB = np.sqrt(np.multiply(np.mean(np.square(np.abs(cmp1))), np.mean(np.square(np.abs(cmp2)))))
-    out = np.divide(tempA, tempB)
-
-    return out
+    return np.divide(tempA, tempB)
 
 def azimuth_pixel2pixel_coherence(data, FOI, roll_range=100, ft_step=1):
     '''
@@ -1940,7 +1952,10 @@ def main():
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout)
-    test_load_marfa()
+
+    magphs = test_load_marfa()
+    test_stacked_power_image(*magphs)
+    del magphs
 
     test_load_pik1()
     test_raw_bxds_load()
