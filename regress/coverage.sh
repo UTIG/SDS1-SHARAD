@@ -30,7 +30,7 @@ export DISPLAY=""
 
 rm -rf ./covdata/
  
-$COV run $FLAGS ../xlib/clutter/parse_channels.py
+$COV run $FLAGS ../xlib/clutter/parse_channels.py > /dev/null
 
 ######################################
 # Run placeholders
@@ -38,6 +38,7 @@ $COV run $FLAGS ../xlib/clutter/parse_channels.py
 for NAME in ../SHARAD/pipeline.py ../SHARAD/data_visualization.py ../SHARAD/run_ranging.py \
 ../xlib/clutter/unfoc_KMS2.py
 do
+    echo "$S0: Running $NAME -h"
     $COV run $FLAGS -a $NAME -h > /dev/null
 done
 $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
@@ -69,7 +70,7 @@ $COV run $FLAGS -a ../xlib/rdr/solar_longitude.py
 $COV run $FLAGS -a ../xlib/misc/prog_test.py
 
 echo $S0: CMD $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
-$COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
+$COV run $FLAGS -a  ../SHARAD/SHARADEnv.py > /dev/null
 
 echo $S0: CMD $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py
 $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py -o ./covdata/
@@ -125,7 +126,8 @@ nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --ofmt none --output ./covdata/rsr_
 
 echo "$S0: run_ranging"
 $COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 4 --jobs 1 -n
-$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 4 --jobs 1
+$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 4 --jobs 4
+$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 2 --jobs 1
 
 
 echo "$S0: interferometry"
