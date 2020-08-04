@@ -32,11 +32,17 @@ import os
 
 import numpy as np
 from scipy.signal import detrend
-import pyfftw
-pyfftw.interfaces.cache.enable()
-#import pcheck
+try:
+    # DataQuestions#324 - pyfftw vs scipy.fft
+    import scipy
+    _ = scipy.fft.fft2 # AttributeError if old version
+    use_pyfftw = False
+except AttributeError:
+    import pyfftw
+    pyfftw.interfaces.cache.enable()
+    use_pyfftw = True
 
-WAIS=os.getenv('WAIS', '/disk/kea/WAIS')
+WAIS = os.getenv('WAIS', '/disk/kea/WAIS')
 
 import unfoc_KMS2 as unfoc
 
@@ -788,18 +794,20 @@ def filter_ra_gen(bxds_input, geo_path, DX, MS, NR, NRr, channel, snm=None,
                 #      Interpolate on sampling frequency and harmonic
                 #      Filter as a Dot-Product
                 #      2D IFFT
-                F = pyfftw.interfaces.numpy_fft.fft2(detrend(signal, 0),[MS1, NRb])
+                myfft2 = pyfftw.interfaces.numpy_fft.fft2 if use_pyfftw else scipy.fft.fft2
+                myifft2 = pyfftw.interfaces.numpy_fft.ifft2 if use_pyfftw else scipy.fft.ifft2
+                F = myfft2(detrend(signal, 0),[MS1, NRb])
 
                 if not undersamp:
                     # Don't cinterp downcoverted radars
                     # New LO leakage removal code (measure on bottom 1/4 of the data)
                     # This probably only works on 3200 sample data and a 10 MHz leak
-                    Fs = pyfftw.interfaces.numpy_fft.fft2(signal[MS1-800-1:MS1-1],[800-1,NRb])
+                    Fs = myfft2(signal[MS1-800-1:MS1-1],[800-1,NRb])
                     #FIXME I think Matlab dfts and python dfts look different
                     F[2561-1,:] = F[2561-1,:] - 4*Fs[641-1,:]
 
                 F = Filter * F
-                signal = pyfftw.interfaces.numpy_fft.ifft2(F,[MS1,NRb]) # .astype(int)
+                signal = myifft2(F,[MS1,NRb]) # .astype(int)
 
                 # No more shifting
                 #signal = shift(signal,shifter);
