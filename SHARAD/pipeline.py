@@ -13,6 +13,7 @@ __history__ = {
          'info': 'First release.'}
 }
 
+# TODO: Make it not a state machine like, options in any order
 # TODO: handle "srf"
 # TODO: Call processors.
 # TODO: Parameters for SAR processing (these could change the output path).
@@ -179,10 +180,13 @@ def main():
             for attr in prod:
                 if (attr[0] == "Name"):
                     logging.info("Considering: " + attr[1])
+            for attr in prod:
                 if (attr[0] == "InPrefix"):
                     prefix = attr[1] + '/'
+            for attr in prod:
                 if (attr[0] == "Indir"):
                     indir = os.path.join(path_outroot, prefix, path_file, attr[1])
+            for attr in prod:
                 if (attr[0] == "Input"):
                     # FIXME: This might be better if absolute paths are detected
                     if (attr[1] == '_a.dat' or attr[1] == '_s.dat'):
@@ -190,16 +194,20 @@ def main():
                     else:
                          infile = os.path.join(indir, data_file+attr[1])
                     intimes.append(getmtime(infile))
+            for attr in prod:
                 if (attr[0] == "Processor"):
                     proc = attr[1]
                     intimes.append(getmtime(attr[1]))
+            for attr in prod:
                 if (attr[0] == "Library"):
                     if (not args.ignorelibs):
                         libfile = os.path.join('../',attr[1])
                         intimes.append(getmtime(libfile))
+            for attr in prod:
                 if (attr[0] == "Prefix"):
                     # Must come before Outdir
                     prefix = attr[1] + '/'
+            for attr in prod:
                 if (attr[0] == "Outdir"):
                     # Must come before Output
                     outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
