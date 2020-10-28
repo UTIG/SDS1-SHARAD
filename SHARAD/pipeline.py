@@ -241,9 +241,9 @@ def main():
                     print(output)
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
-                    cmd = './' + proc + ' --tracklist ' + temp
-                    subprocess.run(cmd)
-                    os.exit(1)
+                    subprocess.run(['./' + proc, '--tracklist', temp, '-o', path_outroot])
+                    os.unlink(temp)
+                    sys.exit(1)
 
         else:
             logging.debug('File already processed. Skipping ' + infile)
