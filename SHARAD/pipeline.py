@@ -13,11 +13,11 @@ __history__ = {
          'info': 'First release.'}
 }
 
-# TODO: Make it not a state machine like, options in any order
 # TODO: handle "srf"
 # TODO: Call processors.
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
+# TODO: Sandbox mode
 # TODO: Parallelism
 
 import sys
@@ -33,6 +33,7 @@ import re
 import numpy as np
 #from scipy.optimize import curve_fit
 import pandas as pd
+import subprocess
 
 # TODO: make this import more robust to allow this script
 # TODO: to be run from outside the SHARAD directory
@@ -40,6 +41,7 @@ sys.path.insert(0, '../xlib')
 #import misc.hdf
 import cmp.pds3lbl as pds3
 import cmp.plotting
+import tempfile
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -108,12 +110,18 @@ Processors = [
     ],
 ]
 
+def temptracklist(infile):
+    temp = tempfile.NamedTemporaryFile(mode='w+',delete=False)
+    temp.write(infile+'\n')
+    temp.close()
+    return temp.name
+
 def getmtime(path):
     try:
         mtime = os.path.getmtime(path)
     except OSError:
         mtime = -1
-    return (mtime,path)
+    return mtime,path
 
 
 def main():
@@ -231,8 +239,12 @@ def main():
                     else:
                         print('Ready to process (old output).')
                     print(output)
-                    logging.debug("Adding " + infile)
-                    process_list.append(infile)  #FIXME
+                    logging.debug("Processing " + infile)
+                    temp = temptracklist(infile)
+                    cmd = './' + proc + ' --tracklist ' + temp
+                    subprocess.run(cmd)
+                    os.exit(1)
+
         else:
             logging.debug('File already processed. Skipping ' + infile)
 
