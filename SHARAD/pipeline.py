@@ -18,6 +18,8 @@ __history__ = {
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
 # TODO: Sandbox mode
+# TODO: Single step
+# TODO: Use max tracks arg
 # TODO: Parallelism
 
 import sys
@@ -198,10 +200,10 @@ def main():
                 if (attr[0] == "Input"):
                     # FIXME: This might be better if absolute paths are detected
                     if (attr[1] == '_a.dat' or attr[1] == '_s.dat'):
-                         infile = os.path.join(SHARADroot,path_file,data_file+attr[1])
+                         oneinput = os.path.join(SHARADroot,path_file,data_file+attr[1])
                     else:
-                         infile = os.path.join(indir, data_file+attr[1])
-                    intimes.append(getmtime(infile))
+                         oneinput = os.path.join(indir, data_file+attr[1])
+                    intimes.append(getmtime(oneinput))
             for attr in prod:
                 if (attr[0] == "Processor"):
                     proc = attr[1]
@@ -241,6 +243,7 @@ def main():
                     print(output)
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
+                    logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + path_outroot)
                     subprocess.run(['./' + proc, '--tracklist', temp, '-o', path_outroot])
                     os.unlink(temp)
                     sys.exit(1)
