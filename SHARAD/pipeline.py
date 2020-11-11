@@ -136,11 +136,13 @@ def main():
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
     parser.add_argument('-n', '--dryrun', action="store_true",
-                        help="Dry run. Build task list but do not run")
+                        help="Dry run. Build task list but do not run (NOT WORKING)")
     parser.add_argument('--tracklist', default="elysium.txt",
                         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0,
-                        help="Maximum number of tracks to process")
+                        help="Maximum number of tracks to process (NOT WORKING)")
+    parser.add_argument('-1', '--once', action="store_true",
+                        help="Just run one subprocess and exit.")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on libraries")
     parser.add_argument('--ignoretimes', action='store_true',
@@ -244,9 +246,11 @@ def main():
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
                     logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + path_outroot)
-                    subprocess.run(['./' + proc, '--tracklist', temp, '-o', path_outroot])
+                    subprocess.run(['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix)])
                     os.unlink(temp)
-                    sys.exit(1)
+                    if args.once:
+                        logging.info("Only one process request.  Quiting.")
+                        sys.exit(1)
 
         else:
             logging.debug('File already processed. Skipping ' + infile)
