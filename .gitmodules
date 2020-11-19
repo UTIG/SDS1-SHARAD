@@ -1,0 +1,6 @@
+[submodule "xlib/rsr"]
+	path = xlib/rsr
+	url = https://github.com/cgrima/rsr.git
+[submodule "xlib/subradar"]
+	path = xlib/subradar
+	url = https://github.com/cgrima/subradar.git

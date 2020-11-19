@@ -1,19 +1,25 @@
-TODO: write some more information
+# Getting SDS
 
-Be sure to run xlib/checkout to check out the correct revisions of Cyril's dependencies from github
+`SDS` uses submodules, so be sure to check out with the recursive option, such as:
 
-
-# Environment
-
-To setup your environment, including path, run
-
-$ source env/cshrc
+```
+git clone --recursive /disk/kea/SDS/repo/sds.git
+```
 
 # Dependencies
 
 pip Package dependencies:
 
 See `requirements.txt`.  To install, run
+
 ```
 pip install -r requirements.txt
+```
+
+# Environment
+
+Before you run code in SDS, in each terminal, to setup your environment, including path, run
+
+```
+$ source env/cshrc
 ```
