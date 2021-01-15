@@ -71,7 +71,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True,
 
     # Load data
 
-    orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
+    orbit_full = orbit if orbit.find('_') == 1 else senv.orbit_to_full(orbit)
 
     logging.debug('PROCESSING: Surface echo extraction for ' + orbit_full)
 
@@ -135,7 +135,7 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True,
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
 
-        if typ is 'cmp':
+        if typ == 'cmp':
             archive_path = os.path.join(senv.out['srf_path'],
                     orbit_info['relpath'], typ)
         else: # pragma: no cover
@@ -206,7 +206,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
         senv = SHARADEnv.SHARADEnv()
 
     # This should be done in aux_data?
-    orbit_full = orbit if orbit.find('_') is 1 else senv.orbit_to_full(orbit)
+    orbit_full = orbit if orbit.find('_') == 1 else senv.orbit_to_full(orbit)
 
     # Surface amplitudes
     surf = surface_amp(senv, orbit, gain=gain, **kwargs)
@@ -235,7 +235,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
         # orbit_info = senv.get_orbit_info(orbit_full, True)
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
-        if typ is 'cmp':
+        if typ == 'cmp':
             archive_path = os.path.join(senv.out['rsr_path'],
                     orbit_info['relpath'], typ)
         else: # pragma: no cover
