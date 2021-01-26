@@ -1,9 +1,7 @@
 # Getting SDS
 
-`SDS` uses submodules, so be sure to check out with the recursive option, such as:
-
 ```
-git clone --recursive /disk/kea/SDS/repo/sds.git
+git clone /disk/kea/SDS/repo/sds.git
 ```
 
 # Dependencies
