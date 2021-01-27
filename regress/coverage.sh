@@ -43,21 +43,12 @@ do
 done
 $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
 
-# TODO: These have import statements that I can't seem to make work.
-# TODO: ../xlib/sar/sar.py
-# TODO: ../xlib/subradar/iem.py
-# TODO: ../xlib/subradar/invert.py
-# TODO: ../subradar/utils.py
-# TODO: ../xlib/rsr/fit.py
-# TODO: ../xlib/rsr/run.py
-# rot and trafos also have
-
 for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py \
 ../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
 ../xlib/clutter/peakint.py \
 ../xlib/misc/coord.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
-../xlib/subradar/roughness.py ../xlib/rng/icsim.py ../xlib/rot/mars.py \
-../xlib/rsr/pdf.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
+../xlib/rng/icsim.py \
+../xlib/rot/mars.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
 do
     $COV run $FLAGS -a $NAME
 done
