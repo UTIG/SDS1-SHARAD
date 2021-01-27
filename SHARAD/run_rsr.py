@@ -116,18 +116,31 @@ def surface_amp(senv, orbit, typ='cmp', ywinwidth=[-100,100], gain=0, sav=True,
     # Archive
     # TODO: def archive_surface_amp(senv, orbit, srf_data)
 
-    out = { 'EPHEMERIS_TIME':aux['EPHEMERIS_TIME'],
-            'SUB_SC_PLANETOCENTRIC_LATITUDE':aux['SUB_SC_PLANETOCENTRIC_LATITUDE'],
-            'SUB_SC_EAST_LONGITUDE':aux['SUB_SC_EAST_LONGITUDE'],
-            'SOLAR_ZENITH_ANGLE':aux['SOLAR_ZENITH_ANGLE'],
-            'SOLAR_LONGITUDE':aux['SOLAR_LONGITUDE'],
-            'SPACECRAFT_ALTITUDE':aux['SPACECRAFT_ALTITUDE'],
-            'SC_ROLL_ANGLE':aux['SC_ROLL_ANGLE'],
-            'surf_y':surf_y,
-            'surf_amp':surf_amp,
-            'surf_pow':20*np.log10(surf_amp),
-            }
-    out = pd.DataFrame(data=out)
+    columns = ['EPHEMERIS_TIME',
+               'SUB_SC_PLANETOCENTRIC_LATITUDE',
+               'SUB_SC_EAST_LONGITUDE',
+               'SOLAR_ZENITH_ANGLE',
+               'SOLAR_LONGITUDE',
+               'SPACECRAFT_ALTITUDE',
+               'SC_ROLL_ANGLE',
+               'surf_y',
+               'surf_amp',
+               'surf_pow']
+
+    values = [aux['EPHEMERIS_TIME'],
+              aux['SUB_SC_PLANETOCENTRIC_LATITUDE'],
+              aux['SUB_SC_EAST_LONGITUDE'],
+              aux['SOLAR_ZENITH_ANGLE'],
+              aux['SOLAR_LONGITUDE'],
+              aux['SPACECRAFT_ALTITUDE'],
+              aux['SC_ROLL_ANGLE'],
+              surf_y,
+              surf_amp,
+              20*np.log10(surf_amp),
+             ]
+    
+    out = pd.DataFrame(values).transpose()
+    out.columns = columns
 
     if sav is True:
         #k = p['orbit_full'].index(orbit_full)
