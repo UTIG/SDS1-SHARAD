@@ -11,7 +11,6 @@ __history__ = {
 import subprocess
 import logging
 import sys
-import gdal
 import json
 import re
 import argparse
@@ -20,6 +19,7 @@ import time
 from scipy.constants import c, pi
 import numpy as np
 import matplotlib.pyplot as plt
+from osgeo import gdal
 
 # Add the parent directory of icsim.py  so we can import the below
 from pathlib import Path

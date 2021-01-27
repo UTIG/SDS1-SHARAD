@@ -13,4 +13,11 @@ setenv PATH /disk/kea/SDS/syst/ext/bin:$PATH
 
 #setenv PATH $WAIS/syst/ext/linux/bin:$WAIS/syst/linux/bin:/usr/local/anaconda3:$PATH
 
+if ( "$1" == "" ) then
+    setenv LD_LIBRARY_PATH $SDS/syst/ext/lib
+else
+    setenv LD_LIBRARY_PATH $SDS/syst/ext/lib:${LD_LIBRARY_PATH}
+endif
+
+
 rehash
