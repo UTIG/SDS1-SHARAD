@@ -12,15 +12,15 @@ import numpy as np
 # peak finding algorithm (qint.m)
 # https://ccrma.stanford.edu/~jos/sasp/Matlab_listing_qint_m.html
 def qint3(ym1, y0, yp1):
-    """ 
+    """
     QINT   Quadratic interpolation of 3 uniformly spaced samples
     Returns the extremum location p, height y, and half-curvature
     of a parabolic fit through 3 points.
 
     %       returns extremum-location p, height y, and half-curvature a
-    %       of a parabolic fit through three points. 
-    %       The parabola is given by y(x) = a*(x-p)^2+b, 
-    %       where y(-1)=ym1, y(0)=y0, y(1)=yp1. 
+    %       of a parabolic fit through three points.
+    %       The parabola is given by y(x) = a*(x-p)^2+b,
+    %       where y(-1)=ym1, y(0)=y0, y(1)=yp1.
 
     given y[m] == max(y) for discretely sampled signal y
 
@@ -28,7 +28,7 @@ def qint3(ym1, y0, yp1):
     p is the value of x at the extremum (min or max)
     y is the value of the signal at y(p)
     a is the half-curvature of a parabolic fit through these three points
-    
+
     """
 
     p = (yp1 - ym1)/(2*(2*y0 - yp1 - ym1))
@@ -120,7 +120,7 @@ def test_qint():
     eps = 1e-6
 
     testdata = [
-        [0.5, 1.0, 2.0, 1.0, 0.5], 
+        [0.5, 1.0, 2.0, 1.0, 0.5],
         [0.5, 2.0, 1.0, 1.0, 0.5],
         # This fails equivalence if equal max values
         #[2.0, 2.0, 1.0, 1.0, 0.5],

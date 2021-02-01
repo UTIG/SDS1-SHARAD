@@ -32,7 +32,7 @@ import rng.icsim as icsim
 import clutter.peakint as peakint
 
 def gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
-                aux_path, label_aux, idx_start, idx_end, 
+                aux_path, label_aux, idx_start, idx_end,
                 debug = False, ipl = False, #window = 50,
                 #average = 30,
                 cluttergram_path=None, save_clutter_path=None,
@@ -85,7 +85,7 @@ def gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
         # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
         sim = icsim.incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end,
                                    do_progress=do_progress, maxechoes=maxechoes).transpose()
-        if save_clutter_path is not None: 
+        if save_clutter_path is not None:
             logging.debug("Saving cluttergram to " + save_clutter_path)
             np.save(save_clutter_path, sim)
     else:
@@ -94,8 +94,8 @@ def gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
     return sim
 
 
-def icd_ranging_2(cmp_data_sliced, sim_data_sliced, idx_start, idx_end, 
-                debug=False, ipl=False, window=50, 
+def icd_ranging_2(cmp_data_sliced, sim_data_sliced, idx_start, idx_end,
+                debug=False, ipl=False, window=50,
                 average=30, co_sim=10, co_data=30,
                 cluttergram_path=None, save_clutter_path=None,
                 do_progress=False):
@@ -110,8 +110,8 @@ def icd_ranging_2(cmp_data_sliced, sim_data_sliced, idx_start, idx_end,
 
 
 def icd_ranging(cmp_path, dtm_path, science_path, label_science,
-                aux_path, label_aux, idx_start, idx_end, 
-                debug = False, ipl = False, window = 50, 
+                aux_path, label_aux, idx_start, idx_end,
+                debug = False, ipl = False, window = 50,
                 average = 30, co_sim = 10, co_data = 30,
                 cluttergram_path=None, save_clutter_path=None,
                 do_progress=False, maxechoes=0):
@@ -139,10 +139,10 @@ def icd_ranging(cmp_path, dtm_path, science_path, label_science,
     idx_start: integer
         start index for xover
     idx_end: integer
-        end index for xover  
+        end index for xover
     do_progress: boolean
         Show progress bar to console if true
-        
+
     Output
     ------
     delta
@@ -154,8 +154,8 @@ def icd_ranging(cmp_path, dtm_path, science_path, label_science,
 
 
     sim = gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
-                aux_path, label_aux, idx_start, idx_end, 
-                debug = debug, ipl=ipl, #window=window, 
+                aux_path, label_aux, idx_start, idx_end,
+                debug = debug, ipl=ipl, #window=window,
                 #average=average, co_sim=co_sim, co_data=co_data,
                 cluttergram_path=cluttergram_path, save_clutter_path=save_clutter_path,
                 do_progress=do_progress, maxechoes=maxechoes)
@@ -202,7 +202,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
     idx_start: integer
         start index for xover
     idx_end: integer
-        end index for xover  
+        end index for xover
     do_progress: boolean
         Show progress bar to console if true
 
@@ -260,7 +260,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
     # can we assert len(sim) == idx_end - idx_start now?
 
     # Free memory - science data not needed anymore
-    
+
     try:
         #assert 0 < power_db.shape[0] <= len(rxwot)
         #assert 0 < sim.shape[0] <= len(rxwot)
@@ -278,7 +278,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
 
     # TODO: document which axis of data is slow time and which is fast time
     # In data and avg, axis 0 is slow time, axis 1 is fast time
- 
+
     # Perform correlation
 
     logging.debug("icd_ranging: Cut noise floor")
@@ -501,7 +501,7 @@ def mean_abs_diff_rolled(x, a, b):
     #----------------------------------------
     #return np.mean(diff_ab)
     return sumdiff / float(a.shape[0]*a.shape[1])
- 
+
 def mean_abs_diff_shifted(x, a, b):
     """ Compute the mean absolute difference (MAD) of two arrays
     while shifting the second array by x in the 2nd dimension.
@@ -512,7 +512,7 @@ def mean_abs_diff_shifted(x, a, b):
     This is meant as an optimized, slightly-modified replacement for the above subtract(x, a, b) function
     """
     assert a.shape == b.shape
-    assert len(a.shape) >= 2 #and a.shape[1] 
+    assert len(a.shape) >= 2 #and a.shape[1]
     roll_x = int(x)
     # simple case
     if roll_x == 0:

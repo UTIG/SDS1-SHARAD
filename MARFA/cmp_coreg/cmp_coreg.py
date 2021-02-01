@@ -42,7 +42,7 @@ def organize_subdirs(rootdir):
         info['ifactor'] = int(m.group(2), 10)
 
         # Search for coregistration data file
-        logging.info("Processing " + path)
+        logging.info("Processing %s", path)
         cfiles = glob.glob(os.path.join(path, '*_AfterCoregistration.npz'))
         assert len(cfiles) == 1
         info['coregnpz'] = cfiles[0]
@@ -136,7 +136,7 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
                 ax_all.plot(x, y, label="method {:d}, ifactor {:d}".format(info['method'], info['ifactor']), linewidth=1, alpha=0.8)
                 jj = ifvals.index(info['ifactor'])
                 rho = coregdata[name]['qual2'].T
-                rho = (rho - np.min(rho)) 
+                rho = (rho - np.min(rho))
                 # left right bottom top
                 print("rho.shape {:s}: {:s}".format(name, str(rho.shape)))
                 extent = (0, xmax, 0, rho.shape[0] / ifactor)
@@ -208,12 +208,12 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
     for ii, (fig2, fig3) in enumerate(rhofigs):
         name = "rho_method{:d}.png".format(ii)
         fig3.savefig(name, dpi=300)
-        logging.info("Saved " + name)
+        logging.info("Saved %s", name)
     #####################################
 
 
 
-    logging.info("Setting y limits to " + str(rangey))
+    logging.info("Setting y limits to %s", str(rangey))
     for ax in rhoplots:
         ax.set_ylim(*rangey)
         # limit x range to first part for checking)
@@ -229,7 +229,7 @@ def diffshift(coregdata, datadict, name0, methods=[0, 1, 2]):
         fig3.savefig(name, dpi=300)
         name = "stats_method{:d}.png".format(ii)
         fig2.savefig(name, dpi=300)
-        logging.info("Saved " + name)
+        logging.info("Saved %s", name)
 
 
 
@@ -359,7 +359,7 @@ def main():
     #compare_all(interferograms, names)
 
 
-    
+
 
     plt.show()
 

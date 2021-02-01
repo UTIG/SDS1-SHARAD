@@ -171,7 +171,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         logging.debug("{:s}: Loading cmp data from {:s}".format(taskname, cmp_path))
 
         # load the range compressed and ionosphere corrected data
-        
+
         real = np.array(pd.read_hdf(cmp_path, 'real'))
         imag = np.array(pd.read_hdf(cmp_path, 'imag'))
         cmp_track = real + 1j * imag
@@ -353,9 +353,9 @@ def main():
 
     # set SAR processing variables as a dictionary
     focuser_names = {
-        'ddv1': 'Delay Doppler v1', 
+        'ddv1': 'Delay Doppler v1',
         'mf': 'Matched Filter',
-        'ddv2': 'Delay Doppler v2', 
+        'ddv2': 'Delay Doppler v2',
     }
     focuser = focuser_names[args.focuser]
     processing_parameters = { # default processing parameters
@@ -381,7 +381,7 @@ def main():
             except json.decoder.JSONDecodeError as e:
                 logging.error("Problem parsing {:s}".format(args.params))
                 raise e
-        
+
 
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
@@ -456,7 +456,7 @@ def main():
             # 1-BIT SAR TESTING ########
             '12945': [40000, 120000],
             '17481': [    0,  25000],
-            
+
             ## WESTERN ALBA MONS #######
             '03512': [    0,  10688],
             '04774': [    0,   1844],
@@ -509,7 +509,7 @@ def main():
             '33955': [58861, 101988],
             '33968': [89735, 103246],
             '35788': [87061, 130208],
-            '36645': [56635,  99770], 
+            '36645': [56635,  99770],
             '36658': [89772, 106969],
             '36671': [89838, 132949],
             '37944': [15763,  58861],

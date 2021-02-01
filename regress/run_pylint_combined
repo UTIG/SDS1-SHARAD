@@ -27,7 +27,6 @@ fi
 S0=`basename $0`
 
 PYLINT='python3 -m pylint'
-#PYLINT_FLAGS="superfluous-parens"
 #PYLINT_FLAGS="--reports=n --rcfile=/dev/null"
 
 

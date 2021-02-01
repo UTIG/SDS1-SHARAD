@@ -146,7 +146,7 @@ def get_minimums(arr):
     return minv, minidx
 """
 
-def vector_interp2(vect, t=None, type='linear'):
+def vector_interp2(vect, t=None, kind='linear'):
     '''
 
     TODO: rename as reconstruct_sample_hold
@@ -197,9 +197,6 @@ def vector_interp2(vect, t=None, type='linear'):
         #unix[ii] = np.round(np.mean([t3, t4]))
         #print("ii={:d} t3={:d} t4={:d}".format(ii,t3, t4))
     out = np.interp(np.arange(0, len_vect, 1), unix, v_uniq)
-    #print(vect)
-    #print(out)
-
 
     return out
 
@@ -217,7 +214,7 @@ def smooth(y, t=None, kind='linear', place='mid', epsilon=0.0):
     y: numpy array representing data samples acquired using sample-and-hold, to be reduced
     t: nupy array of time (independent variable) corresponding to y. If
        t is none, then t is internally generated to be the indices of y
-4~    kind: string
+    kind: string
         String defining type of interpolation to perform for smoothing.
         See scipy interp1d.
     place:

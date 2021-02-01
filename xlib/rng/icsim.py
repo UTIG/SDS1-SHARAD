@@ -15,6 +15,7 @@ import json
 import re
 import argparse
 import time
+from pathlib import Path
 
 from scipy.constants import c, pi
 import numpy as np
@@ -22,7 +23,6 @@ import matplotlib.pyplot as plt
 from osgeo import gdal
 
 # Add the parent directory of icsim.py  so we can import the below
-from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 #import cmp.pds3lbl as pds3
@@ -62,7 +62,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     Output:
     """
-    
+
     t0 = time.time()
     # Open DTM
     geotiff = gdal.Open(dtm_path)
@@ -74,7 +74,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # TODO: can we just load sections of the ROI?
 
     # Number of Rangelines
-    
+
     Necho = ROIstop-ROIstart
     Necho1 = min(Necho, maxechoes) if maxechoes else Necho
     # Derive pulse repetition frequency
@@ -137,8 +137,8 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     # Extract topography and simulate scattering
     logging.debug("incoherent_sim: setup elapsed time at {:0.3f} sec".format(time.time() - t0))
-    
-    
+
+
     # Calculate cartesian coordinates for all coordinates on the map being used.
     logging.debug("Precomputing cartesian coordinates of interest")
     dem_mask = np.zeros_like(dem, dtype=np.bool)
@@ -149,7 +149,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         _, _, aidx = argwhere_dtmgrid(dem.shape, lon_w, lon_e, lat_s, lat_n,
                                  CornerLats, CornerLons)
         dem_mask[aidx[0]:aidx[1], aidx[2]:aidx[3]] = True
-    
+
     # Calculate cartesian and generate a full spherical.
     dem_cart = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
     del dem, dem_mask
@@ -202,12 +202,12 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         # to maximize numerical stability/accuracy.
         # This step could be optional.
         iP = idxtop[np.argsort(P[idxtop])]
-        
+
         if pos == 0:
             tot_power = np.sum(P)
             used_power = np.sum(P[iP])
             logging.info("incoherent_sim: Using 20% of reflectors ({:d} total), got {:0.2f}% of power".format(len(P), used_power / tot_power * 100))
-        
+
         delay = delay[iP]     # sort top x% delays in ascending order of power
         P = P[iP]             # sort top x% powers in ascending order of power
         delay = np.mod(delay, trx) # wrap delay by radar receive window
@@ -634,8 +634,7 @@ def surfaspect(X, Y, Z, x0, y0, z0):
     Uz = XR*Xn + YR*Yn + ZR*Zn # Uz = dot(R, vn)
 
     return (la, lb, Ux, Uy, Uz, R)
-    
-    
+
 
 def surfaspect1(surf, p0):
     """
@@ -644,7 +643,7 @@ def surfaspect1(surf, p0):
     coordinates, and a point external to the surface, computes the size,
     orientation and distance of each portion of the discretized surface
     w.r.t. the external point p0=(x0, y0, z0)
-    
+
     surf is expected to be an N x M x 3 grid of point coordinates, where
     X = surf[:, :, 0] is the x coordinate of each point
     Y = surf[:, :, 1] is the y coordinate of each point
@@ -653,7 +652,7 @@ def surfaspect1(surf, p0):
 
     # Compute facet's vector along one axis: upper coordinates minus lower coordinates
     vb = np.empty(surf.shape)  # store upper coordinates in final result
- 
+
     # up minus down (position of point below minus point above)
     vb[0, :, :] = surf[0, :, :]      # up
     vb[1:, :, :] = surf[0:-1, :]     # up
@@ -668,7 +667,7 @@ def surfaspect1(surf, p0):
     va[:, -1, :] = surf[:, -1, :]     # right
     va[:, 0, :] -= surf[:,  0, :]     # left
     va[:, 1:, :] -= surf[:,  0:-1, :] # left
-         
+
     # Compute normal vector to each facet
     vn = np.cross(va, vb)
 
@@ -699,15 +698,13 @@ def surfaspect1(surf, p0):
     Uz = np.sum(PR*vn, axis=2)
 
     return (la, lb, Ux, Uy, Uz, R)
-    
-    
 
-    
+
 
 def GetCornerCoordinates2(FileName):
     """ Use gdalinfo to get corner coordinates, but use json format """
     cmd = ['gdalinfo', '-json', FileName]
-    logging.debug("GetCornerCoordinates: CMD: " + " ".join(cmd))
+    logging.debug("GetCornerCoordinates: CMD: %s", " ".join(cmd))
     resp = subprocess.check_output(cmd)
     try:
         gdal_info = json.loads(resp.decode())
@@ -727,9 +724,9 @@ def GetCornerCoordinates2(FileName):
 
 
 def GetCornerCoordinates(FileName):
-    # TODO: convert this to not use gdalinfo, but to do things natively?
+    """ TODO: convert this to not use gdalinfo, but to do things natively? """
     cmd = 'gdalinfo {}'.format(FileName)
-    logging.debug("GetCornerCoordinates: CMD:  " + cmd)
+    logging.debug("GetCornerCoordinates: CMD:  %s", cmd)
     GdalInfo = subprocess.check_output(cmd,
                                        shell=True)
     GdalInfo = GdalInfo.splitlines() # Creates a line by line list.
@@ -757,6 +754,7 @@ def GetCornerCoordinates(FileName):
     return CornerLats, CornerLons
 
 def test_GetCornerCoordinates1():
+    """ Check equivalence of GetCornerCoordinates"""
     import os
     dtm = os.path.join(os.getenv('SDS'), 'orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff') # example DTM file
     x1 = GetCornerCoordinates(dtm)
@@ -782,7 +780,7 @@ latlonpat = re.compile(r"""
     """
     , re.X) 
 def GetLatLon(line):
-    """ Parse latitude and longitude from gdalinfo line 
+    """ Parse latitude and longitude from gdalinfo line
 Corner Coordinates:
 Upper Left  (-1333625.000, 1778175.000) ( 22d30' 1.15"W, 30d 0' 2.04"N)
 Lower Left  (-1333625.000,     -25.000) ( 22d30' 1.15"W,  0d 0' 1.52"S)
@@ -808,7 +806,7 @@ Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)
 
 
 def test_latlon():
-    
+    """ Test GetLatLon """
     data = b"""Upper Left  (-1333625.000, 1778175.000) ( 22d30' 1.15"W, 30d 0' 2.04"N)
 Lower Left  (-1333625.000,     -25.000) ( 22d30' 1.15"W,  0d 0' 1.52"S)
 Upper Right (      25.000, 1778175.000) (  0d 0' 1.52"E, 30d 0' 2.04"N)
@@ -840,9 +838,9 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
 
     # Relative directory of this file
     reldir = os.path.dirname(os.path.relpath(inpath, path_root_edr))
-    logging.debug("inpath: " + inpath)
-    logging.debug("reldir: " + reldir)
-    logging.debug("path_root_edr: " + path_root_edr)
+    logging.debug("inpath: %s", inpath)
+    logging.debug("reldir: %s", reldir)
+    logging.debug("path_root_edr: %s", path_root_edr)
     cmp_path = os.path.join(path_root_cmp, reldir, 'ion', fname.replace('_a.dat','_s.h5') )
     label_science = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
     label_aux  = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
@@ -888,7 +886,7 @@ def test_surfaspect():
     """ TODO: test equivalence of surfaspect() and surfaspect1() """
 
 def main():
-    debug = True
+    """ Main test function """
     parser = argparse.ArgumentParser(description='Run SHARAD ranging processing')
     parser.add_argument('-o','--output', help="Output file for icsim test data")
     parser.add_argument('--tracklist', default="xover_idx.dat",

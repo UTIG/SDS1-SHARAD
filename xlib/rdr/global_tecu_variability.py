@@ -68,10 +68,10 @@ for ii in range(len(sza_centers)):
 
             TECU = []
             unique_orbits = 0
-            
+
             for root, dirs, files in os.walk(path_to_rdr):
                 for file in files:
-                    if file.endswith('.tab'): 
+                    if file.endswith('.tab'):
                         filename = os.path.join(root, file)
                         old_TECU_length = len(TECU)
                         with open(filename) as csvfile:
@@ -83,7 +83,7 @@ for ii in range(len(sza_centers)):
                                             TECU.append(float(row[9]) * 0.29)
                         if len(TECU) > old_TECU_length:
                             unique_orbits += 1
-                                            
+
             if len(TECU) > 0:
                 number_TECU[ii, jj, kk] = len(TECU)
                 mean_TECU[ii, jj, kk] = np.mean(TECU)
@@ -96,7 +96,7 @@ for ii in range(len(sza_centers)):
                 minimum_TECU[ii, jj, kk] = np.nan
                 maximum_TECU[ii, jj, kk] = np.nan
                 orbit_TECU[ii, jj, kk] = unique_orbits
-                
+
 #print('#:', number_TECU[ii, jj, kk])
 #print('Mean:', mean_TECU[ii, jj, kk])
 #print('Minimum:', minimum_TECU[ii, jj, kk])
@@ -104,12 +104,12 @@ for ii in range(len(sza_centers)):
 #print('Orbits:', orbit_TECU[ii, jj, kk])
 
 # save the results
-if full_area[0] < 0: 
-    A = 'M' + str(np.abs(full_area[0])); 
+if full_area[0] < 0:
+    A = 'M' + str(np.abs(full_area[0]));
 else:
     A = str(full_area[0])
 if full_area[1] < 0:
-    B = 'M' + str(np.abs(full_area[1])) 
+    B = 'M' + str(np.abs(full_area[1]))
 else:
     B = str(full_area[1])
 basename = 'GlobalTECU_Lat' + A + '-' + B + '_Long' + str(full_area[2]) + '-' + str(full_area[3])

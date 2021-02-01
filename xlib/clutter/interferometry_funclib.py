@@ -137,7 +137,7 @@ def load_S2_bxds(pth, channel, nsamp=3200):
     return bxds
 
 def find_S2_bxds(basepath, maxcount=None):
-    # basepath of the  form 
+    # basepath of the  form
     # /disk/kea/WAIS/targ/xtra
     # /disk/kea/WAIS/targ/xtra/GOG2/FOC/Best_Versions/S2_FIL/GDS/JKB2f/X2a/bxds2.i
     globpat = os.path.join(basepath, '*/FOC/Best_Versions/S2_FIL/*/*/*/bxds?.i')
@@ -158,7 +158,7 @@ def test_load_S2_bxds():
         assert len(bxds)
         if i >= 9: # only process the first 10 files
             break
-        
+
 
 
 
@@ -426,11 +426,11 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
 
     # calculate correlation map and average (multi-look) if desired
     if fresnel != 1:
-        
+
         #top = np.divide(stack(np.multiply(cmpA, np.conj(cmpB)), fresnel, datatype='complex'), fresnel)
         #bottomA = np.divide(stack(np.square(np.abs(cmpA)), fresnel), fresnel)
         #bottomB = np.divide(stack(np.square(np.abs(cmpB)), fresnel), fresnel)
-        
+
         # setup bounds for each multilook window (output range line in middle)
         indices = np.arange(np.floor(fresnel / 2) + 1, cmpA.shape[1], fresnel) - 1
         if cmpA.shape[1] - indices[-1] < np.floor(fresnel / 2):
@@ -719,7 +719,7 @@ def sinc_interpolate(data, orig_sample_interval, upsample_factor):
 
 
 def frequency_shift(data, upsample_factor, offset):
-    """ 
+    """
     Shift a vector by a sub-sample amount, by upsampling by upsample_factor and taking the offset
     function for interpolating a vector by padding the data in the frequency
     domain.
@@ -739,7 +739,7 @@ def frequency_shift(data, upsample_factor, offset):
     return subsamp_b[np.arange(0, len(subsamp_b), upsample_factor)] # subsamp_b[offset, len(subsamp_b), upsample_factor]
 
 def frequency_shift2(data, foffset):
-    """ 
+    """
     Shift a vector by a sub-sample amount, by upsampling by upsample_factor and taking the offset
     function for interpolating a vector by padding the data in the frequency
     domain.
@@ -864,7 +864,7 @@ def test_interpolate(bplot=False):
             sig_interp0 = np.interp(x2, x, sig_noise) # linear interpolation
             sig_interp1 = np.real(sinc_interpolate(sig_noise, osi, ifactor))
             sig_interp2 = np.real(frequency_interpolate(sig_noise, ifactor))
-    
+
             rms1 = np.sqrt(np.square(abs(sig_interp0 - sig_interp1)).mean())
             rms2 = np.sqrt(np.square(abs(sig_interp0 - sig_interp2)).mean())
             rms3 = np.sqrt(np.square(abs(sig_interp1 - sig_interp2)).mean())
@@ -894,7 +894,7 @@ def test_interpolate(bplot=False):
                 logging.error("repeatsize={:d} ifactor={:d} RMS interpolation "
                               "difference: {:f} (limit {:f})".format(repeatsize, ifactor, rms3, 5e-4))
                 bplot = True
-                
+
             if bplot: #pragma: no cover
                 plt.subplot(211)
                 plt.plot(x2, sig_interp0, x2, sig_interp1, x2, sig_interp2)
@@ -1038,7 +1038,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300,
 
     TODO: coregistration should probably occur using either just the first half of the image,
     or it should be done in a log-scaled domain (is it already log-scaled?).  Otherwise the only
-    effective contribution to the signal will be the echoes near the surface.  
+    effective contribution to the signal will be the echoes near the surface.
 
     Inputs:
     -------------
@@ -1047,7 +1047,7 @@ def coregistration(cmpA, cmpB, orig_sample_interval, upsample_factor, shift=300,
       orig_sample_interval: sampling interval of the input data
           upsample_factor: factor used modify the original fast-time sampling
                             interval
-                     shift: 
+                     shift:
                     method: coregistration algorithm method described in coregister() function
 
     Outputs:
@@ -1105,7 +1105,7 @@ def read_ztim(filename, field_names=None):
 
     Output:
     ------------
-        data frame of the ztim 
+        data frame of the ztim
     '''
 
     ztim_format = 'S1, i2, i2, i4'
@@ -1123,7 +1123,7 @@ def read_ztim(filename, field_names=None):
         data = np.core.records.fromfile(zfile, formats=zformat, names=ztim_names + field_names,
                             aligned=True, byteorder='>')
 
-    return pd.DataFrame(data) 
+    return pd.DataFrame(data)
 
 def load_roll(treg_path, s1_path):
     '''
@@ -1330,7 +1330,7 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
 
     assert bxdsA.shape == bxdsB.shape
 
-    # trim of the range lines if desired. 
+    # trim of the range lines if desired.
     # TODO: some of the downstream functions aren't aware of this.
     #logging.debug("bxds original shape="  + str(bxdsA.shape))
     #if sigwin[0] >= 0 and sigwin[1] > 0:
@@ -1352,7 +1352,7 @@ def denoise_and_dechirp(gain, sigwin, raw_path, geo_path, chirp_path,
     # TODO: do we need to make the chirp complex?
     #refchirp *= hamming
     # Since we did an FFT with a detrend in it in filter_ra, we can skip detrending.
-    detrend = False #'constant' 
+    detrend = False #'constant'
     # prepare the outputs
     dechirpA = np.empty_like(bxdsA, dtype=complex)
     # dechirp
@@ -1719,7 +1719,7 @@ def independent_azimuth_samples(cmpA, cmpB, FOI, roll_range=100, ft_step=1):
     '''
     Function to determine the azimuth sample interval between independent
     range lines.
-    
+
     Inputs:
     ----------------
            cmpA: complex-valued antenna A radargram
@@ -1792,7 +1792,7 @@ def interferogram_normalization(interferogram, surface):
     a defined surface. The function has an internal step to make sure the 'surface'
     input covers the entire breadth of the interferogram. The function interpolates the
     picked surface into spaces where the surface isn't defined.
-    
+
     Inputs:
     ----------------
       interferogram: stacked interferogram
@@ -1837,7 +1837,7 @@ def surface_pick(image, FOI, pick_method='maximum'):
     '''
     Function to pick the surface echo overlying an already defined subsurface
     feature-of-interest
-    
+
     Inputs:
     ----------------
            image: power image
@@ -1862,7 +1862,7 @@ def surface_pick(image, FOI, pick_method='maximum'):
     # pick the surface within the area covered by the FOI
     SRF = ip.picker(np.transpose(image2), snap_to=pick_method)
     SRF = np.transpose(SRF)
-    
+
     # ensure the picked surface covers the breadth of the trimmed power image
     test = np.nansum(SRF, axis=0)
     x = np.argwhere(test == 1)[:, 0]
@@ -1889,7 +1889,7 @@ def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
     off-nadir surface clutter. This is done by first estimating the
     cross-track look angle assuming all propagation is at the speed
     of light and look angle can be estimated using the time delay to the
-    surface as well as the time delay to the picked FOI. 
+    surface as well as the time delay to the picked FOI.
 
     Inputs:
     ----------------
@@ -1925,7 +1925,7 @@ def offnadir_clutter(FOI, SRF, rollang, N, B, mb_offset, l, dt):
 
     # convert sample numbers to one-way times
     times = np.divide(np.multiply(sampl, dt), 2)
-    
+
     # convert one-way times to look angles
     rollang = rollang[(np.arange(np.floor(N / 2) + 1, len(rollang), N) - 1).astype(int)]
     rollang = rollang[indx]

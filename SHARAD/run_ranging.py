@@ -85,8 +85,8 @@ def main():
 
             if not os.path.exists(outfile):
                 process_list.append({
-                    'inpath' : path, 
-                    #'outputfile' : outfile, 
+                    'inpath' : path,
+                    #'outputfile' : outfile,
                     'idx_start' : idx_start,
                     'idx_end' : idx_end,
                     'save_format' : args.ofmt,
@@ -126,13 +126,13 @@ def main():
     logging.info('done with tasks.')
 
 
-    """When using multiprocessing the 
+    """When using multiprocessing the
     results are returned in random order. Since always two tracks have to be compared
     per crossover I found it convenient for testing if the output is listed in the
     same order as the input, although this is not strictly necessary. But the first
     two tracks are then x-over 1, track 3 and 4 x-over 2, and so on... The error
     seems to happen if an error at some track occurs. Then he cannot find it in the
-    input. 
+    input.
 
     Why these specific tracks are not going through needs further investigation. There
     seems to be some array length issue.
@@ -211,10 +211,10 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
 
         science_path = inpath.replace('_a.dat','_s.dat')
 
-        if not os.path.exists(cmp_path): 
+        if not os.path.exists(cmp_path):
             logging.warning(cmp_path + " does not exist")
         science_path = inpath.replace('_a.dat','_s.dat')
-        if not os.path.exists(cmp_path): 
+        if not os.path.exists(cmp_path):
             logging.warning(cmp_path + " does not exist")
             return 0
 

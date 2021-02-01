@@ -20,10 +20,10 @@ class hdf:
             print('ERROR: No data for '+group+' in input file.')
             return None
 
-        if (full_path):
+        if full_path:
             return [group+'/'+key for key in node._v_children.keys()]
-        else:
-            return [key for key in node._v_children.keys()]
+
+        return [key for key in node._v_children.keys()]
 
     def to_dict(self, group):
         """
@@ -52,8 +52,7 @@ class hdf:
         if col_names is not None:
             return np.concatenate([data[key][col_names].values
                                    for key in data.keys()])
-        else:
-            return np.concatenate([data[key].values for key in data.keys()])
+        return np.concatenate([data[key].values for key in data.keys()])
 
     def close(self):
         try:
@@ -69,6 +68,7 @@ class hdf:
     def save_dict(self, group, grouped_data, verbose=False):
         keys = grouped_data.keys()
         if verbose:
+            # TODO: this clearly doesn't work
             from pydlr.misc.prog import Prog
             pr = Prog(keys)
         for key in keys:
@@ -88,23 +88,24 @@ class hdf:
             3. "info" - description of the data (should be included)
         """
         label = self.file.get('label', None)
-        if label is not None:
-            if formatted:
-                print_str = 'Using input file: ' + self.file._path + '\n'
-                print_str += ('Description: ' +
-                              label.get('info', 'not provided') + ' \n')
-                if label.get('source') is not None:
-                    print_str += 'Source: ' + label.get('source', '') + ' \n'
-                print_str += 'Created ' + label['date'] + ' '
-                print_str += 'by ' + label['user'] + '.\n'
-                for key in label.keys():
-                    if not(key in ['info', 'user', 'date', 'source']):
-                        print_str += key+': '+str(label[key]) + '\n'
-                return print_str[:-1]
-            else:
-                return dict(label)
-        else:
+        if label is None:
             return 'No label information available in ' + self.file._path + '.'
+
+        if not formatted:
+            return dict(label)
+        # TODO:  use string formatting
+        print_str = 'Using input file: ' + self.file._path + '\n'
+        print_str += ('Description: ' +
+                      label.get('info', 'not provided') + ' \n')
+        if label.get('source') is not None:
+            print_str += 'Source: ' + label.get('source', '') + ' \n'
+        print_str += 'Created ' + label['date'] + ' '
+        print_str += 'by ' + label['user'] + '.\n'
+        for key in label.keys():
+            if not(key in ['info', 'user', 'date', 'source']):
+                print_str += key+': '+str(label[key]) + '\n'
+
+        return print_str[:-1]
 
     def update_label(self, **kwargs):
         """

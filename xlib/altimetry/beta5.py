@@ -46,7 +46,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     idx_start (optional): integer
         Start index for processing track. Default is 0.
     idx_end (optional): integer
-        End index for processing track. Default is None. 
+        End index for processing track. Default is None.
         TODO: what does "None" mean?
     use_spice (optional): boolean
         Specifies is spacecraft position is taken from the EDR
@@ -241,15 +241,15 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     logging.debug("Size of 'avg' data: {:0.2f} MB".format(sys.getsizeof(avg)/MB))
     del radargram
 
-    """ 
+    """
     import matplotlib.pyplot as plt
     fig,ax = plt.subplots(figsize=(300,4))
     plt.imshow(np.transpose(20*np.log10(abs(avg[:,0:1500]))),aspect='auto')
     cbar = plt.colorbar()
     cbar.set_label('[dB]')
     plt.show()
-    
-    
+
+
     import cmp.plotting
     print('control')
     rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
