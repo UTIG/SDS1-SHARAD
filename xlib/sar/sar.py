@@ -650,6 +650,7 @@ def time_to_rxwindow(dt, rxwindow_samp, scradius, pri, instrument):
     if instrument == 'SHARAD':
         out = np.zeros(len(pri), dtype=float)
         for ii in range(len(pri)):
+            # TODO: convert to table
             if pri[ii] == 1: pri_step = 1428E-6
             elif pri[ii] == 2: pri_step = 1429E-6
             elif pri[ii] == 3: pri_step = 1290E-6
@@ -1137,8 +1138,8 @@ def ellipsoidal_distance(lat1, long1, lat2, long2, a, b, number_iterations=8):
 
     phi1, phi2 = lat1, lat2
     # calculate the reduced latitudes
-    U1 = scipy.arctan(np.multiply((1 - f), scipy.tan(phi1)))
-    U2 = scipy.arctan(np.multiply((1 - f), scipy.tan(phi2)))
+    U1 = np.arctan(np.multiply((1 - f), np.tan(phi1)))
+    U2 = np.arctan(np.multiply((1 - f), np.tan(phi2)))
     L1, L2 = long1, long2
     L = L2 - L1
 
@@ -1148,15 +1149,15 @@ def ellipsoidal_distance(lat1, long1, lat2, long2, a, b, number_iterations=8):
     while True:
 
         ind += 1
-        t = np.square(scipy.cos(U2) * scipy.sin(lambda_old))
-        t += np.square(scipy.cos(U1) * scipy.sin(U2) - scipy.sin(U1) * scipy.cos(U2) * scipy.cos(lambda_old))
+        t = np.square(np.cos(U2) * np.sin(lambda_old))
+        t += np.square(np.cos(U1) * np.sin(U2) - np.sin(U1) * np.cos(U2) * np.cos(lambda_old))
         sin_sigma = np.sqrt(t)
-        cos_sigma = scipy.sin(U1) * scipy.sin(U2) + scipy.cos(U1) * scipy.cos(U2) * scipy.cos(lambda_old)
-        sigma = scipy.arctan2(sin_sigma, cos_sigma)
+        cos_sigma = np.sin(U1) * np.sin(U2) + np.cos(U1) * np.cos(U2) * np.cos(lambda_old)
+        sigma = np.arctan2(sin_sigma, cos_sigma)
 
-        sin_alpha = scipy.cos(U1) * scipy.cos(U2) * scipy.sin(lambda_old) / sin_sigma
+        sin_alpha = np.cos(U1) * np.cos(U2) * np.sin(lambda_old) / sin_sigma
         cos_sq_alpha = 1 - np.square(sin_alpha)
-        cos_2sigma_m = cos_sigma - 2 * scipy.sin(U1) * scipy.sin(U2) / cos_sq_alpha
+        cos_2sigma_m = cos_sigma - 2 * np.sin(U1) * np.sin(U2) / cos_sq_alpha
         C = f * cos_sq_alpha * (4 + f * (4 - 3 * cos_sq_alpha)) / 16
 
         t = sigma + C * sin_sigma * (cos_2sigma_m + C * cos_sigma * (-1 + 2 * np.square(cos_2sigma_m)))
@@ -1200,15 +1201,15 @@ def groundtrack(latitude, longitude, a=3396.19E3, b=3376.2E3):
     latitude = np.deg2rad(latitude)
     longitude = np.deg2rad(longitude)
     for ii in range(1, len(latitude)):
-        s = ellipsoidal_distance(latitude[ii-1], longitude[ii-1], 
+        s = ellipsoidal_distance(latitude[ii-1], longitude[ii-1],
                                  latitude[ii], longitude[ii], a, b)
         output[ii] = s + output[ii - 1]
 
     return np.divide(output, 1000)
 
-def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim, 
-                  aperture_length, ephemeris, topography, pri, scradius, 
-                  rxwindow_samp, latitude, longitude, band, 
+def delay_doppler_v2(indata, interpolate_dx, posting_interval, data_trim,
+                  aperture_length, ephemeris, topography, pri, scradius,
+                  rxwindow_samp, latitude, longitude, band,
                   instrument='SHARAD', marID='1', debugtag='SAR'):
     '''
     Second generation of a Delay Doppler SAR focuser that tries to move towards
