@@ -14,7 +14,11 @@ __history__ = {
 }
 
 # TODO: handle "srf"
-# TODO: Call processors. (test)
+# TODO: Call processors. (test...)
+# TODO: Call processors. (rng_cmp) nothing runs, bad tracklist?
+# TODO: Call processors. (altim) nothing runs, bad tracklist?
+# TODO: Call processors. (fix rsr)
+# TODO: Call processors. (sar2 works)
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
 # TODO: Sandbox mode (input form sandbox is issue)
