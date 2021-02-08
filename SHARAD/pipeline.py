@@ -14,10 +14,10 @@ __history__ = {
 }
 
 # TODO: handle "srf"
-# TODO: Call processors.
+# TODO: Call processors. (test)
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
-# TODO: Sandbox mode
+# TODO: Sandbox mode (input form sandbox is issue)
 # TODO: Single step
 # TODO: Use max tracks arg
 # TODO: Parallelism
@@ -239,10 +239,10 @@ def main():
             else:
                 if not args.ignoretimes or outtimes[0][0] == -1:
                     if (outtimes[0][0] == -1):
-                        print('Ready to process (no output).')
+                        logging.info('Ready to process (no output file).')
                     else:
-                        print('Ready to process (old output).')
-                    print(output)
+                        logging.info('Ready to process (old output file).')
+                    logging.info(output)
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
                     logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + path_outroot)
