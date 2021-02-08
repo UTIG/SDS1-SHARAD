@@ -15,8 +15,8 @@ __history__ = {
 
 # TODO: handle "srf"
 # TODO: Call processors. (test...)
-# TODO: Call processors. (rng_cmp) nothing runs, bad tracklist?
-# TODO: Call processors. (altim) nothing runs, bad tracklist?
+# TODO: Call processors. (rng_cmp) nothing runs, tracklist matches input, fails when cmp is added to output path
+# TODO: Call processors. (altim) nothing runs, tracklist matches input
 # TODO: Call processors. (fix rsr)
 # TODO: Call processors. (sar2 works)
 # TODO: Parameters for SAR processing (these could change the output path).
@@ -117,6 +117,8 @@ Processors = [
 ]
 
 def temptracklist(infile):
+    logging.debug("Writing Temp File");
+    logging.debug(infile);
     temp = tempfile.NamedTemporaryFile(mode='w+',delete=False)
     temp.write(infile+'\n')
     temp.close()
@@ -250,10 +252,11 @@ def main():
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
                     logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + path_outroot)
+                    logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + os.path.join(path_outroot,prefix))
                     if args.dryrun:
                         logging.info("Dryrun, quiting.");
                         sys.exit(0)
-                    subprocess.run(['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix)])
+                    subprocess.run(['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v'])
                     os.unlink(temp)
                     if args.once:
                         logging.info("Only one process request.  Quiting.")
