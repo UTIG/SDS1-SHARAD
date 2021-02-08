@@ -246,6 +246,9 @@ def main():
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
                     logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + path_outroot)
+                    if args.dryrun:
+                        logging.info("Dryrun, quiting.");
+                        sys.exit(0)
                     subprocess.run(['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix)])
                     os.unlink(temp)
                     if args.once:
@@ -256,37 +259,6 @@ def main():
             logging.debug('File already processed. Skipping ' + infile)
 
     sys.exit(0)
-    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
-        process_list = process_list[0:args.maxtracks]
-
-    if args.dryrun:
-        sys.exit(0)
-
-    logging.info("Start processing {:d} tracks".format(len(process_list)))
-
-    start_time = time.time()
-
-    named_params = {'saving':True, 'chrp_filt':True, 'verbose':args.verbose, 'radargram':False}
-
-    if nb_cores <= 1:
-        # Single processing (for profiling)
-        for t in process_list:
-            cmp_processor(*t, **named_params)
-    else:
-        # Multiprocessing
-        pool = multiprocessing.Pool(nb_cores)
-        results = [pool.apply_async(cmp_processor, t, \
-                   named_params) for t in process_list]
-
-        for i, result in enumerate(results):
-            dummy = result.get()
-            if dummy == 1:
-                logging.error("{:s}: Problem running pulse compression".format(process_list[i][4]))
-            else:
-                logging.info("{:s}: Finished pulse compression".format(process_list[i][4]))
-
-    logging.info("Done in {:0.2f} seconds".format(time.time() - start_time))
-
 
 if __name__ == "__main__":
     # execute only if run as a script
