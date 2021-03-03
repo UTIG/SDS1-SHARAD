@@ -14,11 +14,11 @@ __history__ = {
 }
 
 # TODO: handle "srf"
-# TODO: Call processors. (test...)
-# TODO: Call processors. (rng_cmp) nothing runs, tracklist matches input, fails when cmp is added to output path
-# TODO: Call processors. (altim) nothing runs, tracklist matches input
-# TODO: Call processors. (fix rsr)
-# TODO: Call processors. (sar2 works)
+# TODO: Call processors: test...
+# TODO: Call processors: rng_cmp: works
+# TODO: Call processors: altim: nothing runs, tracklist matches input
+# TODO: Call processors: rsr: fix
+# TODO: Call processors: sar2: works
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
 # TODO: Sandbox mode (input form sandbox is issue)
@@ -192,6 +192,7 @@ def main():
             m = re.search('edr(\d*)/', infile)
             orbit = m.group(1)
             intimes = []
+            outputs = []
             outtimes = []
             prefix = ''
             inprefix = ''
@@ -231,6 +232,7 @@ def main():
                     outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
                 if (attr[0] == "Output"):
                     output = os.path.join(outdir, data_file+attr[1])
+                    outputs.append(output)
                     outtimes.append(getmtime((output)))
             if (len(intimes) == 0):
                 logging.error("No inputs for process")
@@ -248,10 +250,17 @@ def main():
                         logging.info('Ready to process (no output file).')
                     else:
                         logging.info('Ready to process (old output file).')
+                        logging.info('Deleting old files.')
+                        for output in outputs:
+                            os.unlink(output)
+                            try:
+                                os.rmdir(os.path.dirname(output))
+                            except OSError:
+                                # We don't care if it fails a few times
+                                pass
                     logging.info(output)
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
-                    logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + path_outroot)
                     logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + os.path.join(path_outroot,prefix))
                     if args.dryrun:
                         logging.info("Dryrun, quiting.");
