@@ -13,6 +13,7 @@ __history__ = {
          'info': 'First release.'}
 }
 
+# TODO: manual step mode
 # TODO: handle "srf"
 # TODO: Call processors: test...
 # TODO: Call processors: rng_cmp: works
@@ -131,6 +132,20 @@ def getmtime(path):
         mtime = -1
     return mtime,path
 
+def manual(cmd, infile, outputs):
+    import getch
+    print('Trackline: ' + infile);
+    print('Command: ' + ' '.join(cmd));
+    print('(Y)es, (N)o, (Q)uit?', end=' ', flush=True);
+    c = getch.getch()
+    print(c)
+    while c not in 'YyNnQq':
+        c = getch.getch()
+        print(c)
+    if c in 'Qq':
+        sys.exit(0)
+    if c in 'Yy':
+        subprocess.run(cmd)
 
 def main():
     parser = argparse.ArgumentParser(description='SHARAD Pipeline')
@@ -141,6 +156,8 @@ def main():
                         help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
+    parser.add_argument('-m', '--manual', action="store_true",
+                        help="Prompt before running processors")
     parser.add_argument('-n', '--dryrun', action="store_true",
                         help="Dry run. Build task list but do not run (NOT WORKING)")
     parser.add_argument('--tracklist', default="elysium.txt",
@@ -265,7 +282,11 @@ def main():
                     if args.dryrun:
                         logging.info("Dryrun, quiting.");
                         sys.exit(0)
-                    subprocess.run(['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v'])
+                    cmd = ['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
+                    if args.manual:
+                        manual(cmd, infile, outputs)
+                    else:
+                        subprocess.run(cmd)
                     os.unlink(temp)
                     if args.once:
                         logging.info("Only one process request.  Quiting.")
