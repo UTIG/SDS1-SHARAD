@@ -165,7 +165,7 @@ def main():
     parser.add_argument('--maxtracks', type=int, default=0,
                         help="Maximum number of tracks to process (NOT WORKING)")
     parser.add_argument('-1', '--once', action="store_true",
-                        help="Just run one subprocess and exit.")
+                        help="Just run one processor and exit.")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on libraries")
     parser.add_argument('--ignoretimes', action='store_true',
