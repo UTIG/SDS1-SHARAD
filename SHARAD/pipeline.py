@@ -3,6 +3,10 @@
 __authors__ = ['Scott Kempf, scottk@ig.utexas.edu']
 __version__ = '1.1'
 __history__ = {
+    '1.2':
+        {'date': 'March 16 2020',
+         'author': 'Scott Kempf, UTIG',
+         'info': 'Processing is working.'},
     '1.1':
         {'date': 'July 7 2020',
          'author': 'Scott Kempf, UTIG',
@@ -13,16 +17,8 @@ __history__ = {
          'info': 'First release.'}
 }
 
-# TODO: handle "srf"
-# TODO: Call processors: test...
-# TODO: Call processors: rng_cmp: works
-# TODO: Call processors: altim: works
-# TODO: Call processors: rsr: works
-# TODO: Call processors: sar2: works
 # TODO: Parameters for SAR processing (these could change the output path).
-# TODO: Manual vs automatic pipeline
 # TODO: Sandbox mode (input from sandbox is issue)
-# TODO: Single step
 # TODO: Use max tracks arg
 # TODO: Parallelism
 
