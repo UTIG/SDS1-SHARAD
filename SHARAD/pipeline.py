@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 __authors__ = ['Scott Kempf, scottk@ig.utexas.edu']
-__version__ = '1.1'
+__version__ = '1.2'
 __history__ = {
     '1.2':
-        {'date': 'March 16 2020',
+        {'date': 'March 16 2021',
          'author': 'Scott Kempf, UTIG',
          'info': 'Processing is working.'},
     '1.1':
