@@ -13,16 +13,15 @@ __history__ = {
          'info': 'First release.'}
 }
 
-# TODO: manual step mode
 # TODO: handle "srf"
 # TODO: Call processors: test...
 # TODO: Call processors: rng_cmp: works
-# TODO: Call processors: altim: nothing runs, tracklist matches input
-# TODO: Call processors: rsr: fix
+# TODO: Call processors: altim: works
+# TODO: Call processors: rsr: works
 # TODO: Call processors: sar2: works
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Manual vs automatic pipeline
-# TODO: Sandbox mode (input form sandbox is issue)
+# TODO: Sandbox mode (input from sandbox is issue)
 # TODO: Single step
 # TODO: Use max tracks arg
 # TODO: Parallelism
@@ -278,11 +277,14 @@ def main():
                     logging.info(output)
                     logging.debug("Processing " + infile)
                     temp = temptracklist(infile)
-                    logging.info("Invoking: " + './' + proc + ' --tracklist ' + temp + ' -o ' + os.path.join(path_outroot,prefix))
+                    if proc == "run_rsr.py":
+                        cmd = ['./' + proc, '-o', os.path.join(path_outroot,prefix), '-v', orbit]
+                    else:
+                        cmd = ['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
+                    logging.info("Invoking: " + ' '.join(cmd))
                     if args.dryrun:
                         logging.info("Dryrun, quiting.");
                         sys.exit(0)
-                    cmd = ['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
                     if args.manual:
                         manual(cmd, infile, outputs)
                     else:
