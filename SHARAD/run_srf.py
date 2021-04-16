@@ -1,7 +1,10 @@
+import argparse
+from datetime import datetime
 import logging
 import numpy as np
 import os
 import pandas as pd
+import sys
 
 import SHARADEnv
 
@@ -211,4 +214,83 @@ def archive_srf(senv, orbit_full, srf_data, typ):
     #print("CREATED: " + fil )
 
     return out
+
+
+def main():
+    parser = argparse.ArgumentParser(description='RSR processing routines')
+
+    # Job control options
+
+    #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
+
+    parser.add_argument('-o','--output', default=None,
+            help="Debugging output data directory")
+    #parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'),
+    #        help="Output data format")
+    parser.add_argument('orbits', metavar='orbit', nargs='+',
+            help='Orbit IDs to process (including leading zeroes). If "all",\
+            processes all orbits')
+    parser.add_argument('-v','--verbose', action="store_true",
+            help="Display verbose output")
+    parser.add_argument('-n','--dryrun', action="store_true",
+            help="Dry run. Build task list but do not run")
+    #parser.add_argument('--tracklist', default="elysium.txt",
+    #    help="List of tracks to process")
+    #parser.add_argument('--maxtracks', default=None, type=int,
+    #    help="Max number of tracks to process")
+
+    # Algorithm options
+
+    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100],
+            help='2 numbers defining the fast-time relative boundaries around\
+            the altimetry surface return where the surface will be looked for')
+    parser.add_argument('-t', '--type', type=str, default='cmp',
+            help='Type of radar data used to get the amplitude from')
+    parser.add_argument('-d', '--delete', action='store_true',
+            help='Delete and reprocess files already processed, only if [orbit] is [all]')
+
+    args = parser.parse_args()
+
+    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=loglevel, stream=sys.stdout,
+        format="run_srf: [%(levelname)-7s] %(message)s")
+
+    senv = SHARADEnv.SHARADEnv()
+
+
+    if 'all' in args.orbits:
+        # Uses todo to define orbits to process
+        assert len(args.orbits) == 1
+        args.orbits = todo(delete=args.delete, senv=senv)
+
+    if '.' in args.orbits[0]:
+        # Use a file to define orbits to process
+        args.orbits = todo(delete=args.delete, senv=senv, filename=args.orbits[0])
+
+    if args.dryrun: # pragma: no cover
+        logging.info("Process orbits: " + ' '.join(args.orbits))
+        sys.exit(0)
+
+    # TODO: implement multiprocessing
+    for i, orbit in enumerate(args.orbits):
+        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
+        #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
+        b = srf_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth, archive=True,
+        gain=0, gain_altitude=False, gain_sahga=False,
+        senv=senv)
+
+        if args.output is not None:
+            # Debugging output
+            outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
+            logging.debug("Saving to " + outfile)
+            if not os.path.exists(args.output):
+                os.makedirs(args.output)
+            np.save(outfile, b)
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
+
 
