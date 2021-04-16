@@ -12,7 +12,7 @@ class DataMissingException(Exception):
     pass
 
 
-def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
+def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
         gain=0, gain_altitude=False, gain_sahga=False,
         senv=None, **kwargs):
     """
@@ -108,7 +108,7 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
     out = {'y':surf_y, 'amp':surf_amp}
 
     if archive == True:
-        archive_srf(senv, orbit_full, out, typ)
+        archive_surface(senv, orbit_full, out, typ)
 
     return out
 
@@ -144,7 +144,7 @@ def relative_sahga_gain(senv, orbit_full):
     return gain
 
 
-def archive_srf(senv, orbit_full, srf_data, typ):
+def archive_surface(senv, orbit_full, srf_data, typ):
     """
     Archive in the hierarchy results obtained from srf_processor
 
@@ -341,7 +341,7 @@ def main():
     for i, orbit in enumerate(args.orbits):
         print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
         #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
-        b = srf_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth, archive=True,
+        b = surface_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth, archive=True,
         gain=0, gain_altitude=False, gain_sahga=False,
         senv=senv)
 
