@@ -9,7 +9,8 @@ class DataMissingException(Exception):
     pass
 
 
-def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
+def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
+        gain=0, gain_altitude=False, gain_sahga=False,
         senv=None, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
@@ -27,6 +28,10 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
         Any gain to be added to the signal (power in dB)
         For SHARAD, it includes the instrumental gain and theabsolute
         calibration value
+    gain_altitude: boolean
+        correct for altitude variation
+    gain_sahga: boolean
+        correct for SA and HGA orientation
     save: boolean
         Whether to save the results in a txt file into the hierarchy
 
@@ -81,12 +86,59 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
             surf_y[i] = maxind
             surf_amp[i] = maxvec
 
+    # Apply gains
+
+    total_gain = gain
+
+    if gain_altitude == True:
+        _gain = relative_altitude_gain(senv, orbit_full)
+        total_gain = total_gain + _gain
+
+    if gain_sahga == True:
+        _gain = relative_sahga_gain(senv, orbit_full)
+        total_gain = total_gain + _gain
+
+    surf_amp = surf_amp * 10**(total_gain/20.)
+
+    # Archiving
+
     out = {'y':surf_y, 'amp':surf_amp}
 
     if archive == True:
         archive_srf(senv, orbit_full, out, typ)
 
     return out
+
+
+def relative_altitude_gain(senv, orbit_full):
+    """Provide relative altitude gain for an orbit following Campbell et al. (2021, eq.1)
+    !!! EQUATION SOUNDS FAULTY !!!
+    """
+    aux = senv.aux_data(orbit_full)
+    if aux is None: # pragma: no cover
+        raise("No Auxiliary Data for orbit " + orbit_full)
+
+    lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+
+    gain = -.41 -1.62*lat -1.10*lat**2 +.65*lat**3 +.66*lat**4  #dB
+
+    return gain
+
+
+def relative_sahga_gain(senv, orbit_full):
+    """ Provide relative SA and HGA gain for an orbit following Campbell et al. (2021, eq.4)
+    """
+    aux = senv.aux_data(orbit_full)
+    if aux is None: # pragma: no cover
+        raise("No Auxiliary Data for orbit " + orbit_full)
+    
+    SAMXin = aux['MRO_SAMX_INNER_GIMBAL_ANGLE']
+    SAPXin = aux['MRO_SAPX_INNER_GIMBAL_ANGLE']
+    HGAout = aux['MRO_HGA_OUTER_GIMBAL_ANGLE']
+
+    gain = 0.0423*np.abs(SAMXin) + 0.0274*np.abs(SAPXin) - 0.0056*np.abs(HGAout)
+
+    return gain
 
 
 def archive_srf(senv, orbit_full, srf_data, typ):
