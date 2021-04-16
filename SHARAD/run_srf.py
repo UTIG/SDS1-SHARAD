@@ -52,9 +52,6 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
     rdg = senv.cmp_data(orbit)
     if rdg is None: # pragma: no cover
         raise DataMissingException("No CMP data for orbit " + orbit)
-#    aux = senv.aux_data(orbit)
-#    if aux is None: # pragma: no cover
-#        raise("No Auxiliary Data for orbit " + orbit)
 
    # Get surface amplitude
 
@@ -99,14 +96,15 @@ def archive_srf(senv, orbit_full, srf_data, typ):
     Input:
     -----
 
-    orbit: string
+    orbit_full: string
         the orbit number or the full name of the orbit file (w/o extension)
         if the orbit is truncated in several file
 
-    Output:
-    ------
-
-    pandas dataframe with auxilliary data and surface amplitudes
+    srf_data: list
+        output from srf_processor
+    
+    typ: string
+        The type of radar data used to get the amplitude from
 
     """
 
