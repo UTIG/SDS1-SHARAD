@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import os
 import pandas as pd
 
 import SHARADEnv
@@ -51,9 +52,9 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
     rdg = senv.cmp_data(orbit)
     if rdg is None: # pragma: no cover
         raise DataMissingException("No CMP data for orbit " + orbit)
-    aux = senv.aux_data(orbit)
-    if aux is None: # pragma: no cover
-        raise("No Auxiliary Data for orbit " + orbit)
+#    aux = senv.aux_data(orbit)
+#    if aux is None: # pragma: no cover
+#        raise("No Auxiliary Data for orbit " + orbit)
 
    # Get surface amplitude
 
@@ -83,8 +84,37 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
             surf_y[i] = maxind
             surf_amp[i] = maxvec
 
-    # Archive
-    # TODO: def archive_surface_amp(senv, orbit, srf_data)
+    out = {'y':surf_y, 'amp':surf_amp}
+
+    if archive == True:
+        archive_srf(senv, orbit_full, out, typ)
+
+    return out
+
+
+def archive_srf(senv, orbit_full, srf_data, typ):
+    """
+    Archive in the hierarchy results obtained from srf_processor
+
+    Input:
+    -----
+
+    orbit: string
+        the orbit number or the full name of the orbit file (w/o extension)
+        if the orbit is truncated in several file
+
+    Output:
+    ------
+
+    pandas dataframe with auxilliary data and surface amplitudes
+
+    """
+
+    # Gather auxilliary information
+
+    aux = senv.aux_data(orbit_full)
+    if aux is None: # pragma: no cover
+        raise("No Auxiliary Data for orbit " + orbit_full)
 
     columns = ['EPHEMERIS_TIME',
                'SUB_SC_PLANETOCENTRIC_LATITUDE',
@@ -104,30 +134,31 @@ def srf_processor(orbit, typ='cmp', ywinwidth=[-100,100], gain=0, archive=False,
               aux['SOLAR_LONGITUDE'],
               aux['SPACECRAFT_ALTITUDE'],
               aux['SC_ROLL_ANGLE'],
-              surf_y,
-              surf_amp,
-              20*np.log10(surf_amp),
+              srf_data['y'],
+              srf_data['amp'],
+              20*np.log10(srf_data['amp']),
              ]
 
     out = pd.DataFrame(values).transpose()
     out.columns = columns
 
-    if archive is True:
-        #k = p['orbit_full'].index(orbit_full)
-        # TODO: what is the correct response if there is more than one result?  GNG
-        list_orbit_info = senv.get_orbit_info(orbit_full)
-        orbit_info = list_orbit_info[0]
+    # Archive
 
-        if typ == 'cmp':
-            archive_path = os.path.join(senv.out['srf_path'],
-                    orbit_info['relpath'], typ)
-        else: # pragma: no cover
-            assert False
-        if not os.path.exists(archive_path):
-            os.makedirs(archive_path)
-        fil = os.path.join(archive_path,  orbit_full + '.txt')
-        out.to_csv(fil, index=None, sep=',')
-        #print("CREATED: " + fil )
+    #k = p['orbit_full'].index(orbit_full)
+    # TODO: what is the correct response if there is more than one result?  GNG
+    list_orbit_info = senv.get_orbit_info(orbit_full)
+    orbit_info = list_orbit_info[0]
+
+    if typ == 'cmp':
+        archive_path = os.path.join(senv.out['srf_path'],
+                orbit_info['relpath'], typ)
+    else: # pragma: no cover
+        assert False
+    if not os.path.exists(archive_path):
+        os.makedirs(archive_path)
+    fil = os.path.join(archive_path,  orbit_full + '.txt')
+    out.to_csv(fil, index=None, sep=',')
+    #print("CREATED: " + fil )
 
     return out
 
