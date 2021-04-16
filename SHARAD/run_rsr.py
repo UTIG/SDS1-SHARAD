@@ -171,13 +171,13 @@ def todo(delete=False, senv=None, filename=None, verbose=False):
     np.seterr(all=errlevel)
 
     # Existing orbits
-    alt_orbits = []
+    srf_orbits = []
     rsr_orbits = []
     for orbit in senv.orbitinfo:
         for suborbit in senv.orbitinfo[orbit]:
             try:
-                if any(s.endswith('.h5') for s in suborbit['altpath']):
-                    alt_orbits.append(suborbit['name'])
+                if any(s.endswith('.txt') for s in suborbit['srfpath']):
+                    srf_orbits.append(suborbit['name'])
                 if any(s.endswith('.txt') for s in suborbit['rsrpath']):
                     rsr_orbits.append(suborbit['name'])
             except KeyError:
@@ -186,9 +186,9 @@ def todo(delete=False, senv=None, filename=None, verbose=False):
     # Available orbits
     if filename is not None:
         fil_orbits = list(np.genfromtxt(filename, dtype='str'))
-        available_orbits = [i for i in fil_orbits if i in alt_orbits]
+        available_orbits = [i for i in fil_orbits if i in srf_orbits]
     else:
-        available_orbits = alt_orbits
+        available_orbits = srf_orbits
 
     # Unprocessed orbits
     unprocessed_orbits = [i for i in available_orbits if i not in rsr_orbits]
@@ -204,7 +204,7 @@ def todo(delete=False, senv=None, filename=None, verbose=False):
         bad_orbits = list(np.genfromtxt('bad_alt.txt', dtype='str'))
         out = [i for i in out if i not in bad_orbits]
 
-    #print(str(len(out)) + ' orbits to processed')
+    #print(str(len(out)) + ' orbits to process')
 
     return out
 
