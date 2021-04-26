@@ -105,6 +105,13 @@ echo $S0: run_altimetry
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt -n
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt
 
+echo "$S0: run_surface"
+# show all files
+$COV run $FLAGS -a ../SHARAD/run_surface.py -n all
+# show all files that would be deleted
+$COV run $FLAGS -a ../SHARAD/run_surface.py -n --delete all
+# Run an orbit
+
 echo "$S0: run_rsr"
 # show all files
 $COV run $FLAGS -a ../SHARAD/run_rsr.py -n all
