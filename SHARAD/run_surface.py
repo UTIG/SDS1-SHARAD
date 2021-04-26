@@ -13,7 +13,7 @@ class DataMissingException(Exception):
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
-        gain=0, gain_altitude=True, gain_sahga=True,
+        gain=0, gain_altitude=False, gain_sahga=False,
         senv=None, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
@@ -343,7 +343,7 @@ def main():
         print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
         #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
         b = surface_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth, archive=True,
-        gain=0, gain_altitude=False, gain_sahga=False,
+        gain=0, gain_altitude=True, gain_sahga=True,
         senv=senv)
 
         if args.output is not None:
