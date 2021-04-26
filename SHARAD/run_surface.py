@@ -1,10 +1,27 @@
+#!/usr/bin/env python3
+
+"""
+Example command:
+
+To process a single orbit (0887601) and archive to the default location:
+
+./run_surface.py 0887601
+
+To process a single orbit (0887601), not archive to the default location (--ofmt
+none),
+and output a numpy file into a debug directory:
+
+./run_surface.py 0887601 --ofmt none --output ./surface_data
+
+"""
+
+import os
+import sys
 import argparse
 from datetime import datetime
 import logging
 import numpy as np
-import os
 import pandas as pd
-import sys
 
 import SHARADEnv
 
@@ -12,9 +29,9 @@ class DataMissingException(Exception):
     pass
 
 
-def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
-        gain=0, gain_altitude=False, gain_sahga=False,
-        senv=None, **kwargs):
+def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
+                      gain=0, gain_altitude=False, gain_sahga=False,
+                      senv=None, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
@@ -93,11 +110,11 @@ def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
 
     total_gain = gain
 
-    if gain_altitude == True:
+    if gain_altitude:
         _gain = relative_altitude_gain(senv, orbit_full)
         total_gain = total_gain + _gain
 
-    if gain_sahga == True:
+    if gain_sahga:
         _gain = relative_sahga_gain(senv, orbit_full)
         total_gain = total_gain + _gain
 
@@ -107,14 +124,15 @@ def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
 
     out = {'y':surf_y, 'amp':surf_amp}
 
-    if archive == True:
+    if archive:
         archive_surface(senv, orbit_full, out, typ)
 
     return out
 
 
 def relative_altitude_gain(senv, orbit_full):
-    """Provide relative altitude gain for an orbit following Campbell et al. (2021, eq.1)
+    """Provide relative altitude gain for an orbit following
+    Campbell et al. (2021, eq.1)
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
@@ -130,17 +148,18 @@ def relative_altitude_gain(senv, orbit_full):
 
 
 def relative_sahga_gain(senv, orbit_full):
-    """ Provide relative SA and HGA gain for an orbit following Campbell et al. (2021, eq.4)
+    """Provide relative SA and HGA gain for an orbit following
+    Campbell et al. (2021, eq.4)
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
         raise("No Auxiliary Data for orbit " + orbit_full)
-    
-    SAMXin = aux['MRO_SAMX_INNER_GIMBAL_ANGLE']
-    SAPXin = aux['MRO_SAPX_INNER_GIMBAL_ANGLE']
-    HGAout = aux['MRO_HGA_OUTER_GIMBAL_ANGLE']
 
-    gain = 0.0423*np.abs(SAMXin) + 0.0274*np.abs(SAPXin) - 0.0056*np.abs(HGAout)
+    samxin = aux['MRO_SAMX_INNER_GIMBAL_ANGLE']
+    sapxin = aux['MRO_SAPX_INNER_GIMBAL_ANGLE']
+    hgaout = aux['MRO_HGA_OUTER_GIMBAL_ANGLE']
+
+    gain = 0.0423*np.abs(samxin) + 0.0274*np.abs(sapxin) - 0.0056*np.abs(hgaout)
 
     return gain
 
@@ -158,7 +177,7 @@ def archive_surface(senv, orbit_full, srf_data, typ):
 
     srf_data: list
         output from srf_processor
-    
+
     typ: string
         The type of radar data used to get the amplitude from
 
@@ -205,12 +224,12 @@ def archive_surface(senv, orbit_full, srf_data, typ):
 
     if typ == 'cmp':
         archive_path = os.path.join(senv.out['srf_path'],
-                orbit_info['relpath'], typ)
+                                    orbit_info['relpath'], typ)
     else: # pragma: no cover
         assert False
     if not os.path.exists(archive_path):
         os.makedirs(archive_path)
-    fil = os.path.join(archive_path,  orbit_full + '.txt')
+    fil = os.path.join(archive_path, orbit_full + '.txt')
     out.to_csv(fil, index=None, sep=',')
     #print("CREATED: " + fil )
 
@@ -284,23 +303,24 @@ def todo(delete=False, senv=None, filename=None, verbose=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='RSR processing routines')
+    parser = argparse.ArgumentParser(description='Processing routines \
+                                     for surface echo power extraction')
 
     # Job control options
 
     #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
 
-    parser.add_argument('-o','--output', default=None,
-            help="Debugging output data directory")
-    #parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'),
+    parser.add_argument('-o', '--output', default=None,
+                        help="Debugging output data directory")
+    #parser.add_argument('--ofmt',   default='hdf5',choices=('hdf5','none'),
     #        help="Output data format")
     parser.add_argument('orbits', metavar='orbit', nargs='+',
-            help='Orbit IDs to process (including leading zeroes). If "all",\
-            processes all orbits')
-    parser.add_argument('-v','--verbose', action="store_true",
-            help="Display verbose output")
-    parser.add_argument('-n','--dryrun', action="store_true",
-            help="Dry run. Build task list but do not run")
+                        help='Orbit IDs to process (including leading zeroes). \
+                        If "all", processes all orbits')
+    parser.add_argument('-v', '--verbose', action="store_true",
+                        help="Display verbose output")
+    parser.add_argument('-n', '--dryrun', action="store_true",
+                        help="Dry run. Build task list but do not run")
     #parser.add_argument('--tracklist', default="elysium.txt",
     #    help="List of tracks to process")
     #parser.add_argument('--maxtracks', default=None, type=int,
@@ -308,19 +328,23 @@ def main():
 
     # Algorithm options
 
-    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100],
-            help='2 numbers defining the fast-time relative boundaries around\
-            the altimetry surface return where the surface will be looked for')
+    parser.add_argument('-y', '--ywinwidth', nargs='+', type=int,
+                        default=(-100, 100),
+                        help='2 numbers defining the fast-time relative \
+                        boundaries around the altimetry surface return where \
+                        the surface will be looked for')
     parser.add_argument('-t', '--type', type=str, default='cmp',
-            help='Type of radar data used to get the amplitude from')
+                        help='Type of radar data used to get the amplitude \
+                        from')
     parser.add_argument('-d', '--delete', action='store_true',
-            help='Delete and reprocess files already processed, only if [orbit] is [all]')
+                        help='Delete and reprocess files already processed, \
+                        only if [orbit] is [all]')
 
     args = parser.parse_args()
 
-    loglevel=logging.DEBUG if args.verbose else logging.INFO
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
-        format="run_srf: [%(levelname)-7s] %(message)s")
+                        format="run_srf: [%(levelname)-7s] %(message)s")
 
     senv = SHARADEnv.SHARADEnv()
 
@@ -332,7 +356,8 @@ def main():
 
     if '.' in args.orbits[0]:
         # Use a file to define orbits to process
-        args.orbits = todo(delete=args.delete, senv=senv, filename=args.orbits[0])
+        args.orbits = todo(delete=args.delete, senv=senv,
+                           filename=args.orbits[0])
 
     if args.dryrun: # pragma: no cover
         logging.info("Process orbits: " + ' '.join(args.orbits))
@@ -340,11 +365,12 @@ def main():
 
     # TODO: implement multiprocessing
     for i, orbit in enumerate(args.orbits):
-        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
+        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
+            '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
         #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
-        b = surface_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth, archive=True,
-        gain=0, gain_altitude=True, gain_sahga=True,
-        senv=senv)
+        b = surface_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth,
+                              archive=True, gain=0, gain_altitude=True,
+                              gain_sahga=True, senv=senv)
 
         if args.output is not None:
             # Debugging output
@@ -358,6 +384,3 @@ def main():
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-
-
-
