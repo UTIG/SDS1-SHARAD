@@ -13,7 +13,7 @@ class DataMissingException(Exception):
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
-        gain=0, gain_altitude=False, gain_sahga=False,
+        gain=0, gain_altitude=True, gain_sahga=True,
         senv=None, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
