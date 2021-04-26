@@ -115,13 +115,14 @@ def surface_processor(orbit, typ='cmp', ywinwidth=[-100,100], archive=False,
 
 def relative_altitude_gain(senv, orbit_full):
     """Provide relative altitude gain for an orbit following Campbell et al. (2021, eq.1)
-    !!! EQUATION SOUNDS FAULTY !!!
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
         raise("No Auxiliary Data for orbit " + orbit_full)
 
     lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+
+    lat = lat/90 # Normalization between -1 and 1 (Bruce's 2021/04/23 email )
 
     gain = -.41 -1.62*lat -1.10*lat**2 +.65*lat**3 +.66*lat**4  #dB
 
