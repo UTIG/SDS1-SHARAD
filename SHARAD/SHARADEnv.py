@@ -165,12 +165,14 @@ class SHARADEnv:
 
         # List files of avaialble for all data products
         for orbit in self.orbitinfo:
-            for typ in self.out:
-                path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
-                files = glob.glob(path)
-                self.orbitinfo[orbit][0][typ.replace('_','')] = files
-
-
+            for subid, suborbit in enumerate(self.orbitinfo[orbit]):
+                for typ in self.out:
+                    path = os.path.join(self.out[typ], 
+                                        self.orbitinfo[orbit][subid]['relpath']
+                                        ) + '/**/' + suborbit['name'] + '*'
+                    files = glob.glob(path)
+                    self.orbitinfo[orbit][subid][typ.replace('_','')] = files
+        
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
         # This isn't ever used.
