@@ -161,6 +161,7 @@ class SHARADEnv:
         #out['orbit_path'] = ['/'.join(f.split('/')[-5:-1])
         #                 for f in label_files]
 
+        # TODO: make orbitinfo a defaultdict
         self.orbitinfo = {} # map orbit name prefix to full orbit name
         for filename in label_files:
             orbit, orbitinfo = make_orbit_info(filename)
@@ -415,8 +416,8 @@ class SHARADEnv:
         for typ in self.out:
             output[typ.split('_')[0]] = []
 
-        for orbit in self.orbitinfo:
-            for suborbit in self.orbitinfo[orbit]:
+        for orbit, suborbits in self.orbitinfo.items():
+            for suborbit in suborbits:
                 for datatype in output.keys():
                     try:
                         #if any(suborbit[datatype + 'path']):
