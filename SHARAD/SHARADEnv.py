@@ -354,6 +354,26 @@ class SHARADEnv:
         return out
 
 
+    def processed(senv):
+        """Output processed data products for each processing (e.g., cmp, alt)
+        For now, each suborbit having at least one file in a certain processing
+        folder is considered 'processed' for this specific processing category
+        """
+        output = {}
+        for typ in senv.out:
+            output[typ.split('_')[0]] = []
+
+        for orbit in senv.orbitinfo:
+            for suborbit in senv.orbitinfo[orbit]:
+                for datatype in output.keys():
+                     try:
+                         if any(suborbit[datatype + 'path']):
+                             output[datatype].append(suborbit['name'])
+                     except:
+                         pass
+
+        return output
+
     def my(self, orbit):
         """Output martian year for a given orbit
         (gives the MY at the beginning of the orbit)
