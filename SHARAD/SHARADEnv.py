@@ -372,6 +372,9 @@ class SHARADEnv:
                      except:
                          pass
 
+        for typ in output.keys():
+            output[typ] = sorted(output[typ])
+
         return output
 
     def my(self, orbit):
