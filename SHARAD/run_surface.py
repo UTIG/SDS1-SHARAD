@@ -295,12 +295,6 @@ def archive_surface(senv, orbit_full, srf_data, typ):
     return out
 
 
-def cb_surface_processor():
-    """Callback function for surface processor
-    """
-    pass
-
-
 def main():
     """Executed if run as script
     """
