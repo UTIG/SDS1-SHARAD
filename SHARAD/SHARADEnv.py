@@ -165,12 +165,14 @@ class SHARADEnv:
 
         # List files of avaialble for all data products
         for orbit in self.orbitinfo:
-            for typ in self.out:
-                path = os.path.join(self.out[typ], self.orbitinfo[orbit][0]['relpath']) + '/**/*'
-                files = glob.glob(path)
-                self.orbitinfo[orbit][0][typ.replace('_','')] = files
-
-
+            for subid, suborbit in enumerate(self.orbitinfo[orbit]):
+                for typ in self.out:
+                    path = os.path.join(self.out[typ], 
+                                        self.orbitinfo[orbit][subid]['relpath']
+                                        ) + '/**/' + suborbit['name'] + '*'
+                    files = glob.glob(path)
+                    self.orbitinfo[orbit][subid][typ.replace('_','')] = files
+        
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
         # This isn't ever used.
@@ -278,7 +280,7 @@ class SHARADEnv:
         #orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
         #k = p['orbit_full'].index(orbit_full)
         path1 = os.path.join(self.out['alt_path'], orbit_info['relpath'],
-                             typ, '*.' + ext)
+                             typ, orbit_info['name'] + '*.' + ext)
         files = glob.glob(path1)
         if not files:
             return None # no file found
@@ -311,10 +313,9 @@ class SHARADEnv:
         orbit_info = self.get_orbit_info(orbit, True)
 
         tecpat = os.path.join(self.out['cmp_path'],
-                 orbit_info['relpath'], typ, '*TECU.txt')
+                 orbit_info['relpath'], typ, orbit_info['name'] + '*TECU.txt')
 
-        fil = glob.glob('/'.join(tecpat)[0])
-        #foo = check(fil)
+        fil = glob.glob(tecpat)[0]
         out = np.loadtxt(fil)
         return out
 
@@ -325,7 +326,7 @@ class SHARADEnv:
         orbit_info = self.get_orbit_info(orbit, True)
 
         globpat = os.path.join(self.out['cmp_path'],
-                               orbit_info['relpath'], typ, '*.h5')
+                               orbit_info['relpath'], typ, orbit_info['name'] + '*.h5')
         fil = sorted(glob.glob(globpat))[0]
         redata = pd.read_hdf(fil, key='real').values
         imdata = pd.read_hdf(fil, key='imag').values
@@ -342,7 +343,7 @@ class SHARADEnv:
             return None
 
         path1 = os.path.join(self.out['srf_path'], orbit_info['relpath'],
-                             typ, '*.txt')
+                             typ, orbit_info['name'] + '*.txt')
         files = glob.glob(path1)
         # TODO: assert glob only has one result
         if not files:
