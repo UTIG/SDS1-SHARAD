@@ -315,8 +315,7 @@ class SHARADEnv:
         tecpat = os.path.join(self.out['cmp_path'],
                  orbit_info['relpath'], typ, orbit_info['name'] + '*TECU.txt')
 
-        fil = glob.glob('/'.join(tecpat)[0])
-        #foo = check(fil)
+        fil = glob.glob(tecpat)[0]
         out = np.loadtxt(fil)
         return out
 
