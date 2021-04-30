@@ -236,76 +236,11 @@ def archive_surface(senv, orbit_full, srf_data, typ):
     return out
 
 
-def todo(delete=False, senv=None, filename=None, verbose=False):
-    """List the orbits that are not already srf-processed to be
-    processed but for which a cmp file exists
-
-    Inputs
-    ------
-
-    delete: boolean
-        If True, delete existing SRF products and re-process.
-        If False, only generate SRF products that do not exist.
-
-    filename: string
-        specific list of orbits to process (optional)
-
-    Output
-    ------
-
-    array of orbits
-    """
-
-    if senv is None:
-        senv = SHARADEnv.SHARADEnv()
-
-    # Numpy errors
-    errlevel = 'warn' if verbose else 'ignore'
-    np.seterr(all=errlevel)
-
-    # Existing orbits
-    alt_orbits = []
-    srf_orbits = []
-    for orbit in senv.orbitinfo:
-        for suborbit in senv.orbitinfo[orbit]:
-            try:
-                if any(s.endswith('.h5') for s in suborbit['altpath']):
-                    alt_orbits.append(suborbit['name'])
-                if any(s.endswith('.txt') for s in suborbit['srfpath']):
-                    srf_orbits.append(suborbit['name'])
-            except KeyError:
-                pass
-
-   # Available orbits
-    if filename is not None:
-        fil_orbits = list(np.genfromtxt(filename, dtype='str'))
-        available_orbits = [i for i in fil_orbits if i in alt_orbits]
-    else:
-        available_orbits = alt_orbits
-
-    # Unprocessed orbits
-    unprocessed_orbits = [i for i in available_orbits if i not in srf_orbits]
-
-    if delete is True:
-        out = available_orbits
-    else:
-        out = unprocessed_orbits
-    out.sort()
-
-    # Remove bad altimetry orbits
-    if os.path.isfile('bad_alt.txt'):
-        bad_orbits = list(np.genfromtxt('bad_alt.txt', dtype='str'))
-        out = [i for i in out if i not in bad_orbits]
-
-    #print(str(len(out)) + ' orbits to processed')
-
-    return out
-
-
 def main():
     parser = argparse.ArgumentParser(description='Processing routines \
                                      for surface echo power extraction')
 
+    #--------------------
     # Job control options
 
     #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
@@ -326,6 +261,7 @@ def main():
     #parser.add_argument('--maxtracks', default=None, type=int,
     #    help="Max number of tracks to process")
 
+    #------------------
     # Algorithm options
 
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int,
@@ -348,19 +284,34 @@ def main():
 
     senv = SHARADEnv.SHARADEnv()
 
+    #--------------------------
+    # Requested Orbits handling
+
+    available = senv.processed()['cmp'] # To convert to EDR orbit list
+    processed = senv.processed()
+    processable = list(set(processed['cmp']) & set(processed['alt']))
+    processable_unprocessed = list(set(processable) - set(processed['srf']))
 
     if 'all' in args.orbits:
-        # Uses todo to define orbits to process
-        assert len(args.orbits) == 1
-        args.orbits = todo(delete=args.delete, senv=senv)
+        requested = available
+    elif '.' in args.orbits[0]: # Input is a filename
+        requested = list(np.genfromtxt(args.orbits[0], dtype='str'))    
+    else:
+        requested = args.orbits
 
-    if '.' in args.orbits[0]:
-        # Use a file to define orbits to process
-        args.orbits = todo(delete=args.delete, senv=senv,
-                           filename=args.orbits[0])
+    if args.delete:
+        args.orbits = list(set(processable) & set(requested))
+    else:
+        args.orbits = list(set(processable_unprocessed) & set(requested))
+
+    args.orbits.sort()
+
+    #-----------
+    # Processing
 
     if args.dryrun: # pragma: no cover
-        logging.info("Process orbits: " + ' '.join(args.orbits))
+        logging.info(f"{' '.join(args.orbits)}")
+        logging.info(f"TOTAL: {len(args.orbits)} to process")
         sys.exit(0)
 
     # TODO: implement multiprocessing
