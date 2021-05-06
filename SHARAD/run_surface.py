@@ -30,7 +30,7 @@ class DataMissingException(Exception):
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
-                      gain=0, gain_altitude='grima2021', gain_sahga=False,
+                      gain=0, gain_altitude='grima2021', gain_sahga=True,
                       senv=None, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
@@ -165,6 +165,7 @@ def relative_sahga_gain(senv, orbit_full):
     hgaout = aux['MRO_HGA_OUTER_GIMBAL_ANGLE']
 
     gain = 0.0423*np.abs(samxin) + 0.0274*np.abs(sapxin) - 0.0056*np.abs(hgaout)
+    gain = -gain
 
     return gain
 
