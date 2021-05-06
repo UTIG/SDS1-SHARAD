@@ -167,9 +167,14 @@ class SHARADEnv:
         for orbit in self.orbitinfo:
             for subid, suborbit in enumerate(self.orbitinfo[orbit]):
                 for typ in self.out:
-                    path = os.path.join(self.out[typ], 
-                                        self.orbitinfo[orbit][subid]['relpath']
-                                        ) + '/**/' + suborbit['name'] + '*'
+                    if typ == 'EDR_path':
+                        path = os.path.join(self.get_edr_path(),
+                                            self.orbitinfo[orbit][subid]['relpath']
+                                            ) + '/*'
+                    else:
+                        path = os.path.join(self.out[typ], 
+                                            self.orbitinfo[orbit][subid]['relpath']
+                                            ) + '/**/' + suborbit['name'] + '*'
                     files = glob.glob(path)
                     self.orbitinfo[orbit][subid][typ.replace('_','')] = files
         
@@ -367,10 +372,17 @@ class SHARADEnv:
             for suborbit in senv.orbitinfo[orbit]:
                 for datatype in output.keys():
                      try:
-                         if any(s.endswith('.txt') for s in suborbit['srfpath']):
+                         #if any(suborbit[datatype + 'path']):
+                         if any(s.endswith('.txt') for s in 
+                                suborbit[datatype + 'path']):
                              output[datatype].append(suborbit['name'])
-                         if any(s.endswith('.h5') for s in suborbit['srfpath']):
+                         if any(s.endswith('.h5') for s in 
+                                suborbit[datatype + 'path']):
                              output[datatype].append(suborbit['name'])
+                         if any(s.endswith('.dat') for s in
+                                suborbit[datatype + 'path']):
+                             output[datatype].append(suborbit['name'])
+
                      except:
                          pass
 
