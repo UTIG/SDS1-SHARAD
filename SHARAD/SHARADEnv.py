@@ -171,6 +171,10 @@ class SHARADEnv:
                         path = os.path.join(self.get_edr_path(),
                                             self.orbitinfo[orbit][subid]['relpath']
                                             ) + '/*'
+                    elif typ == 'foc_path':
+                        path = os.path.join(self.out[typ],
+                                            self.orbitinfo[orbit][subid]['relpath']
+                                            ) + '/*/*/*/*'
                     else:
                         path = os.path.join(self.out[typ], 
                                             self.orbitinfo[orbit][subid]['relpath']
