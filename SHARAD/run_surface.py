@@ -30,7 +30,7 @@ class DataMissingException(Exception):
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
-                      gain=0, gain_altitude=False, gain_sahga=False,
+                      gain=0, gain_altitude='grima2021', gain_sahga=False,
                       senv=None, **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
@@ -130,19 +130,24 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
     return out
 
 
-def relative_altitude_gain(senv, orbit_full):
-    """Provide relative altitude gain for an orbit following
-    Campbell et al. (2021, eq.1)
+def relative_altitude_gain(senv, orbit_full, method='grima2012'):
+    """Provide relative altitude gain for an orbit following 
+    Grima et al. 2012 or Campbell et al. (2021, eq.1)
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
         raise("No Auxiliary Data for orbit " + orbit_full)
 
-    lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+    if method  == 'grima2012':
+        alt_ref = 250 # Reference altitude in km
+        alt = aux['SPACECRAFT_ALTITUDE']
+        gain = 20*np.log10(alt/alt_ref)
 
-    lat = lat/90 # Normalization between -1 and 1 (Bruce's 2021/04/23 email )
-
-    gain = -.41 -1.62*lat -1.10*lat**2 +.65*lat**3 +.66*lat**4  #dB
+    if method == 'campbell2021':
+        lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+        lat = lat/90 # Normalization between -1 and 1 (Bruce's 2021/04/23 email )
+        gain = -.41 -1.62*lat -1.10*lat**2 +.65*lat**3 +.66*lat**4  #dB
+        gain = -gain
 
     return gain
 
