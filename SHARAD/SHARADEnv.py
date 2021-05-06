@@ -367,7 +367,9 @@ class SHARADEnv:
             for suborbit in senv.orbitinfo[orbit]:
                 for datatype in output.keys():
                      try:
-                         if any(suborbit[datatype + 'path']):
+                         if any(s.endswith('.txt') for s in suborbit['srfpath']):
+                             output[datatype].append(suborbit['name'])
+                         if any(s.endswith('.h5') for s in suborbit['srfpath']):
                              output[datatype].append(suborbit['name'])
                      except:
                          pass
