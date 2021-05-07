@@ -20,13 +20,33 @@ import sys
 import argparse
 from datetime import datetime
 import logging
+import multiprocessing
 import numpy as np
 import pandas as pd
 
 import SHARADEnv
 
+
 class DataMissingException(Exception):
     pass
+
+
+class Async:
+    """
+    Class to support multi procesing jobs. For calling example, see:
+    http://masnun.com/2014/01/01/async-execution-in-python-using-multiprocessing-pool.html
+    """
+    def __init__(self, func, cb_func, nbcores=1):
+        self.func = func
+        self.cb_func = cb_func
+        self.pool = multiprocessing.Pool(nbcores)
+
+    def call(self,*args, **kwargs):
+        return self.pool.apply_async(self.func, args, kwargs, self.cb_func)
+
+    def wait(self):
+        self.pool.close()
+        self.pool.join()
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
@@ -170,7 +190,7 @@ def relative_sahga_gain(senv, orbit_full):
     return gain
 
 
-def archive_surface(senv, orbit_full, srf_data, typ):
+def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
     """
     Archive in the hierarchy results obtained from srf_processor
 
@@ -237,9 +257,15 @@ def archive_surface(senv, orbit_full, srf_data, typ):
         os.makedirs(archive_path)
     fil = os.path.join(archive_path, orbit_full + '.txt')
     out.to_csv(fil, index=None, sep=',')
-    #print("CREATED: " + fil )
+    logging.info('CREATED: ' + fil)
 
     return out
+
+
+def cb_surface_processor():
+    """Callback function for surface processor
+    """
+    pass
 
 
 def main():
@@ -258,6 +284,9 @@ def main():
     parser.add_argument('orbits', metavar='orbit', nargs='+',
                         help='Orbit IDs to process (including leading zeroes). \
                         If "all", processes all orbits')
+    parser.add_argument('-j','--jobs', type=int, default=8,
+            help="Number of jobs (cores) to use for processing. -1 to disable\
+            multiprocessing")
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
     parser.add_argument('-n', '--dryrun', action="store_true",
@@ -311,31 +340,77 @@ def main():
         args.orbits = list(set(processable_unprocessed) & set(requested))
 
     args.orbits.sort()
-
+    
     #-----------
     # Processing
 
     if args.dryrun: # pragma: no cover
         logging.info(f"{' '.join(args.orbits)}")
-        logging.info(f"TOTAL: {len(args.orbits)} to process")
+        #logging.info(f"TOTAL: {len(args.orbits)} to process")
         sys.exit(0)
 
-    # TODO: implement multiprocessing
+    logging.info(f"TOTAL: {len(args.orbits)} to process")
+
+    # Keyword arguments for processing
+    kwargs = {'typ':args.type,
+              'ywinwidth':args.ywinwidth,
+              'archive':True,
+              'gain':0,
+              'gain_altitude':True,
+              'gain_sahga':True,
+              'senv':senv
+             }
+
+    # Create Async class for multiprocessing
+    if args.jobs > 0:
+        async_surface = Async(surface_processor, None, nbcores=args.jobs)
+
+    # Processing
     for i, orbit in enumerate(args.orbits):
-        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
-            '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
-        #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
-        b = surface_processor(orbit, typ=args.type, ywinwidth=args.ywinwidth,
-                              archive=True, gain=0, gain_altitude=True,
-                              gain_sahga=True, senv=senv)
+        #logging.debug('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
+        #              '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
+
+        # Do NOT use the multiprocessing package
+        if args.jobs == -1:
+            b = surface_processor(orbit, **kwargs)
+
+        # Do use the multiprocessing package
+        if args.jobs > 0:
+            async_surface.call(orbit, **kwargs)
 
         if args.output is not None:
-            # Debugging output
-            outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
-            logging.debug("Saving to " + outfile)
-            if not os.path.exists(args.output):
-                os.makedirs(args.output)
-            np.save(outfile, b)
+                # Debugging output
+                outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
+                logging.debug("Saving to " + outfile)
+                if not os.path.exists(args.output):
+                    os.makedirs(args.output)
+                np.save(outfile, b)
+
+    if args.jobs > 0:
+        async_surface.wait()
+
+    #if args.jobs == -1:
+    #    for i, orbit in enumerate(args.orbits):
+    #        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
+    #            '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
+    #        b = surface_processor(orbit, **kwargs)
+    #        #b = surface_processor(orbit, typ=args.type, 
+    #        #                      ywinwidth=args.ywinwidth,
+    #        #                      archive=True, gain=0, gain_altitude=True,
+    #        #                      gain_sahga=True, senv=senv)
+
+    #        if args.output is not None:
+    #            # Debugging output
+    #            outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
+    #            logging.debug("Saving to " + outfile)
+    #            if not os.path.exists(args.output):
+    #                os.makedirs(args.output)
+    #            np.save(outfile, b)
+
+    #if args.jobs > 0:
+    #    async_surface = Async(surface_processor, None, nbcores=jobs)
+    #    for orbit in args.orbits:
+    #        async_surface.call(orbit, **kwargs) 
 
 
 if __name__ == "__main__":
