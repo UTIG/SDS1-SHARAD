@@ -62,6 +62,14 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
     pwr_image, lim = fl.load_power_image(line, chan, trim, fresnel_stack, 'averaged', pth=pth)
     if trim[3] == 0:
         trim[3] = lim
+
+    # load_power_image only trims the second axis (slow time)
+    # so trim fast time here.
+    if trim is not None:
+        assert trim[0] < trim[1] <= pwr_image.shape[0]
+        pwr_image = pwr_image[trim[0]:trim[1], :]
+        logging.info("Trimming power image fast time records to %d:%d", *trim[0:2])
+
     if debug and bplot:
         plt.figure()
         plt.imshow(pwr_image, aspect='auto', cmap='gray')
@@ -79,6 +87,7 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
         FOI = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
         #np.save('SRH_Y81a_lakepicks_15Stack.npy', FOI)
         FOI = np.transpose(FOI)
+        assert FOI.shape == pwr_image.shape # assert that what got loaded is the right shape
         if debug:
             plt.figure()
             plt.imshow(pwr_image, aspect='auto', cmap='gray')
@@ -94,7 +103,7 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
             logging.error(msg)
             # continue around again
 
-    logging.info('Picked FOI with length {:d} samples'.format(Nf))
+    logging.info('Picked FOI with length %d samples', Nf)
 
     # Feature surface above the picked FOI from the stacked power image
     print('-- select surface above feature of interest')
@@ -108,6 +117,7 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
         plt.colorbar()
         plt.show()
 
+    assert SRF.shape == FOI.shape
     print('FEATURE OF INTEREST SELECTION -- complete')
     print(' ')
 
@@ -137,6 +147,13 @@ def select_ref((line, path, chan, fresnel_stack, trim,
 
     if trim[3] == 0:
         trim[3] = lim
+    # load_power_image only trims the second axis (slow time)
+    # so trim fast time here.
+    if trim is not None:
+        assert trim[0] < trim[1] <= pwr_image.shape[0]
+        pwr_image = pwr_image[trim[0]:trim[1], :]
+        logging.info("Trimming power image fast time records to %d:%d", *trim[0:2])
+
     if debug and bplot:
         plt.figure()
         plt.imshow(pwr_image, aspect='auto', cmap='gray')
@@ -211,7 +228,7 @@ def FOI_picklen(foi):
 # Some pre-defined trim parameters for commonly-used lines
 TRIMS = {
     'NAQLK/JKB2j/ZY1b': [0, 1000, 0, 12000],
-    'GOG3/JKB2j/BWN01b': [0, 1000, 0, 15000],
+    #'GOG3/JKB2j/BWN01b': [0, 1000, 0, 15000],
     'GOG3/JKB2j/BWN01a': [0, 1000, 15000, 27294],
     '__DEFAULT__': [0, 1000, 0, 0],
 }

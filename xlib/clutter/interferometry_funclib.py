@@ -234,14 +234,14 @@ def load_power_image(line, channel, trim, fresnel, mode, pth='./Test Data/MARFA/
     ------------
           line: string specifying the line of interest
        channel: string specifying the MARFA channel
-          trim: limits used to trim the full profile
+          trim: limits used to trim the full profile. Note that only slow time axis is trimmed in this function.
        fresnel: Fresnel zone length in units of trace spacings
           mode: mode to use when stacking range lines to Fresenl zone interval
            pth: path the relevant MARFA files
 
     Outputs:
     ------------
-        output: power image for the rangeline of interest
+        output: power image for the rangeline of interest. First axis is fast time; second axis is slow time.
            lim: number of range lines in the untrimmed radargram
     '''
 
@@ -1840,7 +1840,7 @@ def surface_pick(image, FOI, pick_method='maximum'):
 
     Inputs:
     ----------------
-           image: power image
+           image: power image.  First axis is fast time, second axis is slow time.
              FOI: array of the same size as the power image with ones where
                   a feature-of-interest has been defined
      pick_method: string indentifying how individual pixels corresponding
@@ -1848,20 +1848,23 @@ def surface_pick(image, FOI, pick_method='maximum'):
 
     Outputs:
     ----------------
-      out is an array of the same size as the poower image with ones
-          where the surface overlying the feature-of-interst has been
+      out is an array of the same size as the power image with ones
+          where the surface overlying the feature-of-interest has been
           defined
     '''
 
     # extract the along-track sample bounds in the picked FOI
+    # indA is the lower record index where the FOI was picked.
     inds = np.argwhere(FOI == 1)[:, 1]
     indA = min(inds)
     indB = max(inds)
     image2 = image[:, indA:indB]
+    logging.info("Picking surface from slow time record (:, %d:%d)", indA, indB)
 
     # pick the surface within the area covered by the FOI
     SRF = ip.picker(np.transpose(image2), snap_to=pick_method)
     SRF = np.transpose(SRF)
+    logging.info("surface_pick(): SRF shape = %s", SRF.shape)
 
     # ensure the picked surface covers the breadth of the trimmed power image
     test = np.nansum(SRF, axis=0)
@@ -1877,9 +1880,16 @@ def surface_pick(image, FOI, pick_method='maximum'):
         SRF2[int(yall[ii]), ii] = 1
 
     # position the picked surface within the full breadth of the power image
-    tempA = np.nan * np.ones((len(FOI), indA))
-    tempB = np.nan * np.ones((len(FOI), np.size(FOI, axis=1) - indB))
-    out = np.concatenate((tempA, SRF, tempB), axis=1)
+    tempA = np.full((FOI.shape[0], indA), np.nan)
+    tempB = np.full((FOI.shape[0], FOI.shape[1] - indB), np.nan)
+    try:
+        out = np.concatenate((tempA, SRF, tempB), axis=1)
+        assert out.shape == image.shape
+    except (ValueError, AssertionError) as _: #usually mismatched dimensions
+        logging.warning("tempA.shape=%s", tempA.shape)
+        logging.warning("SRF.shape=%s", SRF.shape)
+        logging.warning("tempB.shape=%s", tempB.shape)
+        raise
 
     return out
 
