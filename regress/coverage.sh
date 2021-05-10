@@ -129,10 +129,10 @@ $COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx
 
 
 echo "$S0: interferometry"
-$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../regress/pick_FOI_NAQLK_JKB2j_ZY1b.npz --project GOG3 --line NAQLK/JKB2j/ZY1b/ --plot
-$COV run $FLAGS -a ../MARFA/run_interferometry.py --mode Reference --project GOG3 --line NAQLK/JKB2j/ZY1b/ \
-                 --pickfile ../regress/pick_FOI_NAQLK_JKB2j_ZY1b.npz \
-                 --refpickfile ../regress/pick_ref_FOI_NAQLK_JKB2j_ZY1b.npz --plot
+$COV run $FLAGS -a ../MARFA/run_interferometry.py --pickfile ../regress/pick_FOI_GOG3_JKB2j_BWN01b.npz --project GOG3 --line GOG3/JKB2j/BWN01b/ --plot
+$COV run $FLAGS -a ../MARFA/run_interferometry.py --mode Reference --project GOG3 --line GOG3/JKB2j/BWN01b/ \
+                 --pickfile ../regress/pick_FOI_GOG3_JKB2j_BWN01b.npz \
+                 --refpickfile ../regress/pick_ref_FOI_GOG3_JKB2j_BWN01b.npz --plot
 
 
 

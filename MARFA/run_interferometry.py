@@ -492,7 +492,9 @@ def main():
             logging.info("Load reference surface pick from " + args.refpickfile)
             with np.load(args.refpickfile) as refpicks:
                 # Load first variable
+                logging.warning("Reference picks: %s", repr(list(refpicks.keys())))
                 reference = refpicks[list(refpicks.keys())[0]]
+                sys.exit(1)
 
         reference = np.transpose(reference)
 
