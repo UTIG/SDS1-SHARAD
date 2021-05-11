@@ -418,8 +418,8 @@ class SHARADEnv:
 
 
     def make_aux_file(self, filename='aux.h5', sampling=1000, verbose=True):
-        """Gather aux data into a single text file to faciliate aux data query.
-        Uncomment the columns you would want to see in the aux file.
+        """Gather aux data into a single text file to faciliate queries over 
+        aux fields. Uncomment the columns you would want to see in the aux file.
         Fields that are not native from the aux dataset are in lower case.
 
         Input:
@@ -433,68 +433,76 @@ class SHARADEnv:
         """
 
         # Aux fields to extract
-        columns=[
-                 #"SCET_BLOCK_WHOLE",
-                 #"SCET_BLOCK_FRAC",
-                 #"EPHEMERIS_TIME",
-                 #"GEOMETRY_EPOCH",
-                 "SOLAR_LONGITUDE",
-                 #"ORBIT_NUMBER",
-                 #"X_MARS_SC_POSITION_VECTOR",
-                 #"Y_MARS_SC_POSITION_VECTOR",
-                 #"Z_MARS_SC_POSITION_VECTOR",
-                 "SPACECRAFT_ALTITUDE",
-                 "SUB_SC_EAST_LONGITUDE",
-                 "SUB_SC_PLANETOCENTRIC_LATITUDE",
-                 #"SUB_SC_PLANETOGRAPHIC_LATITUDE",
-                 #"X_MARS_SC_VELOCITY_VECTOR",
-                 #"Y_MARS_SC_VELOCITY_VECTOR",
-                 #"Z_MARS_SC_VELOCITY_VECTOR",
-                 #"MARS_SC_RADIAL_VELOCITY",
-                 #"MARS_SC_TANGENTIAL_VELOCITY",
-                 #"LOCAL_TRUE_SOLAR_TIME",
-                 "SOLAR_ZENITH_ANGLE",
-                 "SC_PITCH_ANGLE",
-                 "SC_YAW_ANGLE",
-                 "SC_ROLL_ANGLE",
-                 #"MRO_SAMX_INNER_GIMBAL_ANGLE",
-                 #"MRO_SAMX_OUTER_GIMBAL_ANGLE",
-                 #"MRO_SAPX_INNER_GIMBAL_ANGLE",
-                 #"MRO_SAPX_OUTER_GIMBAL_ANGLE",
-                 #"MRO_HGA_INNER_GIMBAL_ANGLE",
-                 #"MRO_HGA_OUTER_GIMBAL_ANGLE",
-                 #"DES_TEMP",
-                 #"DES_5V",
-                 #"DES_12V",
-                 #"DES_2V5",
-                 #"RX_TEMP",
-                 #"TX_TEMP",
-                 #"TX_LEV",
-                 #"TX_CURR",
-                 #"CORRUPTED_DATA_FLAG1",
-                 #"CORRUPTED_DATA_FLAG2",
-                ]
+        aux_columns=[
+                     #"SCET_BLOCK_WHOLE",
+                     #"SCET_BLOCK_FRAC",
+                     "EPHEMERIS_TIME",
+                     #"GEOMETRY_EPOCH",
+                     "SOLAR_LONGITUDE",
+                     #"ORBIT_NUMBER",
+                     #"X_MARS_SC_POSITION_VECTOR",
+                     #"Y_MARS_SC_POSITION_VECTOR",
+                     #"Z_MARS_SC_POSITION_VECTOR",
+                     "SPACECRAFT_ALTITUDE",
+                     "SUB_SC_EAST_LONGITUDE",
+                     "SUB_SC_PLANETOCENTRIC_LATITUDE",
+                     #"SUB_SC_PLANETOGRAPHIC_LATITUDE",
+                     #"X_MARS_SC_VELOCITY_VECTOR",
+                     #"Y_MARS_SC_VELOCITY_VECTOR",
+                     #"Z_MARS_SC_VELOCITY_VECTOR",
+                     #"MARS_SC_RADIAL_VELOCITY",
+                     #"MARS_SC_TANGENTIAL_VELOCITY",
+                     "LOCAL_TRUE_SOLAR_TIME",
+                     "SOLAR_ZENITH_ANGLE",
+                     "SC_PITCH_ANGLE",
+                     "SC_YAW_ANGLE",
+                     "SC_ROLL_ANGLE",
+                     #"MRO_SAMX_INNER_GIMBAL_ANGLE",
+                     #"MRO_SAMX_OUTER_GIMBAL_ANGLE",
+                     #"MRO_SAPX_INNER_GIMBAL_ANGLE",
+                     #"MRO_SAPX_OUTER_GIMBAL_ANGLE",
+                     #"MRO_HGA_INNER_GIMBAL_ANGLE",
+                     #"MRO_HGA_OUTER_GIMBAL_ANGLE",
+                     #"DES_TEMP",
+                     #"DES_5V",
+                     #"DES_12V",
+                     #"DES_2V5",
+                     #"RX_TEMP",
+                     #"TX_TEMP",
+                     #"TX_LEV",
+                     #"TX_CURR",
+                     "CORRUPTED_DATA_FLAG1",
+                     "CORRUPTED_DATA_FLAG2",
+                    ]
 
-        # Extract Data
+        all_columns = aux_columns.copy()
+        all_columns.append('orbit')
+        all_columns.append('martian_year')
+
+        # Create hdf5 file
+        df = pd.DataFrame(columns=all_columns)
         product = 'sampling_' + str(sampling)
+        store = pd.HDFStore(filename)
+        store.put(product, df, format='table', data_columns=True)
+
+        # Axtract and Store Data
         orbits = self.processed()['cmp']
+
         for i, orbit in enumerate(orbits):
             if verbose == True:
                 print(str(i) + '/' + str(len(orbits)) + ' : ' +orbit)
 
             if self.my(orbit):
-                df = pd.DataFrame(self.aux_data(orbit)[::sampling][columns])
+                df = pd.DataFrame(self.aux_data(orbit)[::sampling][aux_columns])
                 df['orbit'] = np.full(len(df), orbit)
                 df['martian_year'] = np.full(len(df), self.my(orbit))
+                store.append(product, df)
 
-                if i == 0: # Create hdf5
-                    df.to_hdf(filename, product, mode='w', format='table')
-                else:
-                    df.to_hdf(filename, product, append=True)
-                del df
+        store.close()
 
 
-    def aux_query(labels, conditions, aux_filename='aux.csv', filename=None, **kwargs):
+    def aux_query(labels, conditions, aux_filename='aux.h5', 
+                  product='sampling_1000', filename=None, **kwargs):
         """Provide a list of orbits matching conditions on their aux labels
         The data are searched within a csv file generated by tools.aux_file
 
@@ -505,21 +513,47 @@ class SHARADEnv:
             query is done
 
         conditions: list
-            list of number pairs (tuples) defining the lower and upper bonds within
-            which the data fall into. The list should be same length as labels.
+            list of number pairs (tuples) defining the lower and upper bonds 
+            within which the data fall into. The list should be same length 
+            as labels.
+
+        aux_filename: string
+            Name of the aux file (hdf5 format) produced by make_aux_file
+
+        product: string
+            Product to read in the aux file
+
+        filename: string
+            filename to write the output in. If None, do not write.
 
         Return
         ------
         List (numpy array) of orbit file names matching the requested conditions
-   
+
         Example
         -------
         labels = ["SUB_SC_EAST_LONGITUDE", "SUB_SC_PLANETOCENTRIC_LATITUDE"]
         conditions = [[0, 90], [30, 60]] 
         a = aux_query(labels, conditions, filename='deuterolinus.csv')
         """
-        # out = pd.read_hdf(filename, key=product, mode='a')
-        pass
+        df = pd.read_hdf(aux_filename, key=product, mode='a', 
+                         columns=labels+['orbit'])
+    
+        # Test conditions on each label
+        for n, label in enumerate(labels):
+            check = (df[label] > conditions[n][0]) & \
+	            (df[label] < conditions[n][1])
+            if n == 0:
+                ok = check
+            else:
+                ok = ok & check
+
+        out = df['orbit'][ok].unique()
+
+        if filename is not None:
+            np.savetxt(filename, out, fmt="%s")
+    
+        return out
 
 
 def test_my(senv):
