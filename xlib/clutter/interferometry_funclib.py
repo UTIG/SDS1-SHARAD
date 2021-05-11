@@ -1793,6 +1793,8 @@ def interferogram_normalization(interferogram, surface):
     input covers the entire breadth of the interferogram. The function interpolates the
     picked surface into spaces where the surface isn't defined.
 
+    # TODO: rename as normalize_interferogram
+
     Inputs:
     ----------------
       interferogram: stacked interferogram
@@ -1803,16 +1805,18 @@ def interferogram_normalization(interferogram, surface):
       output is the normalized interferogram
     '''
 
+    # make sure we aren't going to have an error.
+    assert interferogram.shape == surface.shape
+
     # ensure the picked surface covers the breadth of the interferogram
     test = np.nansum(surface, axis=0)
     x = np.argwhere(test == 1)[:, 0]
-    y = np.zeros((len(x)), dtype = int)
+    y = np.zeros((len(x)), dtype=int)
     for ii in range(len(x)):
         y[ii] = np.argwhere(surface[:, x[ii]] == 1)
-    xall = np.arange(0, np.size(surface, axis=1))
+    xall = np.arange(0, surface.shape[1])
     yall = np.interp(xall, x, y)
-    surface2 = np.zeros((len(surface), np.size(surface, axis=1)), dtype=float)
-    surface2[:, :] = np.nan
+    surface2 = np.full(surface.shape, np.nan, dtype=float)
     for ii in range(len(xall)):
         surface2[int(yall[ii]), ii] = 1
 

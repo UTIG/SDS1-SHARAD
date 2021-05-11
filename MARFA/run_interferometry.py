@@ -19,7 +19,24 @@ with REASON measurments, the goal is to use MARFA.
 
 Usage example
 
-./run_interferometry.py --project GOG3 --line NAQLK/JKB2j/ZY1b/ --plot
+run_interferometry takes as input a transect specification.  With this command,
+run_interferometry will prompt you to pick a feature of interest and the surface in a GUI.
+Generated intermediate files, such as plots and your picks, will be saved into the folder
+out_ZY1b_a
+
+./run_interferometry.py --project GOG3 --line NAQLK/JKB2j/ZY1b/ --plot --mode Reference --save out_ZY1b_a
+
+
+To reuse these intermediate picks in later runs, use the --pickfile and --refpickfile arguments.
+If you don't specify these arguments, you'll be prompted to pick them using the GUI as needed.
+
+This command line reuses the pickfile generated above, but allows you to pick a new reference
+pick, which is saved into folder out_ZY1b_b.
+
+./run_interferometry.py --project GOG3 --line NAQLK/JKB2j/ZY1b/ --plot --mode Reference \
+                        --pickfile out_ZY1b_a/run_interferometry_FOI_save0.npz --save out_ZY1b_b
+
+
 
 # GNG: there seems to be some trouble with the Quit Picking dialog getting frozen.
 # Maybe it's not getting closed?
@@ -48,8 +65,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as col
 
-xlib_clutter = os.path.join(os.path.dirname(__file__), '../xlib/clutter')
-sys.path.insert(0, xlib_clutter)
+xlib_clutter = os.path.abspath(os.path.join(os.path.dirname(__file__), '../xlib/clutter'))
+sys.path.insert(1, xlib_clutter)
 
 
 import interferometry_funclib as fl
@@ -98,13 +115,14 @@ def main():
                         help='Line name: project/set/transect')
     parser.add_argument('--fresnelstack', type=int, default=15, help='fresnel_stack')
     parser.add_argument('--plot', action='store_true', help='Plot debugging graphs')
-    parser.add_argument('--save', default=None, help='Location to save intermediate files and graphs')
+    parser.add_argument('--save', default=None, help='Location to save intermediate files and plots')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
     parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD',
                         help='targ data base directory')
-    parser.add_argument('--mode', default='Roll', choices=('Roll','Reference', 'none'),
+    parser.add_argument('--mode', default='Roll', choices=('Roll', 'Reference', 'none'),
                         help='Interferogram Correction Mode')
     # TODO: make coregistration algorithm flag a more friendly string name
+    # TODO: update coregistration to be the accepted default
     parser.add_argument('--coregmethod', default=0, type=int, choices=range(8),
                         help="Coregistration method option")
     parser.add_argument('--coregifactor', default=10, type=int,
@@ -115,7 +133,9 @@ def main():
     args = parser.parse_args()
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=loglevel, stream=sys.stdout)
+
+    fmtstr = 'ri: [%(levelname)-5s] %(message)s'
+    logging.basicConfig(level=loglevel, format=fmtstr, stream=sys.stdout)
     # Set default number of decimal places to display for numpy arrays
     np.set_printoptions(precision=3)
 
@@ -133,14 +153,14 @@ def main():
     interferogram_correction_mode = args.mode
     roll_correction = True
 
-    path = '/disk/kea/WAIS/targ/xtra/' + project + '/FOC/Best_Versions/'
+    focpath = os.path.join('/disk/kea/WAIS/targ/xtra', project, 'FOC/Best_Versions')
     if project in ('SRH1', 'ICP9', 'ICP10'):
         snm, chirp_bp = 'RADnh5', True
     else:
         snm, chirp_bp = 'RADnh3', False
     rawpath = os.path.join('/disk/kea/WAIS/orig/xlob', line.rstrip('/'), snm) + '/'
     tregpath = os.path.join('/disk/kea/WAIS/targ/treg', line,  'TRJ_JKB0/')
-    chirppath = path + 'S4_FOC/'
+    chirppath = os.path.join(focpath, 'S4_FOC')
     print('chirppath = ' + chirppath)
     print('tregpath = ' + tregpath)
     print('rawpath = ' + rawpath)
@@ -171,6 +191,9 @@ def main():
     mb_offsets = {'GOG3': 155.6, 'SRH1': 127.5, 'ICP10': 127.5}
     mb_offset = mb_offsets.get(project, mb_offsets['SRH1'])
 
+    if args.save:
+        os.makedirs(args.save, exist_ok=True)
+
     if args.pickfile:
         # TODO: validate pick parameters against interferometry parameters from
         # argparse and make sure they match.
@@ -183,12 +206,15 @@ def main():
         Nf = pickint.FOI_picklen(FOI)
     else:
         # Pick an FOI, and save it to a cache file for reuse
-        savefile = 'run_interferometry_FOI_save0.npz'
-        FOI, SRF, Nf = pickint.select_foi_and_srf(line=line, path=path, \
+        if args.save:
+            savefile = os.path.join(args.save, 'run_interferometry_FOI_save0.npz')
+            logging.info("Caching picks to %s", savefile)
+        else:
+            savefile = None
+        FOI, SRF, Nf = pickint.select_foi_and_srf(line=line, path=focpath,
                        chan=pickint.CHANNELS[gain], fresnel_stack=args.fresnelstack,
                        FOI_selection_method=FOI_selection_method,
                        trim=trim, bplot=args.plot, debug=debug, savefile=savefile)
-        logging.debug("Cached picks to " + savefile)
 
 
     # CHIRP STABILITY ASSESSMENT AND COREGISTRATION ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -196,13 +222,11 @@ def main():
     print('CHIRP STABILITY ASSESSMENT AND COREGISTRATION')
 
     # Test to see if co-registered data product already exists for this PST
-    A = line.split('/')
-    print(str(project))
-    print(str(A))
-    print(str(trim))
+    pst = line.split('/') # TODO: make 'A' more dsecriptive (pst)
+    logging.info("project=%s pst=%s trim=%s", project, str(pst), str(trim))
     savedir = "." if args.save is None else args.save
     post_coreg = os.path.join(savedir, "{0:s}_{1[0]:s}_{1[1]:s}_{1[2]:s}_{2[2]:d}to{2[3]:d}_AfterCoregistration" \
-                 ".npz".format(project, A, trim))
+                 ".npz".format(project, pst, trim))
 
     if not os.path.exists(post_coreg):
 
@@ -212,7 +236,9 @@ def main():
         trimchirp[0] = 0 #trimchirp[0] = 4
         # trimchirp[1] = max(1000, chirpwin[1]) # limit to 1000 to allow plots to plot.
         trimchirp[1] = chirpwin[1] + (chirpwin[1] - chirpwin[0])
-        dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trimchirp, rawpath, path + 'S2_FIL/' + line, chirppath + line, do_cinterp=False, bp=chirp_bp)
+        geo_path = os.path.join(focpath, 'S2_FIL', line)
+        dechirpA, dechirpB = fl.denoise_and_dechirp(gain, trimchirp, rawpath, geo_path=geo_path,
+                                                    chirp_path=os.path.join(chirppath, line), do_cinterp=False, bp=chirp_bp)
         if bplot and debug:
             plt.figure()
             xmax = min(1000, dechirpA.shape[0]) # plot at most first 1000 samples
@@ -280,7 +306,7 @@ def main():
             if args.save:
                 outfile = os.path.join(args.save, 'chirp_stability2.png')
                 plt.savefig(outfile, dpi=300)
-                print("Saving plot to " + outfile)
+                logging.info("Saving chirp stability plot to %s", outfile)
             plt.show()
         del loopbackA, loopbackB
 
@@ -289,9 +315,12 @@ def main():
         print('B chirp shift: mean={:0.3f}, std dev={:0.3g}'.format( \
               np.mean(stabilityB), np.std(stabilityB)))
 
-        stability_save_file = 'chirp_phase_stability.npz'
-        np.savez(stability_save_file, stabilityA=stabilityA, stabilityB=stabilityB)
-        print("Saved data to " + stability_save_file)
+
+        if args.save:
+            savefile = os.path.join(args.save, 'run_interferometry_FOI_save0.npz')
+            stability_save_file = os.path.join(args.save, 'chirp_phase_stability.npz')
+            np.savez(stability_save_file, stabilityA=stabilityA, stabilityB=stabilityB)
+            logging.info("Saved chirp phase stability data to %s", stability_save_file)
 
 
 
@@ -303,8 +332,9 @@ def main():
             chan1, chan2 = '6', '8'
         else: #pragma: no cover
             assert False
-        cmp_a = fl.convert_to_complex(*fl.load_marfa(line, chan1, pth=path + 'S4_FOC/', trim=trim))
-        cmp_b = fl.convert_to_complex(*fl.load_marfa(line, chan2, pth=path + 'S4_FOC/', trim=trim))
+        marfa_pth = os.path.join(focpath, 'S4_FOC')
+        cmp_a = fl.convert_to_complex(*fl.load_marfa(line, chan1, pth=marfa_pth, trim=trim))
+        cmp_b = fl.convert_to_complex(*fl.load_marfa(line, chan2, pth=marfa_pth, trim=trim))
 
         # TODO: complete reorganization to use Radargram class. GNG
         #rdr_a = Radargram(cmp_a, ft_shift_chirp=stabilityA)
@@ -338,7 +368,7 @@ def main():
             if args.save:
                 outfile = os.path.join(args.save, 'magphs1.png')
                 plt.savefig(outfile, dpi=300)
-                print("Saving plot to " + outfile)
+                logging.info("Saving magphs plot to %s", outfile)
 
             plt.show()
             del mag_a, phs_a, mag_b, phs_b
@@ -365,7 +395,7 @@ def main():
             if args.save:
                 outfile = os.path.join(args.save, 'chirp_stability3.png')
                 plt.savefig(outfile, dpi=300)
-                print("Saving plot to " + outfile)
+                logging.info("Saving plot to %s", outfile)
             del mag_a, phs_a, mag_b, phs_b
 
         # Sub-pixel co-registration of the port and starboard range lines
@@ -373,7 +403,8 @@ def main():
         # and output shift_array and qual_array as outputs
         print('-- co-registration of port and starboard radargrams')
         myshift = 300*args.coregifactor
-        cmp_a3, cmp_b3, shift_array, qual_array, qual_array2 = fl.coregistration(cmp_a2, cmp_b2, (1 / 50E6), args.coregifactor, shift=myshift, method=args.coregmethod)
+        cmp_a3, cmp_b3, shift_array, qual_array, qual_array2 = fl.coregistration(cmp_a2, cmp_b2, (1 / 50E6),
+              args.coregifactor, shift=myshift, method=args.coregmethod)
         del cmp_a2, cmp_b2
         if args.save:
             print('Saving to ' + post_coreg)
@@ -441,8 +472,9 @@ def main():
     if interferogram_correction_mode == 'Roll':
         # Roll correction
         print('-- derive roll correction')
+        norm_path = os.path.join(focpath, 'S1_POS', line)
         roll_phase, roll_ang = fl.roll_correction(np.divide(299792458, fc), B, trim, tregpath, \
-                               path + 'S1_POS/' + line, roll_shift=roll_shift)
+                               norm_path, roll_shift=roll_shift)
         if bplot and debug:
             plt.figure()
             plt.subplot(211)
@@ -478,23 +510,24 @@ def main():
     elif interferogram_correction_mode == 'Reference':
 
         roll_ang = np.zeros((np.size(cmp_a3, axis=1)), dtype=float)
-        pth = os.path.join(path, 'S4_FOC/')
 
-        pwr_image, _ = fl.load_power_image(line, channel=pickint.CHANNELS[gain], trim=trim, fresnel=args.fresnelstack, mode='averaged', pth=pth)
         if not args.refpickfile:
-            # Pick reference surface from the combined power image
-            print('-- pick reference surface')
-            reference = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
-            savefile = 'run_interferometry_referencepicks.npz'
-            np.savez_compressed(savefile, reference)
-            logging.debug("Cached reference surface pick to " + savefile)
+            # Pick reference surface from the combined power image and save if requested
+            savefile = os.path.join(args.save, 'run_interferometry_referencepicks.npz') if args.save else None
+            pwr_image, reference = pickint.select_ref(line, path=focpath, chan=pickint.CHANNELS[gain], fresnel_stack=args.fresnelstack,
+                                           trim=trim, FOI_selection_method='maximum', bplot=bplot, debug=debug,
+                                           savefile=savefile)
         else:
-            logging.info("Load reference surface pick from " + args.refpickfile)
+            pth = os.path.join(focpath, 'S4_FOC/')
+            pwr_image, _ = fl.load_power_image(line, channel=pickint.CHANNELS[gain],
+                                               trim=trim, fresnel=args.fresnelstack, mode='averaged', pth=pth)
+            logging.info("Load reference surface pick from %s", args.refpickfile)
             with np.load(args.refpickfile) as refpicks:
-                # Load first variable
-                logging.warning("Reference picks: %s", repr(list(refpicks.keys())))
-                reference = refpicks[list(refpicks.keys())[0]]
-                sys.exit(1)
+                # Old ones used to be called arr_0
+                try:
+                    reference = refpicks['reference']
+                except KeyError:
+                    reference = refpicks['arr_0']
 
         reference = np.transpose(reference)
 
@@ -539,12 +572,12 @@ def main():
         plt.savefig(os.path.join(args.save, 'ri_int_image.png'), dpi=600)
         out_filename = os.path.join(args.save, 'ri_int_image.npz')
         np.savez(out_filename, int_image=int_image)
-        print("Saved " + out_filename)
+        logging.info("Saved %s", out_filename)
         try: # save noroll if it exists.
             out_filename = os.path.join(args.save, 'ri_int_image_noroll.npz')
             np.savez(out_filename, int_image_noroll=int_image_noroll)
-        except:
-            raise
+        except UnboundLocalError:
+            logging.info("int_image_noroll was not produced as part of this run, so not saving intermediate output.")
 
 
 
@@ -575,7 +608,7 @@ def main():
         plt.savefig(os.path.join(args.save, 'ri_corrmap.png'), dpi=600)
         out_filename = os.path.join(args.save, 'ri_corrmap.npz')
         np.savez(out_filename, corrmap=corrmap)
-        print("Saved " + out_filename)
+        logging.info("Saved %s", out_filename)
 
 
     # Extract feature-of-interest interferometric phase and correlation 

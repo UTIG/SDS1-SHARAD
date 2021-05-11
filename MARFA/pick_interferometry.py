@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 #import matplotlib.colors as col
 #from tkinter import *
 
-clutter_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../xlib.clutter')))
+clutter_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../xlib.clutter'))
 sys.path.insert(1, clutter_path)
 import interferometry_funclib as fl
 import interface_picker as ip
@@ -135,18 +135,23 @@ def select_foi_and_srf(line, path, chan, fresnel_stack, trim,
 
     return FOI, SRF, Nf
 
-def select_ref((line, path, chan, fresnel_stack, trim,
+def select_ref(line, path, chan, fresnel_stack, trim,
                FOI_selection_method='maximum', bplot=True, debug=False,
                savefile=None):
-    """ Select the feature for a reference pick """
+    """ Select the feature for a reference pick
+    And return the reference object.
+    If savefile is not None, save an npz file for the reference feature to this file.
+    """
     # Load the combined and focused 1m MARFA data product and stack to the
     # desired trace spacing in preparation for feature detection and selection
     pth = os.path.join(path, 'S4_FOC/')
     logging.info("Loading radar products from %s", pth)
     pwr_image, lim = fl.load_power_image(line, chan, trim, fresnel_stack, 'averaged', pth=pth)
 
-    if trim[3] == 0:
-        trim[3] = lim
+
+    pth = os.path.join(path, 'S4_FOC/')
+    pwr_image, _ = fl.load_power_image(line, channel=chan, trim=trim, fresnel=fresnel_stack, mode='averaged', pth=pth)
+
     # load_power_image only trims the second axis (slow time)
     # so trim fast time here.
     if trim is not None:
@@ -154,65 +159,15 @@ def select_ref((line, path, chan, fresnel_stack, trim,
         pwr_image = pwr_image[trim[0]:trim[1], :]
         logging.info("Trimming power image fast time records to %d:%d", *trim[0:2])
 
-    if debug and bplot:
-        plt.figure()
-        plt.imshow(pwr_image, aspect='auto', cmap='gray')
-        plt.title('power image at Fresnel trace spacing')
-        plt.colorbar()
-        plt.clim([0, 20])
-        plt.show()
+    # Pick reference surface from the combined power image
+    print('-- pick reference surface')
+    reference = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
 
-    # Feature selection from the stacked power image. Must be at least 5 samples long
-    print('-- select feature of interest')
-    Nf = 0
-    min_samples = 5
-    while Nf < min_samples:
-        #FOI = np.transpose(np.load('SRH_Y81a_lakepicks_15Stack.npy'))
-        FOI = ip.picker(np.transpose(pwr_image), snap_to=FOI_selection_method)
-        #np.save('SRH_Y81a_lakepicks_15Stack.npy', FOI)
-        FOI = np.transpose(FOI)
-        if debug:
-            plt.figure()
-            plt.imshow(pwr_image, aspect='auto', cmap='gray')
-            plt.title('power image with picked FOI')
-            plt.imshow(FOI, aspect='auto')
-            plt.colorbar()
-            plt.show()
-        # check the length of the picked FOI
-        Nf = FOI_picklen(FOI)
-        if Nf < min_samples:
-            msg = 'Feature of interest selected was only {:d} samples. ' \
-                  'FOI must be at at least {:d} samples. Please re-select'.format(Nf, min_samples)
-            logging.error(msg)
-            # continue around again
+    if savefile is not None:
+        np.savez_compressed(savefile, reference=reference)
+        logging.info("Saved reference surface pick to %s", savefile)
 
-    logging.info('Picked FOI with length {:d} samples'.format(Nf))
-
-    # Feature surface above the picked FOI from the stacked power image
-    print('-- select surface above feature of interest')
-    SRF = fl.surface_pick(pwr_image, FOI)
-    if bplot and debug:
-        plt.figure()
-        plt.imshow(pwr_image, aspect='auto', cmap='gray')
-        plt.title('power image with picked FOI and associated SURFACE')
-        plt.imshow(FOI, aspect='auto')
-        plt.imshow(SRF, aspect='auto')
-        plt.colorbar()
-        plt.show()
-
-    print('FEATURE OF INTEREST SELECTION -- complete')
-    print(' ')
-
-    # -----------------------------------------------------------------------------
-    # Save if requested
-    if savefile:
-        np.savez_compressed(savefile, \
-            # metadata for pick \
-            line=line, chan=chan, fresnel_stack=fresnel_stack, trim=trim, \
-            # actual pick data \
-            FOI=FOI, SRF=SRF, Nf=Nf) # Nf is maybe not necessary
-        print('Saved picks to ' + savefile)
-
+    return pwr_image, reference
 
 
 
