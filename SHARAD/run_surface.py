@@ -78,7 +78,11 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
     Output:
     ------
 
-    pandas dataframe with auxilliary data and surface amplitudes
+    pandas dataframe with:
+        y: surfac echo location in fast time
+        amp: surface echo amplitude
+        pdb: surface echo power in dB
+    #    noise: background noise in dB
 
     """
 
@@ -103,13 +107,17 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
     alty = alt['idx_fine']
     surf_y = alty * 0
     surf_amp = alty * 0
+    #noise = alty * 0
     for i, val in enumerate(alty):
         if (not np.isfinite(val)) or (val <= 0):
             surf_y[i] = np.nan
             surf_amp[i] = np.nan
         else:
+            val = int(val)
             # Pulse amplitude
             pls = np.abs(rdg[i, :])
+            # Noise
+            #noise[i] = 20*np.log10(np.mean(pls[val-100:val]))
             # Product of the pulse with its derivative
             prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
             # interval within which to retrieve the surface
@@ -139,10 +147,12 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
         total_gain = total_gain + _gain
 
     surf_amp = surf_amp * 10**(total_gain/20.)
+    #noise = noise + total_gain
 
     # Archiving
 
-    out = {'y':surf_y, 'amp':surf_amp}
+    out = {'y':surf_y, 'amp':surf_amp, } #'noise':noise, 
+           #'pdb':20*np.log10(surf_amp)}
 
     if archive:
         archive_surface(senv, orbit_full, out, typ)
