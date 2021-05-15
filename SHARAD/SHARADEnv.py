@@ -557,7 +557,7 @@ class SHARADEnv:
 
     def gather_datapoints(self, labels, conditions, product='srf', 
                           filename='gather_datapoints.h5', verbose=True):
-        """Gather in a hd5 file the data points from orbits matching the
+        """Gather in a hd5 file the data points of orbits matching the
         requested conditions.
   
         Inputs
@@ -572,7 +572,7 @@ class SHARADEnv:
             as labels
 
         product: string
-            Product to read in the aux file
+            Product to read and store in the aux file
 
         filename: string
             filename to write the output in. If None, do not write.
@@ -590,6 +590,7 @@ class SHARADEnv:
         for i, orbit in enumerate(orbits):
             if verbose == True:
                 print(str(i) + '/' + str(len(orbits)) + ' : ' +orbit)
+            aux = self.aux_data(orbit)
             data = getattr(self, product + '_data')(orbit)
             df = pd.DataFrame(data, columns=columns)
 
@@ -602,7 +603,9 @@ class SHARADEnv:
                 else:
                     ok = ok & check
 
-            store.append(product, df[ok])
+            if not (any(aux['CORRUPTED_DATA_FLAG1'] == 1) or 
+                    any(aux['CORRUPTED_DATA_FLAG2'] == 1)):
+                store.append(product, df[ok])
 
         store.close()
 
