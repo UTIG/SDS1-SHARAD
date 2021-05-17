@@ -89,14 +89,14 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
 
     orbit_full = orbit if orbit.find('_') == 1 else senv.orbit_to_full(orbit)
 
-    logging.debug('PROCESSING: Surface echo extraction for ' + orbit_full)
+    logging.debug('PROCESSING: Surface echo extraction for %s', orbit_full)
 
     alt = senv.alt_data(orbit, typ='beta5', ext='h5')
     if alt is None: # pragma: no cover
-        raise DataMissingException("No Altimetry Data for orbit " + orbit)
+        raise DataMissingException("No Altimetry Data for orbit %s", orbit)
     rdg = senv.cmp_data(orbit)
     if rdg is None: # pragma: no cover
-        raise DataMissingException("No CMP data for orbit " + orbit)
+        raise DataMissingException("No CMP data for orbit %s", orbit)
 
    # Get surface amplitude
 
@@ -156,7 +156,7 @@ def relative_altitude_gain(senv, orbit_full, method='grima2012'):
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
-        raise("No Auxiliary Data for orbit " + orbit_full)
+        raise DataMissingException("No Auxiliary Data for orbit %s" orbit_full)
 
     if method  == 'grima2012':
         alt_ref = 250 # Reference altitude in km
@@ -178,7 +178,7 @@ def relative_sahga_gain(senv, orbit_full):
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
-        raise("No Auxiliary Data for orbit " + orbit_full)
+        raise DataMissingExceptione("No Auxiliary Data for orbit %s", orbit_full)
 
     samxin = aux['MRO_SAMX_INNER_GIMBAL_ANGLE']
     sapxin = aux['MRO_SAPX_INNER_GIMBAL_ANGLE']
@@ -213,7 +213,7 @@ def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
 
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
-        raise("No Auxiliary Data for orbit " + orbit_full)
+        raise DataMissingException("No Auxiliary Data for orbit %s", orbit_full)
 
     columns = ['EPHEMERIS_TIME',
                'SUB_SC_PLANETOCENTRIC_LATITUDE',
@@ -248,16 +248,16 @@ def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
     list_orbit_info = senv.get_orbit_info(orbit_full)
     orbit_info = list_orbit_info[0]
 
-    if typ == 'cmp':
-        archive_path = os.path.join(senv.out['srf_path'],
-                                    orbit_info['relpath'], typ)
-    else: # pragma: no cover
-        assert False
+    assert type == 'cmp'
+
+    archive_path = os.path.join(senv.out['srf_path'],
+                                orbit_info['relpath'], typ)
+
     if not os.path.exists(archive_path):
         os.makedirs(archive_path)
     fil = os.path.join(archive_path, orbit_full + '.txt')
     out.to_csv(fil, index=None, sep=',')
-    logging.info('CREATED: ' + fil)
+    logging.info('CREATED: %s', fil)
 
     return out
 
@@ -330,7 +330,7 @@ def main():
     if 'all' in args.orbits:
         requested = available
     elif '.' in args.orbits[0]: # Input is a filename
-        requested = list(np.genfromtxt(args.orbits[0], dtype='str'))    
+        requested = list(np.genfromtxt(args.orbits[0], dtype='str'))
     else:
         requested = args.orbits
 
@@ -344,12 +344,12 @@ def main():
     #-----------
     # Processing
 
-    if args.dryrun: # pragma: no cover
-        logging.info(f"{' '.join(args.orbits)}")
+    if args.dryrun:
+        logging.info("Orbits: " + ' '.join(args.orbits))
         #logging.info(f"TOTAL: {len(args.orbits)} to process")
         sys.exit(0)
 
-    logging.info(f"TOTAL: {len(args.orbits)} to process")
+    logging.info("TOTAL: %d orbits to process", len(args.orbits))
 
     # Keyword arguments for processing
     kwargs = {'typ':args.type,
@@ -381,7 +381,7 @@ def main():
         if args.output is not None:
                 # Debugging output
                 outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
-                logging.debug("Saving to " + outfile)
+                logging.debug("Saving to %s", outfile)
                 if not os.path.exists(args.output):
                     os.makedirs(args.output)
                 np.save(outfile, b)
