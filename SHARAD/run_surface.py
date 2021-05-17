@@ -156,7 +156,7 @@ def relative_altitude_gain(senv, orbit_full, method='grima2012'):
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
-        raise DataMissingException("No Auxiliary Data for orbit %s" orbit_full)
+        raise DataMissingException("No Auxiliary Data for orbit %s", orbit_full)
 
     if method  == 'grima2012':
         alt_ref = 250 # Reference altitude in km
