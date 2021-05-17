@@ -23,6 +23,7 @@ import logging
 import multiprocessing
 import numpy as np
 import pandas as pd
+import subradar as sr
 
 import SHARADEnv
 
@@ -51,7 +52,7 @@ class Async:
 
 def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
-                      senv=None, **kwargs):
+                      senv=None, method='grima2012', **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
@@ -72,6 +73,8 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
         correct for altitude variation
     gain_sahga: boolean
         correct for SA and HGA orientation
+    method: string
+        surface detection method to use by subradar.surface.detector
     save: boolean
         Whether to save the results in a txt file into the hierarchy
 
@@ -98,41 +101,49 @@ def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
     alt = senv.alt_data(orbit, typ='beta5', ext='h5')
     if alt is None: # pragma: no cover
         raise DataMissingException("No Altimetry Data for orbit %s", orbit)
+
+    alty = alt['idx_fine']
+    alty[alty < 0] = 0
+
     rdg = senv.cmp_data(orbit)
     if rdg is None: # pragma: no cover
         raise DataMissingException("No CMP data for orbit %s", orbit)
 
-   # Get surface amplitude
+    # Get surface amplitude
+    surf_y = sr.surface.detector(rdg=rdg**2, y0=alty, winsize=ywinwidth,
+                                 method=method, axis=0)
 
-    alty = alt['idx_fine']
-    surf_y = alty * 0
-    surf_amp = alty * 0
+    surf_amp = [rdg[int(yindex), int(yval)] 
+                for yindex, yval in enumerate(surf_y)]
+
+    #surf_y = alty * 0
+    #surf_amp = alty * 0
     #noise = alty * 0
-    for i, val in enumerate(alty):
-        if (not np.isfinite(val)) or (val <= 0):
-            surf_y[i] = np.nan
-            surf_amp[i] = np.nan
-        else:
-            val = int(val)
-            # Pulse amplitude
-            pls = np.abs(rdg[i, :])
+    #for i, val in enumerate(alty):
+    #    if (not np.isfinite(val)) or (val <= 0):
+    #        surf_y[i] = np.nan
+    #        surf_amp[i] = np.nan
+    #    else:
+    #        val = int(val)
+    #        # Pulse amplitude
+    #        pls = np.abs(rdg[i, :])
             # Noise
             #noise[i] = 20*np.log10(np.mean(pls[val-100:val]))
             # Product of the pulse with its derivative
-            prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
+    #        prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
             # interval within which to retrieve the surface
-            val = int(val)
-            itv = prd[val+ywinwidth[0]:val+ywinwidth[1]]
-            if len(itv):
-                maxprd = np.max(itv)
-                maxind = val + ywinwidth[0] + np.argmax(itv) # The surface echo
-                maxvec = pls[maxind] # The y coordinate of the surface echo
-            else:
-                maxprd = 0
-                maxind = 0
-                maxvec = 0
-            surf_y[i] = maxind
-            surf_amp[i] = maxvec
+    #        val = int(val)
+    #        itv = prd[val+ywinwidth[0]:val+ywinwidth[1]]
+    #        if len(itv):
+    #            maxprd = np.max(itv)
+    #            maxind = val + ywinwidth[0] + np.argmax(itv) # The surface echo
+    #            maxvec = pls[maxind] # The y coordinate of the surface echo
+    #        else:
+    #            maxprd = 0
+    #            maxind = 0
+    #            maxvec = 0
+    #        surf_y[i] = maxind
+    #        surf_amp[i] = maxvec
 
     # Apply gains
 
