@@ -106,11 +106,13 @@ $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 -
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt
 
 echo "$S0: run_surface"
-# show all files
-$COV run $FLAGS -a ../SHARAD/run_surface.py -n all
 # show all files that would be deleted
 $COV run $FLAGS -a ../SHARAD/run_surface.py -n --delete all
-# Run an orbit
+# show all files
+$COV run $FLAGS -a ../SHARAD/run_surface.py -n all
+# TODO: run with filelist and explicit name listing
+# Run orbits. This currently fails. 
+$COV run $FLAGS -a ../SHARAD/run_surface.py -j 1 -o out_debug all && true
 
 echo "$S0: run_rsr"
 # show all files
@@ -137,7 +139,7 @@ $COV run $FLAGS -a ../MARFA/run_interferometry.py \
                  --project GOG3 --line GOG3/JKB2j/BWN01b/ --mode Reference \
                  --pickfile ../regress/pick_FOI_GOG3_JKB2j_BWN01b.npz \
                  --refpickfile ../regress/pick_ref_GOG3_JKB2j_BWN01b_Stack15_KMS2.npz \
-                 --plot
+                 --plot --save out_ri2
 
 
 

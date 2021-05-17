@@ -143,7 +143,7 @@ def main():
     line = args.line
     bplot = args.plot
     debug = True
-    gain = 'low'
+    gain = 'low' # TODO: try with gain = 'high'
     fresnel_stack = args.fresnelstack #15
     fc = 60E6
     B = 19
@@ -191,7 +191,7 @@ def main():
     mb_offsets = {'GOG3': 155.6, 'SRH1': 127.5, 'ICP10': 127.5}
     mb_offset = mb_offsets.get(project, mb_offsets['SRH1'])
 
-    if args.save:
+    if args.save is not None:
         os.makedirs(args.save, exist_ok=True)
 
     if args.pickfile:
@@ -206,7 +206,7 @@ def main():
         Nf = pickint.FOI_picklen(FOI)
     else:
         # Pick an FOI, and save it to a cache file for reuse
-        if args.save:
+        if args.save is not None:
             savefile = os.path.join(args.save, 'run_interferometry_FOI_save0.npz')
             logging.info("Caching picks to %s", savefile)
         else:
@@ -248,7 +248,7 @@ def main():
             plt.subplot(212)
             plt.imshow(20 * np.log10(np.abs(dechirpB[0:xmax, :])), aspect='auto', cmap='gray')
             plt.title('Antenna B')
-            if args.save:
+            if args.save is not None:
                 outfile = os.path.join(args.save, 'chirp_stability1.png')
                 plt.savefig(outfile, dpi=300)
                 print("Saving plot to " + outfile)
@@ -284,7 +284,7 @@ def main():
             plt.ylabel('magnitude [dB]')
             del refja, refjb
 
-            if args.save:
+            if args.save is not None:
                 outfile = os.path.join(args.save, 'chirp_loopback1.png')
                 plt.savefig(outfile, dpi=300)
                 print("Saving plot to " + outfile)
@@ -303,7 +303,7 @@ def main():
             plt.xlabel('Range Line #')
             plt.ylabel('Shift for Optimal Chirp Stability')
             plt.legend()
-            if args.save:
+            if args.save is not None:
                 outfile = os.path.join(args.save, 'chirp_stability2.png')
                 plt.savefig(outfile, dpi=300)
                 logging.info("Saving chirp stability plot to %s", outfile)
@@ -316,7 +316,7 @@ def main():
               np.mean(stabilityB), np.std(stabilityB)))
 
 
-        if args.save:
+        if args.save is not None:
             savefile = os.path.join(args.save, 'run_interferometry_FOI_save0.npz')
             stability_save_file = os.path.join(args.save, 'chirp_phase_stability.npz')
             np.savez(stability_save_file, stabilityA=stabilityA, stabilityB=stabilityB)
@@ -365,7 +365,7 @@ def main():
             #plt.title('RGB image with normalized mag_a in R and normalized mag_b in B\n'
             # 'normalization to max amplitude in mag_a')
 
-            if args.save:
+            if args.save is not None:
                 outfile = os.path.join(args.save, 'magphs1.png')
                 plt.savefig(outfile, dpi=300)
                 logging.info("Saving magphs plot to %s", outfile)
@@ -392,7 +392,7 @@ def main():
             plt.subplot(414); plt.imshow(np.rad2deg(phs_b), aspect='auto', cmap='seismic')
             plt.title('B phase after chirp stability adjustment'); plt.colorbar(); plt.clim([-180, 180])
             plt.show()
-            if args.save:
+            if args.save is not None:
                 outfile = os.path.join(args.save, 'chirp_stability3.png')
                 plt.savefig(outfile, dpi=300)
                 logging.info("Saving plot to %s", outfile)
@@ -406,14 +406,14 @@ def main():
         cmp_a3, cmp_b3, shift_array, qual_array, qual_array2 = fl.coregistration(cmp_a2, cmp_b2, (1 / 50E6),
               args.coregifactor, shift=myshift, method=args.coregmethod)
         del cmp_a2, cmp_b2
-        if args.save:
-            print('Saving to ' + post_coreg)
+        if args.save is not None:
+            logging.info("Saving coregistration result to %s", post_coreg)
             np.savez(post_coreg, cmp_a3=cmp_a3, cmp_b3=cmp_b3, shift_array=shift_array, qual=qual_array, qual2=qual_array2)
         if bplot:
             plt.figure()
             plt.subplot(211); plt.plot(shift_array);
             plt.subplot(212); plt.plot(qual_array);
-            if args.save:
+            if args.save is not None:
                 outfile = os.path.join(args.save, 'coregistration1.png')
                 plt.savefig(outfile, dpi=300)
                 print("Saving plot to " + outfile)
@@ -442,7 +442,7 @@ def main():
         plt.subplot(414); plt.imshow(np.rad2deg(phs_b), aspect='auto', cmap='seismic');
         plt.title('co-registered antenna B phase'); plt.clim([-180, 180]); plt.colorbar()
         del mag_a, phs_a, mag_b, phs_b
-        if args.save:
+        if args.save is not None:
             outfile = os.path.join(args.save, 'coregistration2.png')
             plt.savefig(outfile, dpi=300)
             print("Saving plot to " + outfile)
@@ -526,7 +526,7 @@ def main():
                 # Old ones used to be called arr_0
                 try:
                     reference = refpicks['reference']
-                except KeyError:
+                except KeyError: # pragma: no cover
                     reference = refpicks['arr_0']
 
         reference = np.transpose(reference)
@@ -568,7 +568,7 @@ def main():
             plt.show()
 
     # save interferogram
-    if args.save:
+    if args.save is not None:
         plt.savefig(os.path.join(args.save, 'ri_int_image.png'), dpi=600)
         out_filename = os.path.join(args.save, 'ri_int_image.npz')
         np.savez(out_filename, int_image=int_image)
@@ -576,7 +576,7 @@ def main():
         try: # save noroll if it exists.
             out_filename = os.path.join(args.save, 'ri_int_image_noroll.npz')
             np.savez(out_filename, int_image_noroll=int_image_noroll)
-        except UnboundLocalError:
+        except UnboundLocalError: # pragma: no cover
             logging.info("int_image_noroll was not produced as part of this run, so not saving intermediate output.")
 
 
@@ -604,7 +604,7 @@ def main():
         plt.show()
 
     ## save correlation map
-    if args.save:
+    if args.save is not None:
         plt.savefig(os.path.join(args.save, 'ri_corrmap.png'), dpi=600)
         out_filename = os.path.join(args.save, 'ri_corrmap.npz')
         np.savez(out_filename, corrmap=corrmap)
