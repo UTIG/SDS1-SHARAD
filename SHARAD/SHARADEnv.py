@@ -395,6 +395,102 @@ class SHARADEnv:
 
         return output
 
+
+    def quadrangles(self, ID, orbitlist=True, filename=None):
+        """Gives a Martian quadrangle complete name, boundaries and orbits
+        crossing it.
+        
+        Inputs
+        ------
+        name: string
+            ID of the quadrangle
+        orbitlist: bool
+            Whether to provide a list of orbits crossing the quandrangle
+        filename: string
+            file name to save the orbit list. Does not save if None.
+
+        Output:
+            dictionary of parameters for the considered quadrangle
+        """
+
+        # Quadrangle dictionary
+        quad = {'MC01': {'name':'Mare Boreum', 
+                         'lat':[65, 90], 'lon':[0, 360]},
+                'MC02': {'name':'Diacria', 
+                         'lat':[30,65], 'lon':[180,240]},
+                'MC03': {'name':'Arcadia', 
+                         'lat':[30,65], 'lon':[240,300]},
+                'MC04': {'name':'Mare Acidalium', 
+                         'lat':[30,65], 'lon':[300,360]},
+                'MC05': {'name':'Ismenius Lacus', 
+                         'lat':[30,65], 'lon':[0,60]},
+                'MC06': {'name':'Casius', 
+                         'lat':[30,65], 'lon':[60,120]},
+                'MC07': {'name':'Cebrenia', 
+                         'lat':[30,65], 'lon':[120,180]},
+                'MC08': {'name':'Amazonis', 
+                         'lat':[0,30], 'lon':[180,225]},
+                'MC09': {'name':'Tharsis', 
+                         'lat':[0,30], 'lon':[225,270]},
+                'MC10': {'name':'Lunae Palus', 
+                         'lat':[0,30], 'lon':[270,315]},
+                'MC11': {'name':'Oxia Palus', 
+                         'lat':[0,30], 'lon':[315,360]},
+                'MC12': {'name':'Arabia', 
+                         'lat':[0,30], 'lon':[0,45]},
+                'MC13': {'name':'Syrtis Major', 
+                         'lat':[0,30], 'lon':[45,90]},
+                'MC14': {'name':'Amenthes', 
+                        'lat':[0,30], 'lon':[90,135]},
+                'MC15': {'name':'Elysium', 
+                         'lat':[0,30], 'lon':[135,180]},
+                'MC16': {'name':'Memnonia', 
+                         'lat':[-30,0], 'lon':[180,225]},
+                'MC17': {'name':'Phoenicis Lacus', 
+                         'lat':[-30,0], 'lon':[225,270]},
+                'MC18': {'name':'Coprates', 
+                         'lat':[-30,0], 'lon':[270,315]},
+                'MC19': {'name':'Margaritifer Sinus', 
+                         'lat':[-30,0], 'lon':[315,360]},
+                'MC20': {'name':'Sinus Sabaeus', 
+                         'lat':[-30,0], 'lon':[0,45]},
+                'MC21': {'name':'Iapygia', 
+                         'lat':[-30,0], 'lon':[45,90]},
+                'MC22': {'name':'Mare Tyrrhenum', 
+                         'lat':[-30,0], 'lon':[90,135]},
+                'MC23': {'name':'Aeolis', 
+                         'lat':[-30,0], 'lon':[135,180]},
+                'MC24': {'name':'Phaethontis', 
+                         'lat':[-65,-30], 'lon':[180,240]},
+                'MC25': {'name':'Thaumasia', 
+                         'lat':[-65,-30], 'lon':[240,300]},
+                'MC26': {'name':'Argyre', 
+                         'lat':[-65,-30], 'lon':[300,360]},
+                'MC27': {'name':'Noachis', 
+                         'lat':[-65,-30], 'lon':[0,60]},
+                'MC28': {'name':'Hellas', 
+                         'lat':[-65,-30], 'lon':[60,120]},
+                'MC29': {'name':'Eridania', 
+                         'lat':[-65,-30], 'lon':[120,180]},
+                'MC30': {'name':'Mare Australe', 
+                         'lat':[-90,-65], 'lon':[0,360]},
+               }
+
+        out = {'ID':ID, 'name':quad[ID]['name'], 
+               'lon':quad[ID]['lon'], 'lat':quad[ID]['lat']}
+
+        if orbitlist:
+            labels = ["SUB_SC_EAST_LONGITUDE", "SUB_SC_PLANETOCENTRIC_LATITUDE"]
+            conditions = [out['lon'], out['lat']]
+            orbits = self.aux_query(labels, conditions)
+            out['orbits'] = orbits
+
+        if filename is not None:
+            np.savetxt(filename, out, fmt="%s")
+
+        return out
+
+
     def my(self, orbit):
         """Output martian year for a given orbit
         (gives the MY at the beginning of the orbit)
