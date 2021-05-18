@@ -92,6 +92,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     if senv is None:
         senv = SHARADEnv.SHARADEnv()
 
+    #----------
     # Load data
 
     orbit_full = orbit if orbit.find('_') == 1 else senv.orbit_to_full(orbit)
@@ -109,42 +110,37 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     if rdg is None: # pragma: no cover
         raise DataMissingException("No CMP data for orbit %s", orbit)
 
-    # Get surface amplitude
-    surf_y = sr.surface.detector(rdg=rdg**2, y0=alty, winsize=ywinwidth,
-                                 method=method, axis=0)
+    #------------------------
+    # Get surface coordinates
 
-    surf_amp = [rdg[int(yindex), int(yval)] 
-                for yindex, yval in enumerate(surf_y)]
+    #np.nan_to_num(rdg, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
-    #surf_y = alty * 0
-    #surf_amp = alty * 0
-    #noise = alty * 0
-    #for i, val in enumerate(alty):
-    #    if (not np.isfinite(val)) or (val <= 0):
-    #        surf_y[i] = np.nan
-    #        surf_amp[i] = np.nan
-    #    else:
-    #        val = int(val)
-    #        # Pulse amplitude
-    #        pls = np.abs(rdg[i, :])
-            # Noise
-            #noise[i] = 20*np.log10(np.mean(pls[val-100:val]))
-            # Product of the pulse with its derivative
-    #        prd = np.abs(np.roll(np.gradient(pls), 2) * pls)
-            # interval within which to retrieve the surface
-    #        val = int(val)
-    #        itv = prd[val+ywinwidth[0]:val+ywinwidth[1]]
-    #        if len(itv):
-    #            maxprd = np.max(itv)
-    #            maxind = val + ywinwidth[0] + np.argmax(itv) # The surface echo
-    #            maxvec = pls[maxind] # The y coordinate of the surface echo
-    #        else:
-    #            maxprd = 0
-    #            maxind = 0
-    #            maxvec = 0
-    #        surf_y[i] = maxind
-    #        surf_amp[i] = maxvec
+    if method == 'mouginot2010':
+        # works better with dB power
+        rdg_for_detection = 20*np.log10(np.abs(rdg))        
+        #np.nan_to_num(rdg_for_detection, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
+    elif method == 'grima2012':
+        # works better with linear power
+        rdg_for_detection = np.abs(rdg)**2
+
+    else:
+        rdg_for_detection = rdg
+
+    surf_y = sr.surface.detector(rdg=rdg_for_detection, y0=alty, 
+                                    winsize=ywinwidth, method=method, axis=0)
+
+    #-----------------------
+    # Get surface amplitudes
+
+    surf_amp = surf_y*0
+    for xindex, yindex in enumerate(surf_y):
+        if np.isnan(yindex):
+            surf_amp[xindex] = 0.0
+        else:
+            surf_amp[xindex] = np.abs(rdg[int(xindex), int(yindex)])
+
+    #------------
     # Apply gains
 
     total_gain = gain
@@ -160,6 +156,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     surf_amp = surf_amp * 10**(total_gain/20.)
     #noise = noise + total_gain
 
+    #----------
     # Archiving
 
     out = {'y':surf_y, 'amp':surf_amp, } #'noise':noise, 
