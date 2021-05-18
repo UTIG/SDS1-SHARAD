@@ -50,7 +50,7 @@ class Async:
         self.pool.join()
 
 
-def surface_processor(orbit, typ='cmp', ywinwidth=(-100, 100), archive=False,
+def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
                       senv=None, method='grima2012', **kwargs):
     """
@@ -269,7 +269,7 @@ def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
     list_orbit_info = senv.get_orbit_info(orbit_full)
     orbit_info = list_orbit_info[0]
 
-    assert type == 'cmp'
+    assert typ == 'cmp'
 
     archive_path = os.path.join(senv.out['srf_path'],
                                 orbit_info['relpath'], typ)
@@ -321,7 +321,7 @@ def main():
     # Algorithm options
 
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int,
-                        default=(-100, 100),
+                        default=100,
                         help='2 numbers defining the fast-time relative \
                         boundaries around the altimetry surface return where \
                         the surface will be looked for')
@@ -369,16 +369,16 @@ def main():
         args.orbits = list(set(processable_unprocessed) & set(requested))
 
     args.orbits.sort()
-
+    
     #-----------
     # Processing
+
+    logging.info("TOTAL: %d orbits to process", len(args.orbits))
 
     if args.dryrun:
         logging.info("Dry run only -- Orbits: " + ' '.join(args.orbits))
         #logging.info(f"TOTAL: {len(args.orbits)} to process")
         sys.exit(0)
-
-    logging.info("TOTAL: %d orbits to process", len(args.orbits))
 
     # Keyword arguments for processing
     kwargs = {'typ':args.type,
