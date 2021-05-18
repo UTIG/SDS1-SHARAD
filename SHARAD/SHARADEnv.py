@@ -396,20 +396,21 @@ class SHARADEnv:
         return output
 
 
-    def quadrangles(self, ID, orbitlist=True, filename=None):
+    def quadrangle(self, ID, orbitlist=True, filename=None):
         """Gives a Martian quadrangle complete name, boundaries and orbits
         crossing it.
         
         Inputs
         ------
-        name: string
-            ID of the quadrangle
+        ID: string
+            ID of the quadrangle (e.g., 'MC15')
         orbitlist: bool
             Whether to provide a list of orbits crossing the quandrangle
         filename: string
             file name to save the orbit list. Does not save if None.
 
-        Output:
+        Output
+        ------
             dictionary of parameters for the considered quadrangle
         """
 
@@ -704,6 +705,28 @@ class SHARADEnv:
                 store.append(product, df[ok])
 
         store.close()
+
+
+    def gather_datapoints_quadrangle(self, ID, folder='./', **kwargs):
+        """Applies self.gather_datapoints in a specific quadrangle
+  
+        Inputs
+        ------
+        ID: string
+            ID of the quadrangle (e.g., 'MC15')
+        product: string
+            Product to read and store in the aux file
+        folder: string
+            Folder to store the file
+        """
+        q = self.quadrangle(ID)
+        labels = ["SUB_SC_EAST_LONGITUDE", "SUB_SC_PLANETOCENTRIC_LATITUDE"]
+        conditions = [q['lon'], q['lat']]
+
+        filename = (folder + q['ID'] + '_' + q['name'] + 
+                    '.h5').replace(' ', '_')
+
+        self.gather_datapoints(labels, conditions, filename=filename, **kwargs)
 
 
 def test_my(senv):
