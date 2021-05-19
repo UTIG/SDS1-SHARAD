@@ -99,9 +99,11 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     logging.debug('PROCESSING: Surface echo extraction for %s', orbit_full)
 
-    alt = senv.alt_data(orbit, typ='beta5', ext='h5')
+    alt = senv.alt_data(orbit, typ='beta5', ext='h5', quality_flag=True)
     if alt is None: # pragma: no cover
         raise DataMissingException("No Altimetry Data for orbit %s", orbit)
+
+    flag = alt['flag']
 
     alty = alt['idx_fine']
     alty[alty < 0] = 0
@@ -159,7 +161,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     #----------
     # Archiving
 
-    out = {'y':surf_y, 'amp':surf_amp, } #'noise':noise, 
+    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag} #'noise':noise, 
            #'pdb':20*np.log10(surf_amp)}
 
     if archive:
@@ -242,7 +244,8 @@ def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
                'SC_ROLL_ANGLE',
                'surf_y',
                'surf_amp',
-               'surf_pow']
+               'surf_pow',
+               'flag']
 
     values = [aux['EPHEMERIS_TIME'],
               aux['SUB_SC_PLANETOCENTRIC_LATITUDE'],
@@ -254,6 +257,7 @@ def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
               srf_data['y'],
               srf_data['amp'],
               20*np.log10(srf_data['amp']),
+              srf_data['flag']
              ]
 
     out = pd.DataFrame(values).transpose()

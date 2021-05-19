@@ -36,6 +36,7 @@ import logging
 import numpy as np
 import pandas as pd
 import h5py as h5
+import rsr
 
 CODEPATH = os.path.dirname(__file__)
 sys.path.append(os.path.normpath(os.path.join(CODEPATH, "../xlib")))
@@ -277,7 +278,7 @@ class SHARADEnv:
         return out
 
 
-    def alt_data(self, orbit, typ='beta5', ext='h5'):
+    def alt_data(self, orbit, typ='beta5', ext='h5', quality_flag=False):
         """Output data processed and archived by the altimetry processor
         """
 
@@ -310,6 +311,20 @@ class SHARADEnv:
                 out[key] = vec
         elif ext == 'npy':
             out = np.load(files[0])
+
+        # Quality flag, assess if the orbit has picks that can be trusted
+        if quality_flag == True:
+            y = out['idx_fine']
+            # Detect negative y coordinates
+            flag = (y < 0)
+            # Coherent content for the y position
+            # (i.e., is the detected surface more or less continuous?)
+            cc = rsr.run.processor(y, fit_model='rice').power()['pc-pn']
+            if cc < 10:
+                flag = flag + True
+            flag = [int(i) for i in flag]
+            out['flag'] = flag
+
         return out
 
 
@@ -363,17 +378,17 @@ class SHARADEnv:
         return out
 
 
-    def processed(senv):
+    def processed(self):
         """Output processed data products for each processing (e.g., cmp, alt)
         For now, each suborbit having at least one file in a certain processing
         folder is considered 'processed' for this specific processing category
         """
         output = {}
-        for typ in senv.out:
+        for typ in self.out:
             output[typ.split('_')[0]] = []
 
-        for orbit in senv.orbitinfo:
-            for suborbit in senv.orbitinfo[orbit]:
+        for orbit in self.orbitinfo:
+            for suborbit in self.orbitinfo[orbit]:
                 for datatype in output.keys():
                      try:
                          #if any(suborbit[datatype + 'path']):
@@ -675,8 +690,11 @@ class SHARADEnv:
             filename to write the output in. If None, do not write.
         """
 
-        # Get orbits matching the conditions
+        # Get orbits matching the conditions and for which data exists
         orbits = self.aux_query(labels, conditions)
+        processed = self.processed()['srf']
+        orbits = list(set(orbits) & set(processed))
+        orbits.sort()
     
         # Create hdf5 file
         columns = self.srf_data(orbits[0]).dtype.names
