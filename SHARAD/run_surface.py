@@ -52,7 +52,7 @@ class Async:
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
-                      senv=None, method='grima2012', **kwargs):
+                      senv=None, method='mouginot2010', **kwargs):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
