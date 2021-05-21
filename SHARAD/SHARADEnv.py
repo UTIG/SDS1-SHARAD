@@ -177,12 +177,12 @@ class SHARADEnv:
                                             self.orbitinfo[orbit][subid]['relpath']
                                             ) + '/*/*/*/*'
                     else:
-                        path = os.path.join(self.out[typ], 
+                        path = os.path.join(self.out[typ],
                                             self.orbitinfo[orbit][subid]['relpath']
                                             ) + '/**/' + suborbit['name'] + '*'
                     files = glob.glob(path)
                     self.orbitinfo[orbit][subid][typ.replace('_','')] = files
-        
+
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
         # This isn't ever used.
@@ -390,20 +390,20 @@ class SHARADEnv:
         for orbit in self.orbitinfo:
             for suborbit in self.orbitinfo[orbit]:
                 for datatype in output.keys():
-                     try:
-                         #if any(suborbit[datatype + 'path']):
-                         if any(s.endswith('.txt') for s in 
-                                suborbit[datatype + 'path']):
-                             output[datatype].append(suborbit['name'])
-                         if any(s.endswith('.h5') for s in 
-                                suborbit[datatype + 'path']):
-                             output[datatype].append(suborbit['name'])
-                         if any(s.endswith('.dat') for s in
-                                suborbit[datatype + 'path']):
-                             output[datatype].append(suborbit['name'])
+                    try:
+                        #if any(suborbit[datatype + 'path']):
+                        if any(s.endswith('.txt') for s in 
+                               suborbit[datatype + 'path']):
+                            output[datatype].append(suborbit['name'])
+                        if any(s.endswith('.h5') for s in 
+                               suborbit[datatype + 'path']):
+                            output[datatype].append(suborbit['name'])
+                        if any(s.endswith('.dat') for s in
+                               suborbit[datatype + 'path']):
+                            output[datatype].append(suborbit['name'])
 
-                     except:
-                         pass
+                    except:
+                        pass
 
         for typ in output.keys():
             output[typ] = sorted(output[typ])
@@ -411,13 +411,13 @@ class SHARADEnv:
         return output
 
 
-    def quadrangle(self, ID, orbitlist=True, filename=None):
+    def quadrangle(self, MCid, orbitlist=True, filename=None):
         """Gives a Martian quadrangle complete name, boundaries and orbits
         crossing it.
-        
+
         Inputs
         ------
-        ID: string
+        MCid: string
             ID of the quadrangle (e.g., 'MC15')
         orbitlist: bool
             Whether to provide a list of orbits crossing the quandrangle
@@ -430,70 +430,70 @@ class SHARADEnv:
         """
 
         # Quadrangle dictionary
-        quad = {'MC01': {'name':'Mare Boreum', 
+        quad = {'MC01': {'name':'Mare Boreum',
                          'lat':[65, 90], 'lon':[0, 360]},
-                'MC02': {'name':'Diacria', 
+                'MC02': {'name':'Diacria',
                          'lat':[30,65], 'lon':[180,240]},
-                'MC03': {'name':'Arcadia', 
+                'MC03': {'name':'Arcadia',
                          'lat':[30,65], 'lon':[240,300]},
-                'MC04': {'name':'Mare Acidalium', 
+                'MC04': {'name':'Mare Acidalium',
                          'lat':[30,65], 'lon':[300,360]},
-                'MC05': {'name':'Ismenius Lacus', 
+                'MC05': {'name':'Ismenius Lacus',
                          'lat':[30,65], 'lon':[0,60]},
-                'MC06': {'name':'Casius', 
+                'MC06': {'name':'Casius',
                          'lat':[30,65], 'lon':[60,120]},
-                'MC07': {'name':'Cebrenia', 
+                'MC07': {'name':'Cebrenia',
                          'lat':[30,65], 'lon':[120,180]},
-                'MC08': {'name':'Amazonis', 
+                'MC08': {'name':'Amazonis',
                          'lat':[0,30], 'lon':[180,225]},
-                'MC09': {'name':'Tharsis', 
+                'MC09': {'name':'Tharsis',
                          'lat':[0,30], 'lon':[225,270]},
-                'MC10': {'name':'Lunae Palus', 
+                'MC10': {'name':'Lunae Palus',
                          'lat':[0,30], 'lon':[270,315]},
-                'MC11': {'name':'Oxia Palus', 
+                'MC11': {'name':'Oxia Palus',
                          'lat':[0,30], 'lon':[315,360]},
-                'MC12': {'name':'Arabia', 
+                'MC12': {'name':'Arabia',
                          'lat':[0,30], 'lon':[0,45]},
-                'MC13': {'name':'Syrtis Major', 
+                'MC13': {'name':'Syrtis Major',
                          'lat':[0,30], 'lon':[45,90]},
-                'MC14': {'name':'Amenthes', 
+                'MC14': {'name':'Amenthes',
                         'lat':[0,30], 'lon':[90,135]},
-                'MC15': {'name':'Elysium', 
+                'MC15': {'name':'Elysium',
                          'lat':[0,30], 'lon':[135,180]},
-                'MC16': {'name':'Memnonia', 
+                'MC16': {'name':'Memnonia',
                          'lat':[-30,0], 'lon':[180,225]},
-                'MC17': {'name':'Phoenicis Lacus', 
+                'MC17': {'name':'Phoenicis Lacus',
                          'lat':[-30,0], 'lon':[225,270]},
-                'MC18': {'name':'Coprates', 
+                'MC18': {'name':'Coprates',
                          'lat':[-30,0], 'lon':[270,315]},
-                'MC19': {'name':'Margaritifer Sinus', 
+                'MC19': {'name':'Margaritifer Sinus',
                          'lat':[-30,0], 'lon':[315,360]},
-                'MC20': {'name':'Sinus Sabaeus', 
+                'MC20': {'name':'Sinus Sabaeus',
                          'lat':[-30,0], 'lon':[0,45]},
-                'MC21': {'name':'Iapygia', 
+                'MC21': {'name':'Iapygia',
                          'lat':[-30,0], 'lon':[45,90]},
-                'MC22': {'name':'Mare Tyrrhenum', 
+                'MC22': {'name':'Mare Tyrrhenum',
                          'lat':[-30,0], 'lon':[90,135]},
-                'MC23': {'name':'Aeolis', 
+                'MC23': {'name':'Aeolis',
                          'lat':[-30,0], 'lon':[135,180]},
-                'MC24': {'name':'Phaethontis', 
+                'MC24': {'name':'Phaethontis',
                          'lat':[-65,-30], 'lon':[180,240]},
-                'MC25': {'name':'Thaumasia', 
+                'MC25': {'name':'Thaumasia',
                          'lat':[-65,-30], 'lon':[240,300]},
-                'MC26': {'name':'Argyre', 
+                'MC26': {'name':'Argyre',
                          'lat':[-65,-30], 'lon':[300,360]},
-                'MC27': {'name':'Noachis', 
+                'MC27': {'name':'Noachis',
                          'lat':[-65,-30], 'lon':[0,60]},
-                'MC28': {'name':'Hellas', 
+                'MC28': {'name':'Hellas',
                          'lat':[-65,-30], 'lon':[60,120]},
-                'MC29': {'name':'Eridania', 
+                'MC29': {'name':'Eridania',
                          'lat':[-65,-30], 'lon':[120,180]},
-                'MC30': {'name':'Mare Australe', 
+                'MC30': {'name':'Mare Australe',
                          'lat':[-90,-65], 'lon':[0,360]},
                }
 
-        out = {'ID':ID, 'name':quad[ID]['name'], 
-               'lon':quad[ID]['lon'], 'lat':quad[ID]['lat']}
+        out = {'ID':MCid, 'name':quad[MCid]['name'],
+               'lon':quad[MCid]['lon'], 'lat':quad[MCid]['lat']}
 
         if orbitlist:
             labels = ["SUB_SC_EAST_LONGITUDE", "SUB_SC_PLANETOCENTRIC_LATITUDE"]
@@ -530,7 +530,7 @@ class SHARADEnv:
 
 
     def make_aux_file(self, filename='aux.h5', sampling=1000, verbose=True):
-        """Gather aux data into a single text file to faciliate queries over 
+        """Gather aux data into a single text file to faciliate queries over
         aux fields. Uncomment the columns you would want to see in the aux file.
         Fields that are not native from the aux dataset are in lower case.
 
@@ -613,8 +613,8 @@ class SHARADEnv:
         store.close()
 
 
-    def aux_query(self, labels, conditions, aux_filename='aux.h5', 
-                  product='sampling_1000', filename=None, **kwargs):
+    def aux_query(self, labels, conditions, aux_filename='aux.h5',
+                  product='sampling_1000', filename=None):
         """Provide a list of orbits matching conditions on their aux labels
         The data are searched within a csv file generated by tools.aux_file
 
@@ -625,8 +625,8 @@ class SHARADEnv:
             query is done
 
         conditions: list
-            list of number pairs (tuples) defining the lower and upper bonds 
-            within which the data fall into. The list should be same length 
+            list of number pairs (tuples) defining the lower and upper bonds
+            within which the data fall into. The list should be same length
             as labels.
 
         aux_filename: string
@@ -645,11 +645,11 @@ class SHARADEnv:
         Example
         -------
         labels = ["SUB_SC_EAST_LONGITUDE", "SUB_SC_PLANETOCENTRIC_LATITUDE"]
-        conditions = [[0, 90], [30, 60]] 
+        conditions = [[0, 90], [30, 60]]
         a = aux_query(labels, conditions, filename='deuterolinus.csv')
         """
         df = pd.read_hdf(aux_filename, key=product, mode='a', columns=labels+['orbit'])
-    
+
         # Test conditions on each label
         for n, label in enumerate(labels):
             check = (df[label] > conditions[n][0]) & \
@@ -663,15 +663,15 @@ class SHARADEnv:
 
         if filename is not None:
             np.savetxt(filename, out, fmt="%s")
-    
+
         return out
 
 
-    def gather_datapoints(self, labels, conditions, product='srf', 
+    def gather_datapoints(self, labels, conditions, product='srf',
                           filename='gather_datapoints.h5', verbose=True):
         """Gather in a hd5 file the data points of orbits matching the
         requested conditions.
-  
+
         Inputs
         ------
         labels: list
@@ -679,8 +679,8 @@ class SHARADEnv:
             query is done
 
         conditions: list
-            list of number pairs (tuples) defining the lower and upper bonds 
-            within which the data fall into. The list should be same length 
+            list of number pairs (tuples) defining the lower and upper bonds
+            within which the data fall into. The list should be same length
             as labels
 
         product: string
@@ -695,7 +695,7 @@ class SHARADEnv:
         processed = self.processed()['srf']
         orbits = list(set(orbits) & set(processed))
         orbits.sort()
-    
+
         # Create hdf5 file
         columns = self.srf_data(orbits[0]).dtype.names
         df = pd.DataFrame(columns=columns)
@@ -703,7 +703,7 @@ class SHARADEnv:
         store.put(product, df, format='table', data_columns=columns)
 
         for i, orbit in enumerate(orbits):
-            if verbose == True:
+            if verbose:
                 print(str(i) + '/' + str(len(orbits)) + ' : ' +orbit)
             aux = self.aux_data(orbit)
             data = getattr(self, product + '_data')(orbit)
@@ -718,16 +718,16 @@ class SHARADEnv:
                 else:
                     ok = ok & check
 
-            if not (any(aux['CORRUPTED_DATA_FLAG1'] == 1) or 
+            if not (any(aux['CORRUPTED_DATA_FLAG1'] == 1) or
                     any(aux['CORRUPTED_DATA_FLAG2'] == 1)):
                 store.append(product, df[ok])
 
         store.close()
 
 
-    def gather_datapoints_quadrangle(self, ID, folder='./', **kwargs):
+    def gather_datapoints_quadrangle(self, MCid, folder='./', **kwargs):
         """Applies self.gather_datapoints in a specific quadrangle
-  
+
         Inputs
         ------
         ID: string
@@ -737,11 +737,11 @@ class SHARADEnv:
         folder: string
             Folder to store the file
         """
-        q = self.quadrangle(ID)
+        q = self.quadrangle(MCid)
         labels = ["SUB_SC_EAST_LONGITUDE", "SUB_SC_PLANETOCENTRIC_LATITUDE"]
         conditions = [q['lon'], q['lat']]
 
-        filename = (folder + q['ID'] + '_' + q['name'] + 
+        filename = (folder + q['ID'] + '_' + q['name'] +
                     '.h5').replace(' ', '_')
 
         self.gather_datapoints(labels, conditions, filename=filename, **kwargs)
@@ -875,7 +875,3 @@ def main():
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-
-
-
-

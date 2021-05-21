@@ -18,7 +18,7 @@ and output a numpy file into a debug directory:
 import os
 import sys
 import argparse
-from datetime import datetime
+#from datetime import datetime
 import logging
 import multiprocessing
 import numpy as np
@@ -33,8 +33,7 @@ class DataMissingException(Exception):
 
 
 class Async:
-    """
-    Class to support multi processing jobs. For calling example, see:
+    """Class to support multi processing jobs. For calling example, see:
     http://masnun.com/2014/01/01/async-execution-in-python-using-multiprocessing-pool.html
     """
     def __init__(self, func, cb_func, nbcores=1):
@@ -52,7 +51,7 @@ class Async:
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
-                      senv=None, method='mouginot2010', **kwargs):
+                      senv=None, method='mouginot2010'):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
@@ -119,7 +118,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     if method == 'mouginot2010':
         # works better with dB power
-        rdg_for_detection = 20*np.log10(np.abs(rdg))        
+        rdg_for_detection = 20*np.log10(np.abs(rdg)) 
         #np.nan_to_num(rdg_for_detection, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
     elif method == 'grima2012':
@@ -129,7 +128,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     else:
         rdg_for_detection = rdg
 
-    surf_y = sr.surface.detector(rdg=rdg_for_detection, y0=alty, 
+    surf_y = sr.surface.detector(rdg=rdg_for_detection, y0=alty,
                                     winsize=ywinwidth, method=method, axis=0)
 
     #-----------------------
@@ -161,7 +160,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     #----------
     # Archiving
 
-    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag} #'noise':noise, 
+    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag} #'noise':noise,
            #'pdb':20*np.log10(surf_amp)}
 
     if archive:
@@ -171,7 +170,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
 
 def relative_altitude_gain(senv, orbit_full, method='grima2012'):
-    """Provide relative altitude gain for an orbit following 
+    """Provide relative altitude gain for an orbit following
     Grima et al. 2012 or Campbell et al. (2021, eq.1)
     """
     aux = senv.aux_data(orbit_full)
@@ -198,7 +197,7 @@ def relative_sahga_gain(senv, orbit_full):
     """
     aux = senv.aux_data(orbit_full)
     if aux is None: # pragma: no cover
-        raise DataMissingExceptione("No Auxiliary Data for orbit %s", orbit_full)
+        raise DataMissingException("No Auxiliary Data for orbit %s", orbit_full)
 
     samxin = aux['MRO_SAMX_INNER_GIMBAL_ANGLE']
     sapxin = aux['MRO_SAPX_INNER_GIMBAL_ANGLE']
@@ -210,7 +209,7 @@ def relative_sahga_gain(senv, orbit_full):
     return gain
 
 
-def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
+def archive_surface(senv, orbit_full, srf_data, typ):
     """
     Archive in the hierarchy results obtained from srf_processor
 
@@ -266,7 +265,6 @@ def archive_surface(senv, orbit_full, srf_data, typ, **kwargs):
     # Archive
 
     #k = p['orbit_full'].index(orbit_full)
-    # TODO: what is the correct response if there is more than one result?  GNG
     list_orbit_info = senv.get_orbit_info(orbit_full)
     orbit_info = list_orbit_info[0]
 
@@ -291,6 +289,8 @@ def cb_surface_processor():
 
 
 def main():
+    """Executed if run as script
+    """
     parser = argparse.ArgumentParser(description='Processing routines \
                                      for surface echo power extraction')
 
@@ -370,7 +370,7 @@ def main():
         args.orbits = list(set(processable_unprocessed) & set(requested))
 
     args.orbits.sort()
-    
+
     #-----------
     # Processing
 
@@ -396,20 +396,20 @@ def main():
         async_surface = Async(surface_processor, None, nbcores=args.jobs)
 
     # Processing
-    for i, orbit in enumerate(args.orbits):
+    for orbit in args.orbits:
         #logging.debug('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
         #              '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
 
         if args.jobs < 2:
             # Do NOT use the multiprocessing package
-            b = surface_processor(orbit, **kwargs)
+            srf = surface_processor(orbit, **kwargs)
             if args.output is not None:
-                    # Debugging output
-                    outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
-                    logging.debug("Saving to %s", outfile)
-                    if not os.path.exists(args.output):
-                        os.makedirs(args.output)
-                    np.save(outfile, b)
+                # Debugging output
+                outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
+                logging.debug("Saving to %s", outfile)
+                if not os.path.exists(args.output):
+                    os.makedirs(args.output)
+                np.save(outfile, srf)
         else:
             # Do use the multiprocessing package
             async_surface.call(orbit, **kwargs)
@@ -423,7 +423,7 @@ def main():
     #        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
     #            '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
     #        b = surface_processor(orbit, **kwargs)
-    #        #b = surface_processor(orbit, typ=args.type, 
+    #        #b = surface_processor(orbit, typ=args.type,
     #        #                      ywinwidth=args.ywinwidth,
     #        #                      archive=True, gain=0, gain_altitude=True,
     #        #                      gain_sahga=True, senv=senv)
@@ -439,7 +439,7 @@ def main():
     #if args.jobs > 0:
     #    async_surface = Async(surface_processor, None, nbcores=jobs)
     #    for orbit in args.orbits:
-    #        async_surface.call(orbit, **kwargs) 
+    #        async_surface.call(orbit, **kwargs)
 
 
 if __name__ == "__main__":
