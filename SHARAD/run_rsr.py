@@ -140,82 +140,10 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
     return b
 
 
-def save_text(b, output_filename):
-    """ Given a pandas dataframe, save it to the specified location """
-    os.makedirs(os.path.dirname(output_filename), exist_ok=True)
-    b.to_csv(output_filename, index=None, sep=',')
-    logging.debug("Wrote text output to %s", output_filename)
-
-
-def todo(delete=False, senv=None, filename=None, verbose=False):
-    """List the orbits that are not already RSR-processed to be
-    processed but for which an altimetry file exists
-
-    Inputs
-    ------
-
-    delete: boolean
-        If True, delete existing RSR products and re-process.
-        If False, only generate RSR products that do not exist.
-
-    filename: string
-        specific list of orbits to process (optional)
-
-    Output
-    ------
-
-    array of orbits
-    """
-
-    if senv is None:
-        senv = SHARADEnv.SHARADEnv()
-
-    # Numpy errors
-    errlevel = 'warn' if verbose else 'ignore'
-    np.seterr(all=errlevel)
-
-    # Existing orbits
-    srf_orbits = []
-    rsr_orbits = []
-    for orbit in senv.orbitinfo:
-        for suborbit in senv.orbitinfo[orbit]:
-            try:
-                if any(s.endswith('.txt') for s in suborbit['srfpath']):
-                    srf_orbits.append(suborbit['name'])
-                if any(s.endswith('.txt') for s in suborbit['rsrpath']):
-                    rsr_orbits.append(suborbit['name'])
-            except KeyError:
-                pass
-
-    # Available orbits
-    if filename is not None:
-        fil_orbits = list(np.genfromtxt(filename, dtype='str'))
-        available_orbits = [i for i in fil_orbits if i in srf_orbits]
-    else:
-        available_orbits = srf_orbits
-
-    # Unprocessed orbits
-    unprocessed_orbits = [i for i in available_orbits if i not in rsr_orbits]
-
-    if delete is True:
-        out = available_orbits
-    else:
-        out = unprocessed_orbits
-    out.sort()
-
-    # Remove bad altimetry orbits
-    if os.path.isfile('bad_alt.txt'):
-        bad_orbits = list(np.genfromtxt('bad_alt.txt', dtype='str'))
-        out = [i for i in out if i not in bad_orbits]
-
-    #print(str(len(out)) + ' orbits to process')
-
-    return out
-
-
 def main():
     parser = argparse.ArgumentParser(description='RSR processing routines')
 
+    #--------------------
     # Job control options
 
     #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
@@ -227,6 +155,7 @@ def main():
     parser.add_argument('orbits', metavar='orbit', nargs='+',
             help='Orbit IDs to process (including leading zeroes). If "all",\
             processes all orbits')
+    parser.add_argument('--orbitlist', help='Text file containing list of orbits to process')
     parser.add_argument('-j','--jobs', type=int, default=8,
             help="Number of jobs (cores) to use for processing. -1 to disable\
             multiprocessing")
@@ -239,6 +168,7 @@ def main():
     #parser.add_argument('--maxtracks', default=None, type=int,
     #    help="Max number of tracks to process")
 
+    #--------------------
     # Algorithm options
 
     parser.add_argument('-w', '--winsize', type=int, default=1000,
@@ -264,14 +194,36 @@ def main():
 
     senv = SHARADEnv.SHARADEnv()
 
-    if 'all' in args.orbits:
-        # Uses todo to define orbits to process
-        assert len(args.orbits) == 1
-        args.orbits = todo(delete=args.delete, senv=senv)
+    #--------------------------
+    # Requested Orbits handling
 
-    if '.' in args.orbits[0]:
-        # Use a file to define orbits to process
-        args.orbits = todo(delete=args.delete, senv=senv, filename=args.orbits[0])
+    logging.debug("Checking orbit processing status")
+    available = senv.processed()['cmp'] # To convert to EDR orbit list
+    processed = senv.processed()
+    processable = processed['srf']
+    processable_unprocessed = list(set(processable) - set(processed['rsr']))
+    logging.debug("Done checking orbit processing status")
+
+    if args.orbits == ['all']:
+        requested = available
+    else:
+        requested = args.orbits
+
+    if args.orbitlist:
+        # Load list of files from orbit list
+        requested.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
+
+    if args.delete:
+        args.orbits = list(set(processable) & set(requested))
+    else:
+        args.orbits = list(set(processable_unprocessed) & set(requested))
+
+    args.orbits.sort()
+
+    #-----------
+    # Processing
+
+    logging.info("TOTAL: %d orbits to process", len(args.orbits))
 
     if args.dryrun: # pragma: no cover
         logging.info("Process orbits: " + ' '.join(args.orbits))
