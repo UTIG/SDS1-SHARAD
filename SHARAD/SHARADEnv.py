@@ -696,31 +696,26 @@ class SHARADEnv:
         orbits = list(set(orbits) & set(processed))
         orbits.sort()
 
-        # Create hdf5 file
-        columns = self.srf_data(orbits[0]).dtype.names
-        df = pd.DataFrame(columns=columns)
+        # Store data
         store = pd.HDFStore(filename)
-        store.put(product, df, format='table', data_columns=columns)
 
         for i, orbit in enumerate(orbits):
             if verbose:
                 print(str(i) + '/' + str(len(orbits)) + ' : ' +orbit)
             aux = self.aux_data(orbit)
             data = getattr(self, product + '_data')(orbit)
-            df = pd.DataFrame(data, columns=columns)
-
-            # Select only points matching the conditions within the orbit
+            df = pd.DataFrame(data)
+            # Points without auxilliary flag
+            ok = (aux['CORRUPTED_DATA_FLAG1'] == 0) &\
+                 (aux['CORRUPTED_DATA_FLAG2'] == 0)
+            # Points matching the conditions
             for n, label in enumerate(labels):
-                check = (df[label] > conditions[n][0]) & \
-                        (df[label] < conditions[n][1])
-                if n == 0:
-                    ok = check
-                else:
-                    ok = ok & check
-
-            if not (any(aux['CORRUPTED_DATA_FLAG1'] == 1) or
-                    any(aux['CORRUPTED_DATA_FLAG2'] == 1)):
-                store.append(product, df[ok])
+                ok = ok & (df[label] > conditions[n][0]) & \
+                          (df[label] < conditions[n][1])
+            if i == 0:
+                store.put(product, df[ok], format='table', data_columns=True )
+            else:
+                store.append(product, df[ok], data_columns=True)
 
         store.close()
 
