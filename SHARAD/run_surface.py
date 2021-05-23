@@ -106,6 +106,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     alty = alt['idx_fine']
     alty[alty < 0] = 0
+    alty[alty > 3600] = 0
 
     rdg = senv.cmp_data(orbit)
     if rdg is None: # pragma: no cover
