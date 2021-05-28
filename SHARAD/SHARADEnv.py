@@ -668,7 +668,8 @@ class SHARADEnv:
 
 
     def gather_datapoints(self, labels, conditions, product='srf',
-                          filename='gather_datapoints.h5', verbose=True):
+                          filename='gather_datapoints.h5', verbose=True,
+                          bad_orbits_filename='bad_orbits.txt'):
         """Gather in a hd5 file the data points of orbits matching the
         requested conditions.
 
@@ -688,12 +689,18 @@ class SHARADEnv:
 
         filename: string
             filename to write the output in. If None, do not write.
+
+        bad_orbits_filename: string
+            a file where bad orbits that should not be considered are listed
         """
 
         # Get orbits matching the conditions and for which data exists
         orbits = self.aux_query(labels, conditions)
         processed = self.processed()['srf']
         orbits = list(set(orbits) & set(processed))
+        if os.path.isfile(bad_orbits_filename):
+            bad_orbits = np.loadtxt(bad_orbits_filename, dtype=str)
+            orbits = list(set(orbits) - set(bad_orbits))
         orbits.sort()
 
         # Store data
@@ -705,6 +712,7 @@ class SHARADEnv:
             aux = self.aux_data(orbit)
             data = getattr(self, product + '_data')(orbit)
             df = pd.DataFrame(data)
+            #df[orbit] = np.full(len(aux['ORBIT_NUMBER']), orbit)
             # Points without auxilliary flag
             ok = (aux['CORRUPTED_DATA_FLAG1'] == 0) &\
                  (aux['CORRUPTED_DATA_FLAG2'] == 0)
