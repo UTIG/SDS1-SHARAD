@@ -319,9 +319,9 @@ class SHARADEnv:
             flag = (y < 0)
             # Coherent content for the y position
             # (i.e., is the detected surface more or less continuous?)
-            cc = rsr.run.processor(y, fit_model='rice').power()['pc-pn']
-            if cc < 10:
-                flag = flag + True
+            #cc = rsr.run.processor(y, fit_model='rice').power()['pc-pn']
+            #if cc < 10:
+            #    flag = flag + True
             flag = [int(i) for i in flag]
             out['flag'] = flag
 
@@ -712,7 +712,7 @@ class SHARADEnv:
             aux = self.aux_data(orbit)
             data = getattr(self, product + '_data')(orbit)
             df = pd.DataFrame(data)
-            #df[orbit] = np.full(len(aux['ORBIT_NUMBER']), orbit)
+            df[orbit] = np.full(len(aux['ORBIT_NUMBER']), orbit)
             # Points without auxilliary flag
             ok = (aux['CORRUPTED_DATA_FLAG1'] == 0) &\
                  (aux['CORRUPTED_DATA_FLAG2'] == 0)
