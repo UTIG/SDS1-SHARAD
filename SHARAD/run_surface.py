@@ -50,7 +50,7 @@ class Async:
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
-                      gain=0, gain_altitude='grima2021', gain_sahga=True,
+                      gain=0, gain_altitude='grima2021', gain_sahga=False,
                       senv=None, method='mouginot2010'):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
