@@ -168,6 +168,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Mutually exclusive
+    assert not (args.dryrun and args.manual)
+
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
@@ -246,12 +249,26 @@ def main():
                     output = os.path.join(outdir, data_file+attr[1])
                     outputs.append(output)
                     outtimes.append(getmtime((output)))
+
+
+
+
             if (len(intimes) == 0):
                 logging.error("No inputs for process")
             intimes.sort(key = lambda x: x[0])
             if (len(outtimes) == 0):
                 logging.error("No outputs for process")
             outtimes.sort(key = lambda x: x[0])
+
+            # Print considered input files for equivalence checking
+            logging.debug("intimes: ")
+            for x in intimes:
+                logging.debug("%0.0f %s", *x)
+            logging.debug("outtimes: ")
+            for x in outtimes:
+                logging.debug("%0.0f %s", *x)
+
+
             if (intimes[0][0] == -1):
                 print('Input missing.')
             elif (intimes[-1][0] < outtimes[0][0]):
@@ -278,13 +295,13 @@ def main():
                     else:
                         cmd = ['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
                     logging.info("Invoking: " + ' '.join(cmd))
-                    if args.dryrun:
-                        logging.info("Dryrun, quiting.");
-                        sys.exit(0)
                     if args.manual:
                         manual(cmd, infile, outputs)
+                    elif args.dryrun:
+                        logging.info("Dryrun")
                     else:
                         subprocess.run(cmd)
+
                     os.unlink(temp)
                     if args.once:
                         logging.info("Only one process request.  Quiting.")
