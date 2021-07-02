@@ -22,6 +22,8 @@ __history__ = {
 # TODO: Use max tracks arg
 # TODO: Parallelism
 
+
+
 """
 
 SYNOPSIS
@@ -48,21 +50,10 @@ import multiprocessing
 import traceback
 import importlib.util
 import re
-import numpy as np
-#from scipy.optimize import curve_fit
-import pandas as pd
 import subprocess
-
-# TODO: make this import more robust to allow this script
-# TODO: to be run from outside the SHARAD directory
-sys.path.insert(0, '../xlib')
-#import misc.hdf
-import cmp.pds3lbl as pds3
-import cmp.plotting
 import tempfile
 
-warnings.filterwarnings("ignore", message="numpy.dtype size changed")
-warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
 
 PROCESSORS = [
     {
@@ -109,27 +100,33 @@ PROCESSORS = [
                       "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         "OutPrefix": "foc",
         # TODO: GNG -- suggest spaces become underscores
+        # Other flags might result in other outputs.
+        # option makes sense.
         "Outdir": "5m/5 range lines/40km",
         "Outputs": ["_s.h5"],
     },
-    {
-        "Name": "Run Ranging",
-        "InPrefix": "cmp",
-        "Indir": "ion",
-        "Inputs": ["_s.h5", "_s_TECU.txt"],
-        "Processor": "run_ranging.py",
-        "Libraries": ["xlib/misc/hdf.py", "xlib/rng/icd.py"],
-        "OutPrefix": "rng",
-        "Outdir": "icd",
-        "Outputs": ["_a.cluttergram.npy"],
-    },
+    # Run ranging needs crossovers, so needs a track file with pairs of tracks
+    # and record numbers.  This is a special data product so we can't run it
+    # automatically.
+    #{
+    #    "Name": "Run Ranging",
+    #    "InPrefix": "cmp",
+    #    "Indir": "ion",
+    #    "Inputs": ["_s.h5", "_s_TECU.txt"],
+    #    "Processor": "run_ranging.py",
+    #    "Libraries": ["xlib/misc/hdf.py", "xlib/rng/icd.py"],
+    #    "OutPrefix": "rng",
+    #    "Outdir": "icd",
+    #    "Outputs": ["_a.cluttergram.npy"],
+    #},
 ]
 
 def temptracklist(infile):
-    """ Create a temporary file and return the handle to it """
-    logging.debug("Writing Temp File");
+    """ Create a temporary file with one track in it,
+    and return the path to it """
+    logging.debug("Writing temporary track list for input file:");
     logging.debug(infile);
-    temp = tempfile.NamedTemporaryFile(mode='w+',delete=False)
+    temp = tempfile.NamedTemporaryFile(mode='w+', delete=False)
     temp.write(infile+'\n')
     temp.close()
     return temp.name
@@ -142,6 +139,7 @@ def getmtime(path):
     return mtime, path
 
 def manual(cmd, infile):
+    """ Interactively prompt whether to run a command """
     import getch
     print('Trackline: ' + infile);
     print('Command: ' + ' '.join(cmd));
@@ -161,19 +159,26 @@ def main():
                         help="Output base directory")
 
     parser.add_argument('-j', '--jobs', type=int, default=4,
-                        help="Number of jobs (cores) to use for processing")
-    parser.add_argument('-v', '--verbose', action="store_true",
-                        help="Display verbose output")
+                        help="Number of jobs (cores) to use for processing (currently ignored)")
+
+    grp_verb = parser.add_mutually_exclusive_group()
+    grp_verb.add_argument('-v', '--verbose', action="store_true",
+                        help="Display verbose output in pipeline script")
+    grp_verb.add_argument('-vv', action="store_true",
+                        help="Display verbose output in pipeline script and subprocesses")
+
+
     parser.add_argument('-m', '--manual', action="store_true",
                         help="Prompt before running processors")
     parser.add_argument('-n', '--dryrun', action="store_true",
                         help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
                         help="List of tracks to process")
-    parser.add_argument('--maxtracks', type=int, default=0,
-                        help="Maximum number of tracks to process (NOT WORKING)")
-    parser.add_argument('-1', '--once', action="store_true",
-                        help="Just run one processor and exit.")
+    parser.add_argument('--maxrequests', type=int, default=0,
+                        help="Maximum number of processing requests to process")
+    # Use --maxrequests 1 instead of -1
+    #parser.add_argument('-1', '--once', action="store_true",
+    #                    help="Just run one processor and exit.")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on libraries")
     parser.add_argument('--ignoretimes', action='store_true',
@@ -182,16 +187,10 @@ def main():
     args = parser.parse_args()
 
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
-    loglevel = logging.DEBUG if args.verbose else logging.INFO
+    loglevel = logging.DEBUG if (args.verbose or args.vv) else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="pipeline: [%(levelname)-7s] %(message)s")
 
-    # Set number of cores
-    nb_cores = args.jobs
-
-    # Read lookup table associating gob's with tracks
-    #h5file = pd.HDFStore('mc11e_spice.h5')
-    #keys = h5file.keys()
     with open(args.tracklist, 'r') as fin:
         lookup = [line.strip() for line in fin if line.strip() != '']
     logging.debug(lookup)
@@ -217,6 +216,7 @@ def main():
             # FIXME error checking is needed here
             m = re.search('edr(\d*)/', infile)
             orbit = m.group(1)
+
             intimes = []
             outputs = []
             outtimes = []
@@ -258,12 +258,10 @@ def main():
             outtimes.sort()
 
             # Print considered input files for equivalence checking
-            logging.debug("intimes: ")
             for x in intimes:
-                logging.debug("%0.0f %s", *x)
-            logging.debug("outtimes: ")
+                logging.debug("INPUT:  %0.0f %s", *x)
             for x in outtimes:
-                logging.debug("%0.0f %s", *x)
+                logging.debug("OUTPUT: %0.0f %s", *x)
 
 
             if intimes[0][0] == -1:
@@ -285,13 +283,19 @@ def main():
                             except OSError:
                                 # We don't care if it fails a few times
                                 pass
-                    logging.info(output)
+                    logging.info("Output: %s", output)
                     logging.debug("Processing %s", infile)
-                    temp = temptracklist(infile)
                     if prod['Processor'] == "run_rsr.py":
-                        cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), '-v', orbit]
+                        temp = None
+                        cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), orbit]
                     else:
-                        cmd = ['./' + prod['Processor'], '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
+                        temp = temptracklist(infile)
+                        cmd = ['./' + prod['Processor'], '--tracklist', temp, '-o', os.path.join(path_outroot,prefix)]
+
+                    if args.vv:
+                        # Run processor with a verbose flag
+                        cmd.append('-v')
+
                     logging.info("Invoking: %s", ' '.join(cmd))
                     if args.manual:
                         manual(cmd, infile)
@@ -299,10 +303,13 @@ def main():
                         logging.info("Dryrun")
                     else:
                         subprocess.run(cmd)
-                    os.unlink(temp)
-                    if args.once:
-                        logging.info("Only one process request.  Quitting.")
-                        sys.exit(1)
+                    if temp: # Remove temp file if it was created
+                        os.unlink(temp)
+
+                    nrequests += 1
+                    if args.maxrequests > 0 and nrequests >= args.maxrequests:
+                        logging.info("Only process %d requests.  Quitting.", args.maxrequests)
+                        return 0
 
         else:
             logging.debug('File already processed. Skipping %s', infile)
