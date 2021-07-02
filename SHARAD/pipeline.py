@@ -22,6 +22,22 @@ __history__ = {
 # TODO: Use max tracks arg
 # TODO: Parallelism
 
+"""
+
+SYNOPSIS
+
+pipeline.py orchestrates the running of SDS data processing scripts based on 
+looking for the expected inputs and corresponding output files.
+
+To run pipeline.py, you usually provide it with a list of orbits to examine.
+
+To simply see what would be run, run with the -n option.
+
+./pipeline.py -i elysium.txt -n
+
+"""
+
+
 import sys
 import os
 import time
@@ -48,71 +64,69 @@ import tempfile
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
-Processors = [
-    [("Name","Run Range Compression"),
-     ("Input","_a.dat"),
-     ("Input","_s.dat"),
-     ("Processor", "run_rng_cmp.py"), ("Library", "xlib/cmp/pds3lbl.py"),
-     ("Library", "xlib/cmp/plotting.py"), ("Library", "xlib/cmp/rng_cmp.py"),
-     ("Prefix", "cmp"),
-     ("Outdir", "ion"),
-     ("Output", "_s.h5"),
-     ("Output", "_s_TECU.txt")
-    ],
-    [("Name","Run Altimetry"),
-     ("InPrefix", "cmp"),
-     ("Indir", "ion"),
-     ("Input", "_s.h5"),
-     ("Input", "_s_TECU.txt"),
-     ("Processor", "run_altimetry.py"),
-     ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
-     ("Prefix", "alt"),
-     ("Outdir", "beta5"),
-     ("Output", "_a.h5")
-    ],
-    [("Name","Run RSR"),
-     ("InPrefix", "cmp"),
-     ("Indir", "ion"),
-     ("Input", "_s.h5"),
-     ("Processor", "run_rsr.py"),
-     ("Library", "xlib/rsr/Classdef.py"), ("Library", "xlib/rsr/detect.py"),
-     ("Library", "xlib/rsr/fit.py"), ("Library", "xlib/rsr/invert.py"),
-     ("Library", "xlib/rsr/pdf.py"), ("Library", "xlib/rsr/run.py"),
-     ("Library", "xlib/rsr/utils.py"), ("Library", "xlib/subradar/Classdef.py"),
-     ("Library", "xlib/subradar/iem.py"),
-     ("Library", "xlib/subradar/invert.py"),
-     ("Library", "xlib/subradar/roughness.py"),
-     ("Library", "xlib/subradar/utils.py"), ("Library", "SHARAD/SHARADEnv.py"),
-     ("Prefix", "rsr"),
-     ("Outdir", "cmp"),
-     ("Output", ".txt")
-    ],
-    [("Name","Run SAR"),
-     ("InPrefix", "cmp"),
-     ("Indir", "ion"),
-     ("Input", "_s.h5"),
-     ("Input", "_s_TECU.txt"),
-     ("Processor", "run_sar2.py"),
-     ("Library", "xlib/sar/sar.py"), ("Library", "xlib/sar/smooth.py"),
-     ("Library", "xlib/cmp/pds3lbl.py"), ("Library", "xlib/altimetry/beta5.py"),
-     ("Prefix", "foc"),
-     ("Outdir", "5m/5 range lines/40km"),
-     ("Output", "_s.h5")
-    ],
-    [("Name","Run Ranging"),
-     ("InPrefix", "cmp"),
-     ("Indir", "ion"),
-     ("Input", "_s.h5"),
-     ("Input", "_s_TECU.txt"),
-     ("Processor", "run_ranging.py"),
-     ("Library", "xlib/misc/hdf.py"), ("Library", "xlib/rng/icd.py"),
-     ("Prefix", "rng"),
-     ("Outdir", "icd"),
-     ("Output", "_a.cluttergram.npy")
-    ],
+PROCESSORS = [
+    {
+        "Name": "Run Range Compression",
+        "InPrefix": '',
+        "Indir": '',
+        "Inputs": ["_a.dat", "_s.dat"],
+        "Processor": "run_rng_cmp.py",
+        "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/cmp/plotting.py", "xlib/cmp/rng_cmp.py"],
+        "OutPrefix": "cmp",
+        "Outdir": "ion",
+        "Outputs": ["_s.h5", "_s_TECU.txt"],
+    },
+    {
+        "Name": "Run Altimetry",
+        "InPrefix": "cmp",
+        "Indir": "ion",
+        "Inputs": ["_s.h5", "_s_TECU.txt"],
+        "Processor": "run_altimetry.py",
+        "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
+        "OutPrefix": "alt",
+        "Outdir": "beta5",
+        "Outputs": ["_a.h5"],
+    },
+    {
+        "Name": "Run RSR",
+        "InPrefix": "cmp",
+        "Indir": "ion",
+        "Inputs": ["_s.h5"],
+        "Processor": "run_rsr.py",
+        # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
+        "Libraries": ["SHARAD/SHARADEnv.py"],
+        "OutPrefix": "rsr",
+        "Outdir": "cmp",
+        "Outputs": [".txt"],
+    },
+    {
+        "Name": "Run SAR",
+        "InPrefix": "cmp",
+        "Indir": "ion",
+        "Inputs": ["_s.h5", "_s_TECU.txt"],
+        "Processor": "run_sar2.py",
+        "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
+                      "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
+        "OutPrefix": "foc",
+        # TODO: GNG -- suggest spaces become underscores
+        "Outdir": "5m/5 range lines/40km",
+        "Outputs": ["_s.h5"],
+    },
+    {
+        "Name": "Run Ranging",
+        "InPrefix": "cmp",
+        "Indir": "ion",
+        "Inputs": ["_s.h5", "_s_TECU.txt"],
+        "Processor": "run_ranging.py",
+        "Libraries": ["xlib/misc/hdf.py", "xlib/rng/icd.py"],
+        "OutPrefix": "rng",
+        "Outdir": "icd",
+        "Outputs": ["_a.cluttergram.npy"],
+    },
 ]
 
 def temptracklist(infile):
+    """ Create a temporary file and return the handle to it """
     logging.debug("Writing Temp File");
     logging.debug(infile);
     temp = tempfile.NamedTemporaryFile(mode='w+',delete=False)
@@ -125,21 +139,20 @@ def getmtime(path):
         mtime = os.path.getmtime(path)
     except OSError:
         mtime = -1
-    return mtime,path
+    return mtime, path
 
-def manual(cmd, infile, outputs):
+def manual(cmd, infile):
     import getch
     print('Trackline: ' + infile);
     print('Command: ' + ' '.join(cmd));
-    print('(Y)es, (N)o, (Q)uit?', end=' ', flush=True);
-    c = getch.getch()
-    print(c)
-    while c not in 'YyNnQq':
-        c = getch.getch()
+    c = ' '
+    while c not in 'ynq':
+        print('(Y)es, (N)o, (Q)uit?', end=' ', flush=True);
+        c = getch.getch().lower()
         print(c)
-    if c in 'Qq':
+    if c == 'q':
         sys.exit(0)
-    if c in 'Yy':
+    if c == 'y':
         subprocess.run(cmd)
 
 def main():
@@ -154,7 +167,7 @@ def main():
     parser.add_argument('-m', '--manual', action="store_true",
                         help="Prompt before running processors")
     parser.add_argument('-n', '--dryrun', action="store_true",
-                        help="Dry run. Build task list but do not run (NOT WORKING)")
+                        help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
                         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0,
@@ -167,9 +180,6 @@ def main():
                         help="Do not any times")
 
     args = parser.parse_args()
-
-    # Mutually exclusive
-    assert not (args.dryrun and args.manual)
 
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
     loglevel = logging.DEBUG if args.verbose else logging.INFO
@@ -191,10 +201,11 @@ def main():
     process_list = []
     path_outroot = args.output
 
-    logging.debug("Base output directory: " + path_outroot)
+    logging.debug("Base output directory: %s", path_outroot)
 
+    nrequests = 0
     SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-    for prod in Processors:
+    for prod in PROCESSORS:
         indir = ''
         proc = ''
         outdir = ''
@@ -209,56 +220,42 @@ def main():
             intimes = []
             outputs = []
             outtimes = []
-            prefix = ''
-            inprefix = ''
-            for attr in prod:
-                if (attr[0] == "Name"):
-                    logging.info("Considering: " + attr[1])
-            for attr in prod:
-                if (attr[0] == "InPrefix"):
-                    prefix = attr[1] + '/'
-            for attr in prod:
-                if (attr[0] == "Indir"):
-                    indir = os.path.join(path_outroot, prefix, path_file, attr[1])
-            for attr in prod:
-                if (attr[0] == "Input"):
-                    # FIXME: This might be better if absolute paths are detected
-                    if (attr[1] == '_a.dat' or attr[1] == '_s.dat'):
-                         oneinput = os.path.join(SHARADroot,path_file,data_file+attr[1])
-                    else:
-                         oneinput = os.path.join(indir, data_file+attr[1])
-                    intimes.append(getmtime(oneinput))
-            for attr in prod:
-                if (attr[0] == "Processor"):
-                    proc = attr[1]
-                    intimes.append(getmtime(attr[1]))
-            for attr in prod:
-                if (attr[0] == "Library"):
-                    if (not args.ignorelibs):
-                        libfile = os.path.join('../',attr[1])
-                        intimes.append(getmtime(libfile))
-            for attr in prod:
-                if (attr[0] == "Prefix"):
-                    # Must come before Outdir
-                    prefix = attr[1] + '/'
-            for attr in prod:
-                if (attr[0] == "Outdir"):
-                    # Must come before Output
-                    outdir = os.path.join(path_outroot, prefix, path_file, attr[1])
-                if (attr[0] == "Output"):
-                    output = os.path.join(outdir, data_file+attr[1])
-                    outputs.append(output)
-                    outtimes.append(getmtime((output)))
+            #prefix = ''
+            #inprefix = ''
+            logging.info("Considering: %s", prod['Name'])
+            #prefix = prod['InPrefix'] + '/'
+            indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
 
+            # Get the modification times for the input files
+            for suffix in prod['Inputs']:
+                # FIXME: This might be better if absolute paths are detected
+                if suffix == '_a.dat' or suffix == '_s.dat':
+                    oneinput = os.path.join(SHARADroot, path_file, data_file + suffix)
+                else:
+                    oneinput = os.path.join(indir, data_file + suffix)
+                intimes.append(getmtime(oneinput))
 
+            # Get modification time for the processor file and known input modules
+            intimes.append(getmtime(prod['Processor']))
 
+            for libname in prod['Libraries']:
+                intimes.append(getmtime(os.path.join('..', libname)))
 
-            if (len(intimes) == 0):
+            prefix = prod['OutPrefix']
+            outdir = os.path.join(path_outroot, prod['OutPrefix'], path_file, prod['Outdir'])
+
+            for o in prod['Outputs']:
+                output = os.path.join(outdir, data_file + o)
+                outputs.append(output)
+                outtimes.append(getmtime(output))
+
+            if len(intimes) == 0:
                 logging.error("No inputs for process")
-            intimes.sort(key = lambda x: x[0])
-            if (len(outtimes) == 0):
+            intimes.sort()
+
+            if len(outtimes) == 0:
                 logging.error("No outputs for process")
-            outtimes.sort(key = lambda x: x[0])
+            outtimes.sort()
 
             # Print considered input files for equivalence checking
             logging.debug("intimes: ")
@@ -269,9 +266,10 @@ def main():
                 logging.debug("%0.0f %s", *x)
 
 
-            if (intimes[0][0] == -1):
+            if intimes[0][0] == -1:
+                # TODO: logging
                 print('Input missing.')
-            elif (intimes[-1][0] < outtimes[0][0]):
+            elif intimes[-1][0] < outtimes[0][0]:
                 print('Up to date.')
             else:
                 if not args.ignoretimes or outtimes[0][0] == -1:
@@ -288,30 +286,28 @@ def main():
                                 # We don't care if it fails a few times
                                 pass
                     logging.info(output)
-                    logging.debug("Processing " + infile)
+                    logging.debug("Processing %s", infile)
                     temp = temptracklist(infile)
-                    if proc == "run_rsr.py":
-                        cmd = ['./' + proc, '-o', os.path.join(path_outroot,prefix), '-v', orbit]
+                    if prod['Processor'] == "run_rsr.py":
+                        cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), '-v', orbit]
                     else:
-                        cmd = ['./' + proc, '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
-                    logging.info("Invoking: " + ' '.join(cmd))
+                        cmd = ['./' + prod['Processor'], '--tracklist', temp, '-o', os.path.join(path_outroot,prefix), '-v']
+                    logging.info("Invoking: %s", ' '.join(cmd))
                     if args.manual:
-                        manual(cmd, infile, outputs)
+                        manual(cmd, infile)
                     elif args.dryrun:
                         logging.info("Dryrun")
                     else:
                         subprocess.run(cmd)
-
                     os.unlink(temp)
                     if args.once:
-                        logging.info("Only one process request.  Quiting.")
+                        logging.info("Only one process request.  Quitting.")
                         sys.exit(1)
 
         else:
-            logging.debug('File already processed. Skipping ' + infile)
-
-    sys.exit(0)
+            logging.debug('File already processed. Skipping %s', infile)
+    return 0
 
 if __name__ == "__main__":
     # execute only if run as a script
-    main()
+    sys.exit(main())
