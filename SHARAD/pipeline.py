@@ -191,9 +191,9 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="pipeline: [%(levelname)-7s] %(message)s")
 
-    with open(args.tracklist, 'r') as fin:
+    with open(args.tracklist, 'rt') as fin:
         lookup = [line.strip() for line in fin if line.strip() != '']
-    logging.debug(lookup)
+
 
     # Build list of processes
     logging.info("Building task list")
@@ -208,7 +208,7 @@ def main():
         indir = ''
         proc = ''
         outdir = ''
-        for i, infile in enumerate(lookup):
+        for lookup_line, infile in enumerate(lookup, start=1):
             path_file = infile.replace(SHARADroot, '')
             data_file = os.path.basename(path_file).replace('_a.dat', '')
             path_file = os.path.dirname(path_file)
@@ -217,12 +217,9 @@ def main():
             m = re.search('edr(\d*)/', infile)
             orbit = m.group(1)
 
-            intimes = []
-            outputs = []
-            outtimes = []
-            #prefix = ''
-            #inprefix = ''
-            logging.info("Considering: %s", prod['Name'])
+            intimes = [] # input file names and modification times
+            outtimes = [] # output file names and modification times
+            logging.info("Considering %s track %d", prod['Name'], lookup_line)
             #prefix = prod['InPrefix'] + '/'
             indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
 
@@ -246,7 +243,6 @@ def main():
 
             for o in prod['Outputs']:
                 output = os.path.join(outdir, data_file + o)
-                outputs.append(output)
                 outtimes.append(getmtime(output))
 
             if len(intimes) == 0:
@@ -264,11 +260,12 @@ def main():
                 logging.debug("OUTPUT: %0.0f %s", *x)
 
 
-            if intimes[0][0] == -1:
-                # TODO: logging
-                print('Input missing.')
+            if intimes[0][0] == -1: # Missing input files
+                for tim, filename in intimes:
+                    if tim == -1:
+                        logging.info("%s is missing input %s", prod['Name'], filename)
             elif intimes[-1][0] < outtimes[0][0]:
-                print('Up to date.')
+                logging.info("Up to date.")
             else:
                 if not args.ignoretimes or outtimes[0][0] == -1:
                     if (outtimes[0][0] == -1):
@@ -276,7 +273,7 @@ def main():
                     else:
                         logging.info('Ready to process (old output file).')
                         logging.info('Deleting old files.')
-                        for output in outputs:
+                        for _, output in outtimes:
                             os.unlink(output)
                             try:
                                 os.rmdir(os.path.dirname(output))
