@@ -43,6 +43,7 @@ class DataMissingException(Exception):
 
 
 def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
+    output_root=None,
     senv=None, **kwargs):
     """
     Output the results from the Radar Statistical Reconnaissance Technique
@@ -77,7 +78,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
     sampling : int
         window repeat rate
     verbose : bool
-        Display fit results informations
+        Display fit results information
 
     Output
     ------
@@ -128,19 +129,22 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
         # orbit_info = senv.get_orbit_info(orbit_full, True)
         list_orbit_info = senv.get_orbit_info(orbit_full)
         orbit_info = list_orbit_info[0]
-        if typ == 'cmp':
-            archive_path = os.path.join(senv.out['rsr_path'],
-                    orbit_info['relpath'], typ)
-        else: # pragma: no cover
-            assert False
-        if not os.path.exists(archive_path):
-            os.makedirs(archive_path)
+        assert typ == 'cmp'
+        if output_root is None:
+            output_root = senv.out['rsr_path']
+        archive_path = os.path.join(output_root,
+                orbit_info['relpath'], typ)
         fil = os.path.join(archive_path,  orbit_full + '.txt')
-        b.to_csv(fil, index=None, sep=',')
-        #print("CREATED: " + fil)
-        logging.debug("CREATED: " + fil )
+        save_text(b, fil)
 
     return b
+
+
+def save_text(b, output_filename):
+    """ Given a pandas dataframe, save it to the specified location """
+    os.makedirs(os.path.dirname(output_filename), exist_ok=True)
+    b.to_csv(output_filename, index=None, sep=',')
+    logging.debug("Wrote text output to %s", output_filename)
 
 
 def todo(delete=False, senv=None, filename=None, verbose=False):
@@ -279,6 +283,7 @@ def main():
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
                 bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
+                output_root=args.output,
                 senv=senv)
 
         if args.output is not None:
