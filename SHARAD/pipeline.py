@@ -28,14 +28,18 @@ __history__ = {
 
 SYNOPSIS
 
-pipeline.py orchestrates the running of SDS data processing scripts based on 
+pipeline.py orchestrates the running of SDS data processing scripts based on
 looking for the expected inputs and corresponding output files.
 
-To run pipeline.py, you usually provide it with a list of orbits to examine.
+To run pipeline.py, you usually provide it with a list of input files to examine.
 
-To simply see what would be run, run with the -n option.
+To only see what would be run, run with the -n option.
 
 ./pipeline.py -i elysium.txt -n
+
+To run interactively and prompt before executing each subprocess, run with -m
+
+./pipeline.py -i elysium.txt -m
 
 """
 
@@ -153,6 +157,7 @@ def manual(cmd, infile):
 
 def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'):
     """ Read the tracklist and parse for relevant information
+    The tracklist contains a list of "orig" input filenames.
     """
     list_items = []
     with open(filename, 'rt') as fin:
@@ -167,19 +172,19 @@ def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD
             data_file = os.path.basename(path_file).replace('_a.dat', '')
             path_file = os.path.dirname(path_file)
             #root_file, ext_file = os.path.splitext(data_file)
-            m = re.search('edr(\d*)/', infile)
+            m = re.search('edr(\d+)/', infile)
             assert m # FIXME error checking is needed here
             orbit = m.group(1)
 
             item = { # variables for input/output file calculation
                 'infile': infile,
-                'path_file': path_file,
+                'path_file': path_file, # Relative path to file
+                # basename for data file (excluding path and suffix)
                 'data_file': data_file,
                 'orbit': orbit,
             }
             list_items.append(item)
     return list_items
-
 
 
 def main():
