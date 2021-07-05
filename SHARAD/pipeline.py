@@ -21,7 +21,7 @@ __history__ = {
 # TODO: Sandbox mode (input from sandbox is issue)
 # TODO: Use max tracks arg
 # TODO: Parallelism
-
+# TODO: --ignoretimes option. Should we call this --force ?
 
 
 """
@@ -59,17 +59,17 @@ PROCESSORS = [
     {
         "Name": "Run Range Compression",
         "InPrefix": '',
-        "Indir": '',
-        "Inputs": ["_a.dat", "_s.dat"],
+        #"Indir": '',
+        #"Inputs": ["_a.dat", "_s.dat"],
 # oneinput = os.path.join(SHARADroot, path_file, data_file + suffix)
-        "Inputs2": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
+        "Inputs": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
                     "{0[orig_root]}/{0[path_file]}/{0[data_file]}_s.dat"],
 
         "Processor": "run_rng_cmp.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/cmp/plotting.py", "xlib/cmp/rng_cmp.py"],
-        "OutPrefix": "cmp",
-        "Outdir": "ion",
-        "Outputs": ["_s.h5", "_s_TECU.txt"],
+        #"OutPrefix": "cmp",
+        #"Outdir": "ion",
+        #"Outputs": ["_s.h5", "_s_TECU.txt"],
         "Outputs2": [
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt",
@@ -79,49 +79,49 @@ PROCESSORS = [
     {
         "Name": "Run Altimetry",
         "InPrefix": "cmp",
-        "Indir": "ion",
-        "Inputs": ["_s.h5", "_s_TECU.txt"],
-#    indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
+        #"Indir": "ion",
+        #"Inputs": ["_s.h5", "_s_TECU.txt"],
+        #    indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
         # Uses the outputs from run_rng_cmp.py
-        "Inputs2": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_altimetry.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
-        "OutPrefix": "alt",
-        "Outdir": "beta5",
-        "Outputs": ["_a.h5"],
+        #"OutPrefix": "alt",
+        #"Outdir": "beta5",
+        #"Outputs": ["_a.h5"],
         "Outputs2": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
     },
     {
         "Name": "Run RSR",
-        "InPrefix": "cmp",
-        "Indir": "ion",
-        "Inputs": ["_s.h5"],
-        "Inputs2": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
+        #"InPrefix": "cmp",
+        #"Indir": "ion",
+        #"Inputs": ["_s.h5"],
+        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "OutPrefix": "rsr",
-        "Outdir": "cmp",
-        "Outputs": [".txt"],
+        #"Outdir": "cmp",
+        #"Outputs": [".txt"],
         "Outputs2": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
     {
         "Name": "Run SAR",
         "InPrefix": "cmp",
-        "Indir": "ion",
-        "Inputs": ["_s.h5", "_s_TECU.txt"],
-        "Inputs2": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+        #"Indir": "ion",
+        #"Inputs": ["_s.h5", "_s_TECU.txt"],
+        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_sar2.py",
         "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
                       "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
-        "OutPrefix": "foc",
+        #"OutPrefix": "foc",
         # TODO: GNG -- suggest spaces become underscores
         # Other flags might result in other outputs.
         # option makes sense.
-        "Outdir": "5m/5 range lines/40km",
-        "Outputs": ["_s.h5"],
+        #"Outdir": "5m/5 range lines/40km",
+        #"Outputs": ["_s.h5"],
         "Outputs2": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
     },
     # Run ranging needs crossovers, so needs a track file with pairs of tracks
@@ -145,7 +145,7 @@ def temptracklist(infile):
     and return the path to it """
     logging.debug("Writing temporary track list for input file:");
     logging.debug(infile);
-    temp = tempfile.NamedTemporaryFile(mode='w+', delete=False)
+    temp = tempfile.NamedTemporaryFile(mode='w+', delete=False, prefix='pipeline_tracklist_')
     temp.write(infile+'\n')
     temp.close()
     return temp.name
@@ -182,22 +182,23 @@ def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD
             if not infile:
                 continue
 
-        path_file = os.path.relpath(infile, SHARADroot)
+            path_file = os.path.relpath(infile, SHARADroot)
+            #path_file = infile.replace(SHARADroot, '')
+            assert path_file.endswith('_a.dat')
+            data_file = os.path.basename(path_file).replace('_a.dat', '')
+            path_file = os.path.dirname(path_file)
+            #root_file, ext_file = os.path.splitext(data_file)
+            m = re.search('edr(\d*)/', infile)
+            assert m # FIXME error checking is needed here
+            orbit = m.group(1)
 
-        #path_file = infile.replace(SHARADroot, '')
-
-        data_file = os.path.basename(path_file).replace('_a.dat', '')
-        path_file = os.path.dirname(path_file)
-        root_file, ext_file = os.path.splitext(data_file)
-        # FIXME error checking is needed here
-        m = re.search('edr(\d*)/', infile)
-        orbit = m.group(1) if m else None
-
-        item = {
-            #'infile': infile, # normally not used
-            'orbit': orbit,
-        }
-        list_items.append(item)
+            item = { # variables for input/output file calculation
+                'infile': infile,
+                'path_file': path_file,
+                'data_file': data_file,
+                'orbit': orbit,
+            }
+            list_items.append(item)
     return list_items
 
 
@@ -231,7 +232,7 @@ def main():
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on libraries")
     parser.add_argument('--ignoretimes', action='store_true',
-                        help="Do not any times")
+                        help="Do not check any times")
 
     args = parser.parse_args()
 
@@ -240,8 +241,7 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="pipeline: [%(levelname)-7s] %(message)s")
 
-    with open(args.tracklist, 'rt') as fin:
-        lookup = [line.strip() for line in fin if line.strip() != '']
+    lookup = read_tracklist(args.tracklist)
 
 
     # Build list of processes
@@ -258,69 +258,48 @@ def main():
     for prod in PROCESSORS:
         indir = ''
         proc = ''
-        outdir = ''
-        for lookup_line, infile in enumerate(lookup, start=1):
-            path_file = infile.replace(SHARADroot, '')
-            data_file = os.path.basename(path_file).replace('_a.dat', '')
-            path_file = os.path.dirname(path_file)
-            root_file,ext_file = os.path.splitext(data_file)
-            # FIXME error checking is needed here
-            m = re.search('edr(\d*)/', infile)
-            orbit = m.group(1)
+        #outdir = ''
+        for lookup_line, item in enumerate(lookup, start=1):
+            infile = item['infile']
+            ivars = item.copy()
+            ivars['orig_root'] = SHARADroot.rstrip('/')
+            ivars['targ_root'] = args.output
 
-            ivars = { # variables for input/output file calculation
-                'orig_root': SHARADroot.rstrip('/'),
-                'targ_root': args.output,
-                'path_file': path_file,
-                'data_file': data_file,
-            }
-
-
+            #path_file = infile.replace(SHARADroot, '')
+            #data_file = os.path.basename(path_file).replace('_a.dat', '')
+            #path_file = os.path.dirname(path_file)
+            #root_file,ext_file = os.path.splitext(data_file)
+            ## FIXME error checking is needed here
+            #m = re.search('edr(\d*)/', infile)
+            #orbit = m.group(1)
 
             intimes = [] # input file names and modification times
             outtimes = [] # output file names and modification times
             logging.info("Considering %s track %d", prod['Processor'], lookup_line)
             #prefix = prod['InPrefix'] + '/'
             # targ directory
-            indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
+            #indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
 
             # Get the modification times for the input files
-            for suffix, fmtstr in zip(prod['Inputs'], prod['Inputs2']):
-                # If suffix is _a.dat or _s.dat, use the base name and add that.
-                # Otherwise, just use the 
-                # FIXME: This might be better if absolute paths are detected
-                if suffix == '_a.dat' or suffix == '_s.dat':
-                    oneinput = os.path.join(SHARADroot, path_file, data_file + suffix)
-                else:
-                    oneinput = os.path.join(indir, data_file + suffix)
-
-                # New input filename calculation
-                oneinput2 = fmtstr.format(ivars)
-                assert oneinput == oneinput2
-                #-----------------
+            for fmtstr in prod['Inputs']:
+                oneinput = fmtstr.format(ivars)
                 intimes.append(getmtime(oneinput))
 
-            # Get modification time for the processor file and known input modules
-            intimes.append(getmtime(prod['Processor']))
+            if not args.ignorelibs:
+                # Get modification time for the processor file and known input modules
+                intimes.append(getmtime(prod['Processor']))
 
-            for libname in prod['Libraries']:
-                intimes.append(getmtime(os.path.join('..', libname)))
+                for libname in prod['Libraries']:
+                    intimes.append(getmtime(os.path.join('..', libname)))
+            else:
+                logging.debug("Not checking code modification times")
 
-            prefix = prod['OutPrefix']
-            outdir = os.path.join(path_outroot, prod['OutPrefix'], path_file, prod['Outdir'])
+            #prefix = prod['OutPrefix']
+            #outdir = os.path.join(path_outroot, prod['OutPrefix'], path_file, prod['Outdir'])
 
-            for o, fmtstr in zip(prod['Outputs'], prod['Outputs2']):
-                output = os.path.join(outdir, data_file + o)
+            for fmtstr in prod['Outputs2']:
+                output = fmtstr.format(ivars) #output = os.path.join(outdir, data_file + o)
                 outtimes.append(getmtime(output))
-
-                # New input filename calculation
-                output2 = fmtstr.format(ivars)
-                try:
-                    assert output == output2
-                except AssertionError:
-                    print(output, "\n", output2)
-                    raise
-                #-----------------
 
 
             if len(intimes) == 0:
@@ -360,12 +339,17 @@ def main():
                                 pass
                     logging.info("Output: %s", output)
                     logging.debug("Processing %s", infile)
+                    # TODO: move this over to the dict
                     if prod['Processor'] == "run_rsr.py":
                         temp = None
                         cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), orbit]
                     else:
                         temp = temptracklist(infile)
-                        cmd = ['./' + prod['Processor'], '--tracklist', temp, '-o', os.path.join(path_outroot,prefix)]
+                        cmd = ['./' + prod['Processor'], '--tracklist', temp,
+                               '-o', os.path.join(path_outroot, prod['InPrefix'] + '/')]
+                        if prod['Processor'] == "run_sar2.py":
+                            # Add targ path which it uses to find input files
+                            cmd += ['-i', ivars['targ_root']]
 
                     if args.vv:
                         # Run processor with a verbose flag
