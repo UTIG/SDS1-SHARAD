@@ -59,18 +59,12 @@ PROCESSORS = [
     {
         "Name": "Run Range Compression",
         "InPrefix": '',
-        #"Indir": '',
-        #"Inputs": ["_a.dat", "_s.dat"],
-# oneinput = os.path.join(SHARADroot, path_file, data_file + suffix)
         "Inputs": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
                     "{0[orig_root]}/{0[path_file]}/{0[data_file]}_s.dat"],
 
         "Processor": "run_rng_cmp.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/cmp/plotting.py", "xlib/cmp/rng_cmp.py"],
-        #"OutPrefix": "cmp",
-        #"Outdir": "ion",
-        #"Outputs": ["_s.h5", "_s_TECU.txt"],
-        "Outputs2": [
+        "Outputs": [
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt",
                     ]
@@ -79,38 +73,25 @@ PROCESSORS = [
     {
         "Name": "Run Altimetry",
         "InPrefix": "cmp",
-        #"Indir": "ion",
-        #"Inputs": ["_s.h5", "_s_TECU.txt"],
-        #    indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
         # Uses the outputs from run_rng_cmp.py
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_altimetry.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
-        #"OutPrefix": "alt",
-        #"Outdir": "beta5",
-        #"Outputs": ["_a.h5"],
-        "Outputs2": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
+        "Outputs": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
     },
     {
         "Name": "Run RSR",
-        #"InPrefix": "cmp",
-        #"Indir": "ion",
-        #"Inputs": ["_s.h5"],
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "OutPrefix": "rsr",
-        #"Outdir": "cmp",
-        #"Outputs": [".txt"],
-        "Outputs2": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
+        "Outputs": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
     {
         "Name": "Run SAR",
         "InPrefix": "cmp",
-        #"Indir": "ion",
-        #"Inputs": ["_s.h5", "_s_TECU.txt"],
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_sar2.py",
@@ -118,11 +99,9 @@ PROCESSORS = [
                       "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         #"OutPrefix": "foc",
         # TODO: GNG -- suggest spaces become underscores
-        # Other flags might result in other outputs.
+        # Other flags might result in other outputs.  For these we need a different command line
         # option makes sense.
-        #"Outdir": "5m/5 range lines/40km",
-        #"Outputs": ["_s.h5"],
-        "Outputs2": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
+        "Outputs": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
     },
     # Run ranging needs crossovers, so needs a track file with pairs of tracks
     # and record numbers.  This is a special data product so we can't run it
@@ -265,20 +244,9 @@ def main():
             ivars['orig_root'] = SHARADroot.rstrip('/')
             ivars['targ_root'] = args.output
 
-            #path_file = infile.replace(SHARADroot, '')
-            #data_file = os.path.basename(path_file).replace('_a.dat', '')
-            #path_file = os.path.dirname(path_file)
-            #root_file,ext_file = os.path.splitext(data_file)
-            ## FIXME error checking is needed here
-            #m = re.search('edr(\d*)/', infile)
-            #orbit = m.group(1)
-
             intimes = [] # input file names and modification times
             outtimes = [] # output file names and modification times
             logging.info("Considering %s track %d", prod['Processor'], lookup_line)
-            #prefix = prod['InPrefix'] + '/'
-            # targ directory
-            #indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
 
             # Get the modification times for the input files
             for fmtstr in prod['Inputs']:
@@ -294,10 +262,7 @@ def main():
             else:
                 logging.debug("Not checking code modification times")
 
-            #prefix = prod['OutPrefix']
-            #outdir = os.path.join(path_outroot, prod['OutPrefix'], path_file, prod['Outdir'])
-
-            for fmtstr in prod['Outputs2']:
+            for fmtstr in prod['Outputs']:
                 output = fmtstr.format(ivars) #output = os.path.join(outdir, data_file + o)
                 outtimes.append(getmtime(output))
 
