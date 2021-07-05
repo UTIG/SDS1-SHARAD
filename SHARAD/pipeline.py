@@ -61,40 +61,58 @@ PROCESSORS = [
         "InPrefix": '',
         "Indir": '',
         "Inputs": ["_a.dat", "_s.dat"],
+# oneinput = os.path.join(SHARADroot, path_file, data_file + suffix)
+        "Inputs2": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
+                    "{0[orig_root]}/{0[path_file]}/{0[data_file]}_s.dat"],
+
         "Processor": "run_rng_cmp.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/cmp/plotting.py", "xlib/cmp/rng_cmp.py"],
         "OutPrefix": "cmp",
         "Outdir": "ion",
         "Outputs": ["_s.h5", "_s_TECU.txt"],
+        "Outputs2": [
+                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt",
+                    ]
+
     },
     {
         "Name": "Run Altimetry",
         "InPrefix": "cmp",
         "Indir": "ion",
         "Inputs": ["_s.h5", "_s_TECU.txt"],
+#    indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
+        # Uses the outputs from run_rng_cmp.py
+        "Inputs2": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_altimetry.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         "OutPrefix": "alt",
         "Outdir": "beta5",
         "Outputs": ["_a.h5"],
+        "Outputs2": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
     },
     {
         "Name": "Run RSR",
         "InPrefix": "cmp",
         "Indir": "ion",
         "Inputs": ["_s.h5"],
+        "Inputs2": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "OutPrefix": "rsr",
         "Outdir": "cmp",
         "Outputs": [".txt"],
+        "Outputs2": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
     {
         "Name": "Run SAR",
         "InPrefix": "cmp",
         "Indir": "ion",
         "Inputs": ["_s.h5", "_s_TECU.txt"],
+        "Inputs2": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_sar2.py",
         "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
                       "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
@@ -104,6 +122,7 @@ PROCESSORS = [
         # option makes sense.
         "Outdir": "5m/5 range lines/40km",
         "Outputs": ["_s.h5"],
+        "Outputs2": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
     },
     # Run ranging needs crossovers, so needs a track file with pairs of tracks
     # and record numbers.  This is a special data product so we can't run it
@@ -153,6 +172,36 @@ def manual(cmd, infile):
     if c == 'y':
         subprocess.run(cmd)
 
+def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'):
+    """ Read the tracklist and parse for relevant information
+    """
+    list_items = []
+    with open(filename, 'rt') as fin:
+        for line in fin:
+            infile = line.strip()
+            if not infile:
+                continue
+
+        path_file = os.path.relpath(infile, SHARADroot)
+
+        #path_file = infile.replace(SHARADroot, '')
+
+        data_file = os.path.basename(path_file).replace('_a.dat', '')
+        path_file = os.path.dirname(path_file)
+        root_file, ext_file = os.path.splitext(data_file)
+        # FIXME error checking is needed here
+        m = re.search('edr(\d*)/', infile)
+        orbit = m.group(1) if m else None
+
+        item = {
+            #'infile': infile, # normally not used
+            'orbit': orbit,
+        }
+        list_items.append(item)
+    return list_items
+
+
+
 def main():
     parser = argparse.ArgumentParser(description='SHARAD Pipeline')
     parser.add_argument('-o', '--output', default='/disk/kea/SDS/targ/xtra/SHARAD',
@@ -198,6 +247,8 @@ def main():
     # Build list of processes
     logging.info("Building task list")
     process_list = []
+    # strip trailing slash
+    args.output = args.output.rstrip('/')
     path_outroot = args.output
 
     logging.debug("Base output directory: %s", path_outroot)
@@ -217,19 +268,36 @@ def main():
             m = re.search('edr(\d*)/', infile)
             orbit = m.group(1)
 
+            ivars = { # variables for input/output file calculation
+                'orig_root': SHARADroot.rstrip('/'),
+                'targ_root': args.output,
+                'path_file': path_file,
+                'data_file': data_file,
+            }
+
+
+
             intimes = [] # input file names and modification times
             outtimes = [] # output file names and modification times
-            logging.info("Considering %s track %d", prod['Name'], lookup_line)
+            logging.info("Considering %s track %d", prod['Processor'], lookup_line)
             #prefix = prod['InPrefix'] + '/'
+            # targ directory
             indir = os.path.join(path_outroot, prod['InPrefix'], path_file, prod['Indir']) 
 
             # Get the modification times for the input files
-            for suffix in prod['Inputs']:
+            for suffix, fmtstr in zip(prod['Inputs'], prod['Inputs2']):
+                # If suffix is _a.dat or _s.dat, use the base name and add that.
+                # Otherwise, just use the 
                 # FIXME: This might be better if absolute paths are detected
                 if suffix == '_a.dat' or suffix == '_s.dat':
                     oneinput = os.path.join(SHARADroot, path_file, data_file + suffix)
                 else:
                     oneinput = os.path.join(indir, data_file + suffix)
+
+                # New input filename calculation
+                oneinput2 = fmtstr.format(ivars)
+                assert oneinput == oneinput2
+                #-----------------
                 intimes.append(getmtime(oneinput))
 
             # Get modification time for the processor file and known input modules
@@ -241,9 +309,19 @@ def main():
             prefix = prod['OutPrefix']
             outdir = os.path.join(path_outroot, prod['OutPrefix'], path_file, prod['Outdir'])
 
-            for o in prod['Outputs']:
+            for o, fmtstr in zip(prod['Outputs'], prod['Outputs2']):
                 output = os.path.join(outdir, data_file + o)
                 outtimes.append(getmtime(output))
+
+                # New input filename calculation
+                output2 = fmtstr.format(ivars)
+                try:
+                    assert output == output2
+                except AssertionError:
+                    print(output, "\n", output2)
+                    raise
+                #-----------------
+
 
             if len(intimes) == 0:
                 logging.error("No inputs for process")
