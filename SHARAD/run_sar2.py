@@ -86,6 +86,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                   - name: (required) name for this task, unique among all tasks being processed
                   - input: (required) path to EDR
                   - output: (required) path to output file (or None to omit saving)
+                  - sharadroot: path to root of SHARAD data
                   - idx_start: (optional)
                   - idx_end: (optional)
       focuser   : Flag for which SAR focuser to use.
@@ -121,6 +122,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
     """
 
     taskname = taskinfo.get('name', "TaskXXX")
+    sharad_root = taskinfo.get('sharad_root', None)
 
     try:
 
@@ -154,9 +156,12 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             if len(procparam['ddv2_trim [samples]']) != 0:
                 logging.debug('{:s}: SAR fast-time trim [samples]: {:f}'.format(taskname, procparam['ddv2_trim [samples]']))
 
-        # create cmp path
         SDS = '/disk/kea/SDS'
-        path_root = os.path.join(SDS, 'targ/xtra/SHARAD/cmp/')
+        # create cmp path
+        if sharad_root is None:
+            sharad_root = os.path.join(SDS, 'targ/xtra/SHARAD')
+        path_root = os.path.join(sharad_root, 'cmp/')
+
         inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
         path_file = os.path.relpath(path, inputroot)
         data_file = os.path.basename(path_file)
@@ -315,9 +320,13 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
 def main():
     SDS = os.getenv('SDS', '/disk/kea/SDS')
+
+    #input_default = os.path.join(SDS, 'targ/xtra/SHARAD')
     output_default = os.path.join(SDS, 'targ/xtra/SHARAD/foc/')
 
     parser = argparse.ArgumentParser(description='Run SAR processing')
+    parser.add_argument('-i', '--input', default=None,
+                        help="Input base SHARAD directory")
     parser.add_argument('-o', '--output', default=output_default,
                         help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5',
@@ -547,6 +556,7 @@ def main():
             'name': 'Task{:03d}-{:s}'.format(i, orbit_name),
             'input': path,
             'output': outputfile,
+            'sharad_root': args.input,
             'idx_start': orbit_index[0],
             'idx_end': orbit_index[1],
         }
