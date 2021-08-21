@@ -712,7 +712,7 @@ class SHARADEnv:
             aux = self.aux_data(orbit)
             data = getattr(self, product + '_data')(orbit)
             df = pd.DataFrame(data)
-            df[orbit] = np.full(len(aux['ORBIT_NUMBER']), orbit)
+            #df[orbit] = np.full(len(aux['ORBIT_NUMBER']), orbit)
             # Points without auxilliary flag
             ok = (aux['CORRUPTED_DATA_FLAG1'] == 0) &\
                  (aux['CORRUPTED_DATA_FLAG2'] == 0)
