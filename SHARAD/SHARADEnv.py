@@ -406,7 +406,7 @@ class SHARADEnv:
                         pass
 
         for typ in output.keys():
-            output[typ] = sorted(output[typ])
+            output[typ] = np.unique(sorted(output[typ]))
 
         return output
 
