@@ -50,8 +50,8 @@ class Async:
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
-                      gain=0, gain_altitude='grima2021', gain_sahga=False,
-                      senv=None, method='mouginot2010'):
+                      gain=0, gain_altitude='grima2021', gain_sahga=True,
+                      senv=None, method='grima2012', alt_data=True):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
@@ -74,8 +74,10 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
         correct for SA and HGA orientation
     method: string
         surface detection method to use by subradar.surface.detector
-    save: boolean
+    archive: boolean
         Whether to save the results in a txt file into the hierarchy
+    alt_data: boolean
+        Whether to use alt data or not
 
     Output:
     ------
@@ -98,19 +100,27 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     logging.debug('PROCESSING: Surface echo extraction for %s', orbit_full)
 
-    alt = senv.alt_data(orbit, typ='beta5', ext='h5', quality_flag=True)
-    if alt is None: # pragma: no cover
-        raise DataMissingException("No Altimetry Data for orbit %s", orbit)
-
-    flag = alt['flag']
-
-    alty = alt['idx_fine']
-    alty[alty < 0] = 0
-    alty[alty > 3600] = 0
-
     rdg = senv.cmp_data(orbit)
     if rdg is None: # pragma: no cover
         raise DataMissingException("No CMP data for orbit %s", orbit)
+
+    if alt_data == True:
+        alt = senv.alt_data(orbit, typ='beta5', ext='h5', quality_flag=True)
+        if alt is None: # pragma: no cover
+           #raise DataMissingException("No Altimetry Data for orbit %s", orbit)
+           return None
+
+        flag = alt['flag']
+
+        alty = alt['idx_fine']
+        alty[alty < 0] = 0
+        alty[alty > 3600] = 0
+    else:
+        alty = np.full(rdg.shape[0], np.ceil(ywinwidth/2))
+
+    #rdg = senv.cmp_data(orbit)
+    #if rdg is None: # pragma: no cover
+    #    raise DataMissingException("No CMP data for orbit %s", orbit)
 
     #------------------------
     # Get surface coordinates
@@ -161,8 +171,10 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     #----------
     # Archiving
 
-    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag} #'noise':noise,
-           #'pdb':20*np.log10(surf_amp)}
+    if alt_data == False:
+        flag = np.full(len(surf_y), 0)
+    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag, } 
+           #'noise':noise, 'pdb':20*np.log10(surf_amp)}
 
     if archive:
         archive_surface(senv, orbit_full, out, typ)
@@ -387,8 +399,10 @@ def main():
               'ywinwidth':args.ywinwidth,
               'archive':True,
               'gain':0,
-              'gain_altitude':True,
+              'gain_altitude':'grima2021',
               'gain_sahga':True,
+              'method':'grima2012',
+              'alt_data':True,
               'senv':senv
              }
 
