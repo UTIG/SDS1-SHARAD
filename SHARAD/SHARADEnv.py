@@ -605,7 +605,10 @@ class SHARADEnv:
                 print(str(i) + '/' + str(len(orbits)) + ' : ' +orbit)
 
             if self.my(orbit):
-                df = pd.DataFrame(self.aux_data(orbit)[::sampling][aux_columns])
+                try:
+                    df = pd.DataFrame(self.aux_data(orbit)[::sampling][aux_columns])
+                except ValueError:
+                    df = pd.DataFrame(self.aux_data(orbit)[::sampling][aux_columns].byteswap().newbyteorder())
                 df['orbit'] = np.full(len(df), orbit)
                 df['martian_year'] = np.full(len(df), self.my(orbit))
                 store.append(product, df)
