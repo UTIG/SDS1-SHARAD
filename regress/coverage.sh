@@ -28,6 +28,9 @@ COV=coverage3
 # Turn off display variable for regressions. (prevent graph windows from activating)
 export DISPLAY=""
 
+# Suppress numexpr messages
+export NUMEXPR_MAX_THREADS=8
+
 rm -rf ./covdata/
  
 $COV run $FLAGS ../xlib/clutter/parse_channels.py > /dev/null
@@ -104,6 +107,9 @@ $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o ./covdata/rng_cmp_data -j 1 --max
 echo $S0: run_altimetry
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt -n
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt
+$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 \
+    --tracklist ./tracks_run_altimetry_fix202110.txt
+
 
 echo "$S0: run_surface"
 # show all files that would be deleted

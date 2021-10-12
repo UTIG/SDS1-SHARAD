@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
-__authors__ = ['Gregor Steinbruegge (UTIG), gregor@ig.utexas.edu']
+__authors__ = ['Gregor Steinbruegge (JPL), Gregor.B.Steinbruegge@jpl.nasa.gov']
 
-__version__ = '1.0'
+__version__ = '1.2'
 __history__ = {
     '1.0':
         {'date': 'March 05, 2019',
          'author': 'Gregor Steinbruegge, UTIG',
-         'info': 'Initial Release.'}}
+         'info': 'Initial Release.'},
+    '1.1':
+        {'date': 'September 16, 2020',
+         'author': 'Gregor Steinbruegge, Stanford',
+         'info': 'Added Zero-Doppler Filter'},
+    '1.2':
+        {'date': 'October 05, 2021',
+         'author': 'Gregor Steinbruegge, JPL',
+         'info': 'Checks for corrupted data & wrong range window start.'}}
 
+
+# TODO:
+# reorder imports
+# send final copy back to gregor
 import time
 from math import tan, pi, erf, sqrt
 import logging
@@ -15,10 +27,11 @@ import sys
 import os
 import numpy as np
 from scipy.constants import c
-from scipy.ndimage.interpolation import shift
 import spiceypy as spice
 import pandas as pd
 from scipy.optimize import least_squares
+
+# Imports from using pipeline
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from misc import prog as prg
 from misc import coord as crd
@@ -26,11 +39,12 @@ import cmp.pds3lbl as pds3
 
 
 def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
-                    idx_start=0, idx_end=None, use_spice=False, ft_avg=10,
-                    max_slope=25, noise_scale=20, fix_pri=None, fine=True):
+                    use_spice=False, ft_avg=10,
+                    max_slope=25, noise_scale=20, fix_pri=None, fine=True,
+                    idx_start=0, idx_end=-1):
 
     """
-    Computes altimetry profile based on Mark Haynes Memo.
+    Computes altimetry profile based on Steinbrügge et al. (in review)
     Method is the Beta5 model based on ocean altimetry.
 
     Input
@@ -41,12 +55,12 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         Path to EDR science data
     label_path: string
         Path to science label of EDR data
-    aux_label: string
+    label_aux: string
         Path to auxillary label file
     idx_start (optional): integer
         Start index for processing track. Default is 0.
     idx_end (optional): integer
-        End index for processing track. Default is None.
+        End index for processing track. Default is None. 
         TODO: what does "None" mean?
     use_spice (optional): boolean
         Specifies is spacecraft position is taken from the EDR
@@ -84,7 +98,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         Unfocussed SAR radargram (smoothed in fast time)
 
     """
-    MB = 1064*1064
+    MB = 1024*1024
     time0 = time.time()
     #============================
     # Read and prepare input data
@@ -120,7 +134,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         lon = np.empty(len(ets))
         for i in range(len(ets)):
             scpos, lt = spice.spkgeo(-74, ets[i], 'J2000', 4)
-            llr = crd.cart2sph(scpos[0:3])
+            llr = crd.cart2sph(scpos[0:3])[0]
             lat[i] = llr[0]
             lon[i] = llr[1]
             sc[i] = np.linalg.norm(scpos[0:3])
@@ -138,12 +152,10 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         3: 1290E-6, 4: 2856E-6,
         5: 2984E-6, 6: 2580E-6
     }
-    # Get the shot frequency.
-    if fix_pri is None:
-        pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
-    else:
-        pri_code = np.full_like(sc, fix_pri)
-    pri = np.array([pri_table.get(x, float('nan')) for x in pri_code])
+
+    pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
+
+    pri = np.array([pri_table.get(x, 1428E-6) for x in pri_code])
 
     del data
 
@@ -151,11 +163,17 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     logging.debug("Spice Geometry calculations: {:0.2f} sec".format(time1-time0))
     time0 = time1
 
+    # Check for too small range window start values   
+    idx_valid = np.where(range_window_start>1000)
+    
+    # Identify corrupted data
+    corrupted_flag = aux['CORRUPTED_DATA_FLAG'].values[idx_start:idx_end]
+    corrupted_idx = np.where(corrupted_flag == 1)[0]
+
     # Calculate offsets for radargram
     sc_cor = np.array(2000*sc/c/0.0375E-6).astype(int)
     phase = -sc_cor+range_window_start
-    tx0 = int(min(phase))
-    offset = int(max(phase) - tx0)
+    tx0 = int(min(phase[idx_valid]))
     shift_param = (phase-tx0) % 3600
 
 
@@ -170,9 +188,11 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # during Europa flybys, REASON data might allow for coherent stacking.
     sc_alt = aux['SPACECRAFT_ALTITUDE'].values[idx_start:idx_end]*1000
     vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'].values[idx_start:idx_end]*1000
-    fresnel = np.sqrt(sc_alt*c/10E6+(c/(20E6))**2)
-    sar_window = int(np.mean(2*fresnel/vel_t/pri)/2)
-    coh_window = int(np.mean((c/20E6/4/tan(max_slope*pi/180)/vel_t/pri)))
+    # catch zero-velocities
+    idxn0 = np.where(abs(vel_t)>0)
+    fresnel = np.sqrt(sc_alt[idxn0]*c/10E6+(c/(20E6))**2)
+    sar_window = int(np.mean(2*fresnel/vel_t[idxn0]/pri[idxn0])/2)
+    coh_window = int(np.mean((c/20E6/4/tan(max_slope*pi/180)/vel_t[idxn0]/pri[idxn0])))
 
     time1 = time.time()
     logging.debug("Compute SAR apertures: {:0.2f} sec".format(time1-time0))
@@ -184,11 +204,18 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Actual pulse processing
     #========================
 
+    # Zero Doppler Filter
+    dp_wdw = 30
+    doppler = np.copy(cmp_track)
+    for j in range(dp_wdw,len(cmp_track)-dp_wdw):
+        doppler_r = np.fft.fft(cmp_track[j-dp_wdw:j+dp_wdw],axis=0)
+        doppler[j] = doppler_r[0]
+
     # Perform smoothing of the waveform aka averaging in fast time
     if ft_avg is not None:
-        wvfrm = np.empty((len(cmp_track), 3600), dtype=np.complex)
-        for i in range(len(cmp_track)):
-            rmean = running_mean(cmp_track[i], ft_avg)
+        wvfrm = np.empty((len(doppler), 3600), dtype=np.complex)
+        for i in range(len(doppler)):
+            rmean = running_mean(doppler[i], ft_avg)
             wvfrm[i] = rmean - np.mean(rmean)
             #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
             #wvfrm[i] -= np.mean(wvfrm[i])
@@ -210,46 +237,38 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
     logging.debug("Size of radargram: {:0.2f} MB".format(sys.getsizeof(radargram)/MB))
     del wvfrm
+    
     # Perform averaging in slow time. Pulse is averaged over the 1/4 the
     # distance of the first pulse-limited footprint and according to max
     # slope specification.
-
     max_window = max(coh_window, sar_window)
     radargram_ext = np.empty((len(radargram) + 2 * max_window, 3600),
                              dtype=np.complex)
 
+    # For zero Doppler no coherent averaging
     for i in range(3600):
         radargram_ext[:, i] = np.pad(radargram[:,i],
                                      (max_window, max_window), 'edge')
-    avg_c = np.empty((len(radargram_ext), 3600), dtype=np.complex)
-    if coh_window > 1:
-        for i in range(3600):
-            avg_c[:, i] = running_mean(radargram_ext[:, i], coh_window)
-    else:
-        avg_c = radargram_ext
-
-    del radargram_ext
-    logging.debug("Size of 'avg_c' data: {:0.2f} MB".format(sys.getsizeof(avg_c)/MB))
 
     avg = np.empty((len(radargram), 3600))
     if sar_window > 1:
         for i in range(3600):
-            avg[:, i] = abs(running_mean(abs(avg_c[:, i]), sar_window))[max_window:-max_window]
+            avg[:, i] = abs(running_mean(abs(radargram_ext[:, i]), sar_window))[max_window:-max_window]
     else:
-        avg = abs(avg_c)
+        avg = abs(radargram_ext)
 
     logging.debug("Size of 'avg' data: {:0.2f} MB".format(sys.getsizeof(avg)/MB))
-    del radargram
+    del radargram_ext
 
-    """
+    """ 
     import matplotlib.pyplot as plt
-    fig,ax = plt.subplots(figsize=(300,4))
-    plt.imshow(np.transpose(20*np.log10(abs(avg[:,0:1500]))),aspect='auto')
+    fig,ax = plt.subplots(figsize=(12,4))
+    plt.imshow(np.transpose(20*np.log10(abs(avg[:,0:1500])+1e-4)),aspect='auto')
     cbar = plt.colorbar()
     cbar.set_label('[dB]')
     plt.show()
-
-
+    """
+    """ 
     import cmp.plotting
     print('control')
     rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
@@ -270,6 +289,10 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # TODO: does this yield to parallel prefix sum or vectorizing?
     noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
     for i in range(len(deriv)):
+    
+        if i in corrupted_idx:
+            coarse[i] = 0
+            continue
         #found = False
         j0 = int(shift_param[i] + 20)
         j1 = int(min(shift_param[i] + 1020, len(deriv[i])))
@@ -301,8 +324,8 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
                 coarse[i] = idxes[0] + j0
                 #found = True
                 break
-
-    time1 = time.time()
+ 
+        time1 = time.time()
     logging.debug("Coarse detection: {:0.2f} sec".format(time1-time0))
     time0 = time1
 
@@ -310,27 +333,33 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Perform least-squares fit of waveform according to beta-5 re-tracking
     # model
     delta = np.zeros(len(avg))
+    snr = np.zeros(len(avg))
     if fine is True:
         b3 = 100
         b4 = 2
         b5 = 3E-2
-        for i in range(len(avg[idx_start:idx_end])):
-            wdw = avg[i, max(coarse[i]-100, 0):min(coarse[i]+100, len(avg[i]))]
+        #p = prg.Prog(len(avg))
+        for i in range(len(avg)):
+            #p.print_Prog(i)
+            
+            if i in corrupted_idx:
+                delta[i] = 0
+                snr[i]
+                continue
+        
+            wdw = 10*np.log10(avg[i, max(coarse[i]-100, 0):min(coarse[i]+100, len(avg[i]))])
             b1 = np.mean(wdw[0:128])
             b2 = max(wdw)-b1
             res = least_squares(model5, [b1, b2, b3, b4, b5], args=wdw,
                                 bounds=([-500, 0, 0, 0, 0],
                                         [np.inf, np.inf, np.inf, np.inf, 1]))
-            if res.x[2] < shift_param[i]:
-                delta[i] = coarse[i]
-            else:
-                delta[i] = res.x[2]+max(coarse[i]-100, 0)
+            delta[i] = res.x[2]+max(coarse[i]-100, 0)
+            snr[i] = res.x[1]
     else:
         delta = coarse
 
     # Ionospheric delay
-    #print(tecu)
-    disp = 0#1.69E-6/20E6*tecu*1E+16
+    disp = 1.69E-6/20E6*tecu*1E+16
     dt_ion = disp/(2*np.pi*20E6)
     # Time-of-Flight (ToF)
     tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
@@ -344,12 +373,16 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Seems like it just wants to be a python list.
     # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
 
-    spots = np.empty((len(r), 7))
+    spots = np.empty((len(r), 8))
     columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', \
-               'idx_coarse', 'idx_fine', 'range']
+               'idx_coarse', 'idx_fine', 'range', 'snr']
+        
     for i in range(len(r)):
-        spots[i, :] = [ets[i], lat[i], lon[i], r[i], \
-                       (coarse-shift_param)[i], (delta-shift_param)[i], r[i]]
+        if i in corrupted_idx:
+            spots[i, :] = [ets[i], lat[i], lon[i], -1, -1, -1, -1, -1]
+        else:
+            spots[i, :] = [ets[i], lat[i], lon[i], r[i], \
+                       (coarse-shift_param)[i], (delta-shift_param)[i], r[i], snr[i]]
 
     df = pd.DataFrame(spots, columns=columns)
     time1 = time.time()

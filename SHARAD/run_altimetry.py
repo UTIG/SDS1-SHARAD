@@ -66,8 +66,11 @@ def main():
 
     ext = {'hdf5':'.h5', 'csv':'.csv', 'none':''}
 
-    with open(args.tracklist, 'r') as flist:
-        for i, path in enumerate(flist):
+    with open(args.tracklist, 'rt') as flist:
+        i = 0
+        for path in flist:
+            if not path or path.strip().startswith('#'):
+                continue
             path = path.rstrip()
             relpath = os.path.dirname(os.path.relpath(path, path_edr))
             path_file = os.path.relpath(path, path_edr)
@@ -80,9 +83,10 @@ def main():
                     'inpath': path,
                     'outfile': outfile,
                     'idx_start': 0,
-                    'idx_end': None,
+                    'idx_end': -1,
                     'save_format': args.ofmt})
                 logging.debug("[{:d}] {:s}".format(i+1, str(process_list[-1])))
+                i += 1
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
@@ -137,7 +141,7 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
         result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
                                     idx_start=idx_start, idx_end=idx_end,
                                     use_spice=False, ft_avg=10, max_slope=25,
-                                    noise_scale=20, fix_pri=1, fine=True)
+                                    noise_scale=20, fine=True)
 
         #plt.plot(result['spot_radius'])
         #plt.show()
