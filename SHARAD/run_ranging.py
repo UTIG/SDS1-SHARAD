@@ -75,6 +75,7 @@ def main():
         for line in flist:
             if line.strip().startswith('#'):
                 continue
+            print(line)
             path, idx_start, idx_end = line.split()
             path = path.rstrip()
             relpath = os.path.dirname(os.path.relpath(path, path_edr))

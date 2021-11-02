@@ -132,8 +132,10 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
 
         science_path = inpath.replace('_a.dat', '_s.dat')
         if not os.path.exists(cmp_path):
+            cmp_path0 = cmp_path
             cmp_path = cmp_path.replace('_s.h5', '_a.h5')
             if not os.path.exists(cmp_path):
+                logging.warning(cmp_path0 + " does not exist")
                 logging.warning(cmp_path + " does not exist")
                 return 0
 

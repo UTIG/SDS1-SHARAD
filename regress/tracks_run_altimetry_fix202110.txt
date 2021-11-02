@@ -1,5 +1,7 @@
 # e_1748102_001_ss19_700_a_a.dat (a track which is perfectly fine)
 # e_0753102_001_ss19_700_a_a.dat (the one Cyril used to demonstrate the range window start bug)
 # and e_6691201_001_ss19_700_a_a.dat (a track with corrupted data).
-/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1748102/e_1748102_001_ss19_700_a_a.dat
-/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr07xxx/edr0753102/e_0753102_001_ss19_700_a_a.dat
+#/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1748102/e_1748102_001_ss19_700_a_a.dat
+#/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr07xxx/edr0753102/e_0753102_001_ss19_700_a_a.dat
+#/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rmXXX/edr6691201/e_6691201_001_ss4_700_a_a.dat 0 -1
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rmXXX/edr6691201/e_6691201_001_ss4_700_a_a.dat
