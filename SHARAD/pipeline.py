@@ -312,7 +312,7 @@ def main():
                     # TODO: move this over to the dict
                     if prod['Processor'] == "run_rsr.py":
                         temp = None
-                        cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), orbit]
+                        cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), item['orbit']]
                     else:
                         temp = temptracklist(infile)
                         cmd = ['./' + prod['Processor'], '--tracklist', temp,
