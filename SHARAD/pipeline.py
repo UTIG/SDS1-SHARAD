@@ -174,6 +174,8 @@ def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD
             #root_file, ext_file = os.path.splitext(data_file)
             m = re.search('edr(\d+)/', infile)
             assert m # FIXME error checking is needed here
+            # FIXME format looks like this: e_0202601_009_ss19_700_a
+            # So the abover RE is picking out the wrong part!
             orbit = m.group(1)
 
             item = { # variables for input/output file calculation
