@@ -41,7 +41,7 @@ import cmp.pds3lbl as pds3
 def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
                     use_spice=False, ft_avg=10,
                     max_slope=25, noise_scale=20, fix_pri=None, fine=True,
-                    idx_start=0, idx_end=-1):
+                    idx_start=0, idx_end=None):
 
     """
     Computes altimetry profile based on Steinbrügge et al. (in review)
@@ -60,8 +60,8 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     idx_start (optional): integer
         Start index for processing track. Default is 0.
     idx_end (optional): integer
-        End index for processing track. Default is None. 
-        TODO: what does "None" mean?
+        End index for processing track. Default is None,
+        which processes to the end of the track.
     use_spice (optional): boolean
         Specifies is spacecraft position is taken from the EDR
         data or if it is re-computed using a spice kernel.

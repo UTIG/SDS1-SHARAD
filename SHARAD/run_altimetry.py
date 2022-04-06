@@ -83,7 +83,7 @@ def main():
                     'inpath': path,
                     'outfile': outfile,
                     'idx_start': 0,
-                    'idx_end': -1,
+                    'idx_end': None,
                     'save_format': args.ofmt})
                 logging.debug("[{:d}] {:s}".format(i+1, str(process_list[-1])))
                 i += 1
