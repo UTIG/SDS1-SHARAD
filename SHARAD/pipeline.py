@@ -85,8 +85,17 @@ PROCESSORS = [
         "Outputs": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
     },
     {
-        "Name": "Run RSR",
+        "Name": "Run Surface",
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
+        "Processor": "run_surface.py",
+        # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
+        "Libraries": ["SHARAD/SHARADEnv.py"],
+        "OutPrefix": "srf",
+        "Outputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}_a.txt"],
+    },
+    {
+        "Name": "Run RSR",
+        "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp0[data_file]}_a.h5"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
