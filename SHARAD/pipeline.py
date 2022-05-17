@@ -91,11 +91,11 @@ PROCESSORS = [
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "OutPrefix": "srf",
-        "Outputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}_a.txt"],
+        "Outputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
     {
         "Name": "Run RSR",
-        "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}_a.h5"],
+        "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
