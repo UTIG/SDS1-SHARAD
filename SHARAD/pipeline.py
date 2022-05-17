@@ -319,7 +319,7 @@ def main():
                     logging.info("Output: %s", output)
                     logging.debug("Processing %s", infile)
                     # TODO: move this over to the dict
-                    if prod['Processor'] == "run_rsr.py":
+                    if prod['Processor'] in ["run_rsr.py","run_surface.py"]:
                         temp = None
                         cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), item['orbit']]
                     else:
