@@ -358,8 +358,8 @@ class SHARADEnv:
 
 
     def srf_data(self, orbit, typ='cmp'):
-        """Output data processed and archived by the altimetry processor
-          (surface) """
+        """Output data processed and archived by the surface processor
+        """
 
         orbit_info = self.get_orbit_info(orbit, True)
 
@@ -376,6 +376,28 @@ class SHARADEnv:
         # TODO: assert glob only has one result
         out = np.genfromtxt(files[0], delimiter=',', names=True)
         return out
+
+
+    def rsr_data(self, orbit, typ='cmp'):
+        """Output data processed and archived by the rsr processor
+        """
+
+        orbit_info = self.get_orbit_info(orbit, True)
+
+        if 'relpath' not in orbit_info: # orbit not found
+            return None
+
+        path1 = os.path.join(self.out['rsr_path'], orbit_info['relpath'],
+                             typ, orbit_info['name'] + '*.txt')
+        files = glob.glob(path1)
+        # TODO: assert glob only has one result
+        if not files:
+            return None # no file found
+
+        # TODO: assert glob only has one result
+        out = np.genfromtxt(files[0], delimiter=',', names=True)
+        return out
+
 
 
     def processed(self):
