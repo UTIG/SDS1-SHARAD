@@ -1,5 +1,5 @@
 bitstring>=3.1.5
-gdal>=3.2.1
+pygdal>=3.2.1
 h5py>=2.9.0
 matplotlib>=3.3.1
 numpy>=1.16.2
