@@ -213,7 +213,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
     # Perform smoothing of the waveform aka averaging in fast time
     if ft_avg is not None:
-        wvfrm = np.empty((len(doppler), 3600), dtype=np.complex)
+        wvfrm = np.empty((len(doppler), 3600), dtype=np.complex64)
         for i in range(len(doppler)):
             rmean = running_mean(doppler[i], ft_avg)
             wvfrm[i] = rmean - np.mean(rmean)
@@ -230,7 +230,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     time0 = time1
 
     # Construct radargram
-    radargram = np.zeros((len(wvfrm), 3600), dtype=np.complex)
+    radargram = np.zeros((len(wvfrm), 3600), dtype=np.complex64)
     for rec in range(len(wvfrm)):
         radargram[rec] = np.roll(wvfrm[rec],int(phase[rec]-tx0))
         #radargram[rec] = np.roll(wvfrm[rec], int(phase[rec + idx_start] - tx0))
@@ -243,7 +243,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # slope specification.
     max_window = max(coh_window, sar_window)
     radargram_ext = np.empty((len(radargram) + 2 * max_window, 3600),
-                             dtype=np.complex)
+                             dtype=np.complex64)
 
     # For zero Doppler no coherent averaging
     for i in range(3600):
