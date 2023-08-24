@@ -86,7 +86,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
 
         # Chop raw data
-        raw_data = np.zeros((len(idx), 3600), dtype=np.complex)
+        raw_data = np.zeros((len(idx), 3600), dtype=np.complex128)
         for j in range(0, 3600):
             raw_data[idx-idx_start, j] = data['sample'+str(j)][idx].values
 
