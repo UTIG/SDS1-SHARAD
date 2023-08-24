@@ -319,13 +319,12 @@ def main():
                     logging.info("Output: %s", output)
                     logging.debug("Processing %s", infile)
                     # TODO: move this over to the dict
-                    if prod['Processor'] in ["run_rsr.py","run_surface.py"]:
+                    if prod['Processor'] in ["run_rsr.py", "run_surface.py"]:
                         temp = None
-                        cmd = ['./' + prod['Processor'], '-o', os.path.join(path_outroot, prod['OutPrefix']), item['orbit']]
+                        cmd = ['./' + prod['Processor'], item['orbit']]
                     else:
                         temp = temptracklist(infile)
-                        cmd = ['./' + prod['Processor'], '--tracklist', temp,
-                               '-o', os.path.join(path_outroot, prod['InPrefix'] + '/')]
+                        cmd = ['./' + prod['Processor'], '--tracklist', temp]
                         if prod['Processor'] == "run_sar2.py":
                             # Add targ path which it uses to find input files
                             cmd += ['-i', ivars['targ_root']]
