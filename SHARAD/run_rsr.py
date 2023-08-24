@@ -193,8 +193,8 @@ def rsr_grid(filename, query_lon=None, query_lat=None, grid_shape='square',
                             query_lon, query_lat, r, nbcores=nbcores)
 
     # Format data
-    out['lon'] = [query_lon[np.int(i)] for i in out['ID'].values]
-    out['lat'] = [query_lat[np.int(i)] for i in out['ID'].values]
+    out['lon'] = [query_lon[np.int32(i)] for i in out['ID'].values]
+    out['lat'] = [query_lat[np.int32(i)] for i in out['ID'].values]
 
     # Store data
     out.to_csv(filename.split('.')[0] + '.rsr.csv', sep=',', header=True, index=False)
@@ -252,8 +252,8 @@ def rsr_quadrangle(filename, query_lon=None, query_lat=None, grid_shape='square'
                             query_lon, query_lat, r, nbcores=nbcores)
 
     # Format data
-    out['lon'] = [query_lon[np.int(i)] for i in out['ID'].values]
-    out['lat'] = [query_lat[np.int(i)] for i in out['ID'].values]
+    out['lon'] = [query_lon[np.int32(i)] for i in out['ID'].values]
+    out['lat'] = [query_lat[np.int32(i)] for i in out['ID'].values]
 
     # Store data
     out.to_csv(filename.split('.')[0] + '.rsr.csv', sep=',', header=True, index=False)
