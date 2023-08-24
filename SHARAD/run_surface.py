@@ -107,8 +107,8 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     if alt_data == True:
         alt = senv.alt_data(orbit, typ='beta5', ext='h5', quality_flag=True)
         if alt is None: # pragma: no cover
-           #raise DataMissingException("No Altimetry Data for orbit %s", orbit)
-           return None
+            logging.info("No Altimetry Data for orbit %s", orbit)
+            return None
 
         flag = alt['flag']
 
@@ -365,7 +365,9 @@ def main():
     available = senv.processed()['cmp'] # To convert to EDR orbit list
     processed = senv.processed()
     processable = list(set(processed['cmp']) & set(processed['alt']))
-    processable_unprocessed = list(set(processable) - set(processed['srf']))
+    processable_unprocessed = list(set(processable))
+    if 'srf' in processed:
+        processable_unprocessed = list(set(processable) - set(processed['srf']))
     logging.debug("Done checking orbit processing status")
 
     if args.orbits == ['all']:
