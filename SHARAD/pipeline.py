@@ -102,20 +102,21 @@ PROCESSORS = [
         "OutPrefix": "rsr",
         "Outputs": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
-    {
-        "Name": "Run SAR",
-        "InPrefix": "cmp",
-        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
-                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
-        "Processor": "run_sar2.py",
-        "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
-                      "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
+#    Don't do SAR on TACC
+#    {
+#        "Name": "Run SAR",
+#        "InPrefix": "cmp",
+#        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+#                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
+#        "Processor": "run_sar2.py",
+#        "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
+#                      "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         #"OutPrefix": "foc",
         # TODO: GNG -- suggest spaces become underscores
         # Other flags might result in other outputs.  For these we need a different command line
         # option makes sense.
-        "Outputs": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
-    },
+#        "Outputs": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
+#    },
     # Run ranging needs crossovers, so needs a track file with pairs of tracks
     # and record numbers.  This is a special data product so we can't run it
     # automatically.
@@ -131,6 +132,14 @@ PROCESSORS = [
     #    "Outputs": ["_a.cluttergram.npy"],
     #},
 ]
+
+def run_command(cmd, output):
+    output = output.replace("targ", "note")
+    if (not os.path.exists(os.path.dirname(output))):
+        os.makedirs(os.path.dirname(output))
+    out = open(output+".stdout", "w")
+    err = open(output+".stderr", "w")
+    return subprocess.run(cmd, stdout=out, stderr=err)
 
 def temptracklist(infile):
     """ Create a temporary file with one track in it,
@@ -201,8 +210,8 @@ def main():
     parser.add_argument('-o', '--output', default='/disk/kea/SDS/targ/xtra/SHARAD',
                         help="Output base directory")
 
-    parser.add_argument('-j', '--jobs', type=int, default=4,
-                        help="Number of jobs (cores) to use for processing (currently ignored)")
+    parser.add_argument('-j', '--jobs', type=int, default=1,
+                        help="Number of jobs (cores) to use for processing")
 
     grp_verb = parser.add_mutually_exclusive_group()
     grp_verb.add_argument('-v', '--verbose', action="store_true",
@@ -217,7 +226,7 @@ def main():
                         help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
                         help="List of tracks to process")
-    parser.add_argument('--maxrequests', type=int, default=0,
+    parser.add_argument('-r', '--maxrequests', type=int, default=0,
                         help="Maximum number of processing requests to process")
     # Use --maxrequests 1 instead of -1
     #parser.add_argument('-1', '--once', action="store_true",
@@ -251,6 +260,7 @@ def main():
     for prod in PROCESSORS:
         indir = ''
         proc = ''
+        results = []
         #outdir = ''
         for lookup_line, item in enumerate(lookup, start=1):
             infile = item['infile']
@@ -319,12 +329,13 @@ def main():
                     logging.info("Output: %s", output)
                     logging.debug("Processing %s", infile)
                     # TODO: move this over to the dict
+                    pool = multiprocessing.Pool(args.jobs)
                     if prod['Processor'] in ["run_rsr.py", "run_surface.py"]:
                         temp = None
-                        cmd = ['./' + prod['Processor'], item['orbit']]
+                        cmd = ['./' + prod['Processor'], item['orbit'], '-j 1']
                     else:
                         temp = temptracklist(infile)
-                        cmd = ['./' + prod['Processor'], '--tracklist', temp]
+                        cmd = ['./' + prod['Processor'], '--tracklist', temp, '-j 1']
                         if prod['Processor'] == "run_sar2.py":
                             # Add targ path which it uses to find input files
                             cmd += ['-i', ivars['targ_root']]
@@ -339,17 +350,26 @@ def main():
                     elif args.dryrun:
                         logging.info("Dryrun")
                     else:
-                        subprocess.run(cmd)
-                    if temp: # Remove temp file if it was created
+                        results.append(pool.apply_async(run_command, [cmd, output]))
+                        #subprocess.run(cmd)
+                    if False: # Remove temp file if it was created
+                        # Don't remove it before it is used!
                         os.unlink(temp)
 
                     nrequests += 1
                     if args.maxrequests > 0 and nrequests >= args.maxrequests:
                         logging.info("Only process %d requests.  Quitting.", args.maxrequests)
+                        # Wait for everything using this processor to finish
+                        for result in results:
+                            result.get()
                         return 0
 
         else:
             logging.debug('File already processed. Skipping %s', infile)
+
+        # Wait for everything using this processor to finish
+        for result in results:
+            result.get()
     return 0
 
 if __name__ == "__main__":
