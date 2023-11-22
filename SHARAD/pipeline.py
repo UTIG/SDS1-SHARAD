@@ -56,7 +56,7 @@ import importlib.util
 import re
 import subprocess
 import tempfile
-
+import psutil
 
 
 PROCESSORS = [
@@ -358,18 +358,23 @@ def main():
 
                     nrequests += 1
                     if args.maxrequests > 0 and nrequests >= args.maxrequests:
-                        logging.info("Only process %d requests.  Quitting.", args.maxrequests)
+                        logging.info("Only process %d requests.  Finishing.", args.maxrequests)
                         # Wait for everything using this processor to finish
                         for result in results:
                             result.get()
+                        logging.info("Only process %d requests.  Quitting.", args.maxrequests)
                         return 0
 
-        else:
-            logging.debug('File already processed. Skipping %s', infile)
+        # FIXME; This else got lost somehow.
+        #else:
+            #logging.debug('File already processed. Skipping %s', infile)
 
         # Wait for everything using this processor to finish
+        logging.info("Waiting for " + prod["Name"] + " to finish.");
         for result in results:
+            logging.debug("CPU percent: " + str(psutil.cpu_percent()))
             result.get()
+    logging.info("All done.");
     return 0
 
 if __name__ == "__main__":
