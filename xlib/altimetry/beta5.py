@@ -107,20 +107,22 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Read input data
     dbc = fix_pri is None
     data = pds3.read_science(science_path, label_science, science=True, bc=dbc)
-    logging.debug("Size of 'edr' data: {:0.2f} MB".format(sys.getsizeof(data)/MB))
+    logging.debug("Size of 'edr' data: %0.2f MB", sys.getsizeof(data)/MB)
     aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'),
                             label_aux, science=False, bc=False)
-    logging.debug("Size of 'aux' data: {:0.2f} MB".format(sys.getsizeof(aux)/MB))
+    logging.debug("Size of 'aux' data: %0.2f MB", sys.getsizeof(aux)/MB)
     re = pd.read_hdf(cmp_path, key='real').values[idx_start:idx_end]
     im = pd.read_hdf(cmp_path, key='imag').values[idx_start:idx_end]
-    cmp_track = np.empty(re.size,dtype=np.complex64)
+    #cmp_track = np.empty(re.size, dtype=np.complex64)
     cmp_track = re+1j*im
-    logging.debug("Size of 'cmp' data: {:0.2f} MB".format(sys.getsizeof(cmp_track)/MB))
+    del re
+    del im
+    logging.debug("Size of 'cmp' data: %0.2f MB", sys.getsizeof(cmp_track)/MB)
     tecu_filename = cmp_path.replace('.h5', '_TECU.txt')
     tecu = np.genfromtxt(tecu_filename)[idx_start:idx_end, 0]
 
     time1 = time.time()
-    logging.debug("Read input elapsed time: {:0.2f} sec".format(time1-time0))
+    logging.debug("Read input elapsed time: %0.2f sec", time1-time0)
     time0 = time1
 
     # Get Range window start
@@ -128,7 +130,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
     # Compute or read S/C position
     ets = aux['EPHEMERIS_TIME'].values[idx_start:idx_end]
-    if use_spice is True:
+    if use_spice:
         sc = np.empty(len(ets))
         lat = np.empty(len(ets))
         lon = np.empty(len(ets))
@@ -178,7 +180,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
 
 
     time1 = time.time()
-    logging.debug("radargram offsets get shot freq: {:0.2f} sec".format(time1-time0))
+    logging.debug("radargram offsets get shot freq: %0.2f sec", time1-time0)
     time0 = time1
 
     # Compute SAR apertures for coherent and incoherent stacking
@@ -195,7 +197,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     coh_window = int(np.mean((c/20E6/4/tan(max_slope*pi/180)/vel_t[idxn0]/pri[idxn0])))
 
     time1 = time.time()
-    logging.debug("Compute SAR apertures: {:0.2f} sec".format(time1-time0))
+    logging.debug("Compute SAR apertures: %0.2f sec", time1-time0)
     time0 = time1
 
     del aux
@@ -204,61 +206,32 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     # Actual pulse processing
     #========================
 
-    # Zero Doppler Filter
-    dp_wdw = 30
-    doppler = np.copy(cmp_track)
-    for j in range(dp_wdw,len(cmp_track)-dp_wdw):
-        doppler_r = np.fft.fft(cmp_track[j-dp_wdw:j+dp_wdw],axis=0)
-        doppler[j] = doppler_r[0]
-
-    # Perform smoothing of the waveform aka averaging in fast time
-    if ft_avg is not None:
-        wvfrm = np.empty((len(doppler), 3600), dtype=np.complex64)
-        for i in range(len(doppler)):
-            rmean = running_mean(doppler[i], ft_avg)
-            wvfrm[i] = rmean - np.mean(rmean)
-            #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
-            #wvfrm[i] -= np.mean(wvfrm[i])
-            wvfrm[i, :10] = wvfrm[i, 20:30]
-            wvfrm[i, -10:] = wvfrm[i, -30:-20]
+    if ft_avg is None:
+        wvfrm_gen = trace_gen(cmp_track)
     else:
-        wvfrm = cmp_track
-
-    del cmp_track
-    time1 = time.time()
-    logging.debug("Waveform smoothing: {:0.2f} sec".format(time1-time0))
-    time0 = time1
+        wvfrm_gen = zero_doppler_filter(cmp_track, ft_avg)
 
     # Construct radargram
-    radargram = np.zeros((len(wvfrm), 3600), dtype=np.complex64)
-    for rec in range(len(wvfrm)):
-        radargram[rec] = np.roll(wvfrm[rec],int(phase[rec]-tx0))
+    radargram = np.empty(cmp_track.shape, dtype=np.complex64)
+
+    for rec, trace in enumerate(wvfrm_gen): # for rec in range(len(wvfrm)):
+        radargram[rec] = np.roll(trace, int(phase[rec]-tx0))
         #radargram[rec] = np.roll(wvfrm[rec], int(phase[rec + idx_start] - tx0))
 
-    logging.debug("Size of radargram: {:0.2f} MB".format(sys.getsizeof(radargram)/MB))
-    del wvfrm
-    
-    # Perform averaging in slow time. Pulse is averaged over the 1/4 the
-    # distance of the first pulse-limited footprint and according to max
-    # slope specification.
-    max_window = max(coh_window, sar_window)
-    radargram_ext = np.empty((len(radargram) + 2 * max_window, 3600),
-                             dtype=np.complex64)
+    time1 = time.time()
+    logging.debug("Waveform smoothing: %0.2f sec", time1-time0)
+    time0 = time1
 
-    # For zero Doppler no coherent averaging
-    for i in range(3600):
-        radargram_ext[:, i] = np.pad(radargram[:,i],
-                                     (max_window, max_window), 'edge')
+    logging.debug("Size of radargram: %0.2f MB", sys.getsizeof(radargram)/MB)
+    del cmp_track
+    #del wvfrm
 
-    avg = np.empty((len(radargram), 3600))
-    if sar_window > 1:
-        for i in range(3600):
-            avg[:, i] = abs(running_mean(abs(radargram_ext[:, i]), sar_window))[max_window:-max_window]
-    else:
-        avg = abs(radargram_ext)
-
-    logging.debug("Size of 'avg' data: {:0.2f} MB".format(sys.getsizeof(avg)/MB))
-    del radargram_ext
+    avg = slow_time_averaging(radargram, coh_window, sar_window)
+    time1 = time.time()
+    logging.debug("Slow time averaging: %0.2f sec", time1-time0)
+    time0 = time1
+    logging.debug("Size of 'avg' data: %0.2f MB", sys.getsizeof(avg)/MB)
+    del radargram
 
     """ 
     import matplotlib.pyplot as plt
@@ -279,17 +252,125 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     cmp.plotting.plot_radargram(10*np.log10(np.abs(avg)**2),tx,samples=3600)
     """
 
+    coarse = coarse_detection(avg, noise_scale, shift_param, corrupted_idx)
+
+    time1 = time.time()
+    logging.debug("Coarse detection: %0.2f sec", time1-time0)
+    time0 = time1
+    fine = False
+    if fine:
+        delta, snr = fine_tracking(avg, coarse, corrupted_idx)
+    else:
+        delta, snr = coarse, np.zeros(len(avg))
+    del avg
+    time1 = time.time()
+    logging.debug("Fine tracking: %0.2f sec", time1-time0)
+    time0 = time1
+
+    # Ionospheric delay
+    disp = 1.69E-6/20E6*tecu*1E+16
+    dt_ion = disp/(2*np.pi*20E6)
+    # Time-of-Flight (ToF)
+    tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
+    # One-way range in km
+    d = tx*c/2000
+
+    # Elevation from Mars CoM
+    r = sc-d
+
+    # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
+    # Seems like it just wants to be a python list.
+    # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
+
+    spots = np.empty((len(r), 8))
+    columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', \
+               'idx_coarse', 'idx_fine', 'range', 'snr']
+
+    for i in range(len(r)):
+        if i in corrupted_idx:
+            spots[i, :] = [ets[i], lat[i], lon[i], -1, -1, -1, -1, -1]
+        else:
+            spots[i, :] = [ets[i], lat[i], lon[i], r[i], \
+                       (coarse-shift_param)[i], (delta-shift_param)[i], r[i], snr[i]]
+
+    df = pd.DataFrame(spots, columns=columns)
+    np.save('beta5.npy', spots) # for debugging
+    time1 = time.time()
+    logging.debug("LSQ, Frame Conversion, DataFrame: %0.2f sec", time1-time0)
+    time0 = time1
+
+    return df
+
+def calc_doppler_trace(radargram, dp_wdw: int, tracenum: int):
+    """ calculate the zero doppler for the given trace in the radargram """
+    if tracenum < dp_wdw or tracenum >= (radargram.shape[0] - dp_wdw):
+        # Return the radargram trace unchanged
+        return radargram[tracenum]
+    else:
+        # If it's in the middle, do an fft and get the zero doppler bin
+        doppler_r = np.fft.fft(radargram[tracenum-dp_wdw:tracenum+dp_wdw], axis=0)
+        return doppler_r[0]
+
+def trace_gen(radargram: np.ndarray):
+    for trace in radargram:
+        yield trace
+
+def zero_doppler_filter(cmp_track, ft_avg: int):
+    """ Zero Doppler Filter
+    TODO: save the doppler array to a memmapped array to a temp directory so that
+    it can be paged out
+
+    do the roll in the same operation
+    """
+    assert ft_avg > 0
+    dp_wdw = 30
+
+    # Perform smoothing of the waveform aka averaging in fast time
+    #wvfrm = np.empty(cmp_track.shape, dtype=np.complex64)
+    for i in range(len(cmp_track)):
+        doppler_r = calc_doppler_trace(cmp_track, dp_wdw, i)
+        rmean = running_mean(doppler_r, ft_avg)
+        trace = rmean - np.mean(rmean)
+        #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
+        #wvfrm[i] -= np.mean(wvfrm[i])
+        trace[:10] = trace[20:30]
+        trace[-10:] = trace[-30:-20]
+        yield trace
+        #wvfrm[i] = trace
+    #return wvfrm
+
+def slow_time_averaging(radargram: np.ndarray, coh_window: int, sar_window: int):
+    # Perform averaging in slow time. Pulse is averaged over the 1/4 the
+    # distance of the first pulse-limited footprint and according to max
+    # slope specification.
+    max_window = max(coh_window, sar_window)
+
+    if sar_window > 1:
+        avg = np.empty(radargram.shape) # float array same size as radargram
+        for i in range(avg.shape[1]):
+            # Get a padded horizontal slice
+            slice_ext = np.pad(radargram[:, i], (max_window, max_window), 'edge')
+            slice_avg = running_mean(abs(slice_ext), sar_window)
+            avg[:, i] = abs(slice_avg)[max_window:-max_window]
+    else:
+        avg = abs(radargram)
+
+    return avg
+
+
+
+def coarse_detection(avg: np.ndarray, noise_scale: float, shift_param, corrupted_idx):
     # Coarse detection
     coarse = np.zeros(len(avg), dtype=int)
     deriv = np.zeros((len(avg), 3599))
 
+    # We need the fast time partial derivatives of the nearby traces (but we don't need all of them)
     for i in range(len(avg)):
         deriv[i] = np.abs(np.diff(avg[i]))
 
     # TODO: does this yield to parallel prefix sum or vectorizing?
     noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
     for i in range(len(deriv)):
-    
         if i in corrupted_idx:
             coarse[i] = 0
             continue
@@ -324,72 +405,46 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
                 coarse[i] = idxes[0] + j0
                 #found = True
                 break
- 
-        time1 = time.time()
-    logging.debug("Coarse detection: {:0.2f} sec".format(time1-time0))
-    time0 = time1
 
-    del deriv
-    # Perform least-squares fit of waveform according to beta-5 re-tracking
-    # model
+    return coarse
+
+
+def fine_tracking(avg: np.ndarray, coarse: np.ndarray, corrupted_idx):
+    """ Perform least-squares fit of waveform according to beta-5 re-tracking model
+    avg: ntraces x nsamples radargram
+    coarse: ntraces x 1 integer array of coarse surface detection
+    corrupted_idx: list of corrupted trace indexes. Skip these traces
+    """
     delta = np.zeros(len(avg))
     snr = np.zeros(len(avg))
-    if fine is True:
-        b3 = 100
-        b4 = 2
-        b5 = 3E-2
-        #p = prg.Prog(len(avg))
-        for i in range(len(avg)):
-            #p.print_Prog(i)
-            
-            if i in corrupted_idx:
-                delta[i] = 0
-                snr[i]
-                continue
-        
-            wdw = 10*np.log10(avg[i, max(coarse[i]-100, 0):min(coarse[i]+100, len(avg[i]))])
-            b1 = np.mean(wdw[0:128])
-            b2 = max(wdw)-b1
-            res = least_squares(model5, [b1, b2, b3, b4, b5], args=wdw,
-                                bounds=([-500, 0, 0, 0, 0],
-                                        [np.inf, np.inf, np.inf, np.inf, 1]))
-            delta[i] = res.x[2]+max(coarse[i]-100, 0)
-            snr[i] = res.x[1]
-    else:
-        delta = coarse
 
-    # Ionospheric delay
-    disp = 1.69E-6/20E6*tecu*1E+16
-    dt_ion = disp/(2*np.pi*20E6)
-    # Time-of-Flight (ToF)
-    tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
-    # One-way range in km
-    d = tx*c/2000
-
-    # Elevation from Mars CoM
-    r = sc-d
-
-    # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
-    # Seems like it just wants to be a python list.
-    # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
-
-    spots = np.empty((len(r), 8))
-    columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', \
-               'idx_coarse', 'idx_fine', 'range', 'snr']
-        
-    for i in range(len(r)):
+    b3 = 100
+    b4 = 2
+    b5 = 3E-2
+    for i in range(avg.shape[0]):
         if i in corrupted_idx:
-            spots[i, :] = [ets[i], lat[i], lon[i], -1, -1, -1, -1, -1]
-        else:
-            spots[i, :] = [ets[i], lat[i], lon[i], r[i], \
-                       (coarse-shift_param)[i], (delta-shift_param)[i], r[i], snr[i]]
+            continue
 
-    df = pd.DataFrame(spots, columns=columns)
-    time1 = time.time()
-    logging.debug("LSQ, Frame Conversion, DataFrame: {:0.2f} sec".format(time1-time0))
-    time0 = time1
+        idx0 = max(coarse[i]-100, 0)
+        idx1 = min(coarse[i]+100, avg.shape[1])
+        # We should be able to run this through multiprocessing and we don't have to pass
+        # the entire radargram through
+        delta[i], snr[i] = fine_tracking_trace(avg[i, idx0:idx1], idx0, b3, b4, b5)
 
-    return df
+    return delta, snr
+
+def fine_tracking_trace(window_samples: np.ndarray, idx0: int, b3: float, b4: float, b5: float):
+    """ Fit the altimetry model to the relevant window in the trace """
+    wdw = 10*np.log10(window_samples)
+    b1 = np.mean(wdw[0:128])
+    b2 = max(wdw)-b1
+    res = least_squares(model5, [b1, b2, b3, b4, b5], args=wdw,
+                        bounds=([-500, 0, 0, 0, 0],
+                                [np.inf, np.inf, np.inf, np.inf, 1]))
+
+    delta = res.x[2] + idx0
+    snr = res.x[1]
+    return delta, snr
 
 def running_mean(x, N):
     res = np.zeros(len(x), dtype=x.dtype)

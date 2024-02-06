@@ -1,13 +1,21 @@
 bitstring>=3.1.5
-pygdal>=3.2.1
 h5py>=2.9.0
 matplotlib>=3.3.1
+scipy>=1.5.4
 numpy>=1.16.2
 pandas>=0.24.2
 pvl>=0.3.0
-rsr>=1.0.5
-subradar>=1.1.0
 spiceypy>=3.1.1
 geopandas>=0.8.1
-scipy>=1.5.4
 pytest>=6.2.1
+
+# pygdal version must match version of osgeo on freeze.
+# If this fails, make sure you have sourced env/cshrc
+pygdal==3.2.1.10
+
+
+rsr>=1.0.5
+#subradar>=1.1.0
+subradar==1.1.1
+
+coverage
