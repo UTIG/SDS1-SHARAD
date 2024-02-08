@@ -292,15 +292,20 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         cmp.plotting.plot_radargram(10*np.log10(np.abs(avg)**2),tx,samples=3600)
         """
 
-        coarse = coarse_detection(avg, noise_scale, shift_param, corrupted_idx)
+        #coarse = coarse_detection(avg, noise_scale, shift_param, corrupted_idx)
+        coarse_gen = coarse_detection_gen(avg, noise_scale, shift_param, corrupted_idx)
 
         time1 = time.time()
         logging.debug("Coarse detection: %0.2f sec", time1-time0)
         time0 = time1
-        fine = False
+        fine = True
         if fine:
-            delta, snr = fine_tracking(avg, coarse, corrupted_idx[idx_start2:idx_end2])
+            coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend)
         else:
+            coarse = np.empty((iiend,), dtype=int)
+            for ii, _, x in coarse_gen:
+                coarse[ii] = x
+
             delta, snr = coarse, np.zeros(len(avg))
         del avg
         time1 = time.time()
@@ -487,13 +492,14 @@ def coarse_detection(avg: np.ndarray, noise_scale: float, shift_param, corrupted
 
     # TODO: does this yield to parallel prefix sum or vectorizing?
     noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
+    logging.info("Noise shape: %r", noise.shape)
     for i in range(len(deriv)):
         if i in corrupted_idx:
             coarse[i] = 0
             continue
         #found = False
         j0 = int(shift_param[i] + 20)
-        j1 = int(min(shift_param[i] + 1020, len(deriv[i])))
+        j1 = int(min(shift_param[i] + 1020, deriv.shape[1]))
         # Find the noise level to set the threshold to, and set the starting
         # lvl to that, to accelerate the search.
         # Round up to the next highest level
@@ -508,15 +514,6 @@ def coarse_detection(avg: np.ndarray, noise_scale: float, shift_param, corrupted
         for lvl in np.arange(lvlstart, 0, -0.1):
 
             noise_threshold = noise[i]*lvl
-            """
-            for j in range(j0, j1):
-                if deriv[i, j] > noise_threshold:
-                    coarse[i] = j
-                    found = True
-                    break
-            if found == True:
-                break
-            """
             idxes = np.argwhere(deriv[i][j0:j1] > noise_threshold)
             if len(idxes) > 0:
                 coarse[i] = idxes[0] + j0
@@ -526,29 +523,76 @@ def coarse_detection(avg: np.ndarray, noise_scale: float, shift_param, corrupted
     return coarse
 
 
-def fine_tracking(avg: np.ndarray, coarse: np.ndarray, corrupted_idx):
+def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corrupted_idx):
+    """ A streamed version of coarse detection that returns the location of the detection
+    as well as the raw trace 
+    In the beginning it will buffer the result
+    """
+
+    for i, (trace, shift_param0) in enumerate(zip(avg, shift_param)):
+        yielded = False
+        if i in corrupted_idx:
+            #coarse0 = 0
+            yield i, trace, None #coarse0
+            continue
+
+        deriv0 = np.abs(np.diff(trace))
+        noise0 = np.sqrt(np.var(deriv0[-1000:])) * noise_scale
+
+        j0 = int(shift_param0 + 20)
+        j1 = int(min(shift_param0 + 1020, len(deriv0)))
+
+        # Find the noise level to set the threshold to, and set the starting
+        # lvl to that, to accelerate the search.
+        # Round up to the next highest level
+        if not np.isnan(noise0) and noise0 > 0:
+            lvlstart = np.ceil(np.max(deriv0) / noise0 * 10.0) / 10.0
+            lvlstart = min(max(lvlstart, 0.1), 1.0)
+        else:
+            lvlstart = 1.0
+
+        for lvl in np.arange(lvlstart, 0, -0.1):
+            noise_threshold = noise0*lvl
+            idxes = np.argwhere(deriv0[j0:j1] > noise_threshold)
+            if len(idxes) > 0:
+                coarse0 = idxes[0][0] + j0
+                yield i, trace, coarse0
+                yielded = True
+                break
+
+        if not yielded:
+            yield i, trace, None
+
+def fine_tracking(coarse_gen, ntraces):
     """ Perform least-squares fit of waveform according to beta-5 re-tracking model
     avg: ntraces x nsamples radargram
     coarse: ntraces x 1 integer array of coarse surface detection
     corrupted_idx: list of corrupted trace indexes. Skip these traces
     """
-    delta = np.zeros(len(avg))
-    snr = np.zeros(len(avg))
+    coarse = np.zeros(ntraces, dtype=int)
+    delta = np.zeros(ntraces)
+    snr = np.zeros(ntraces)
 
     b3 = 100
     b4 = 2
     b5 = 3E-2
-    for i in range(avg.shape[0]):
-        if i in corrupted_idx:
-            continue
 
-        idx0 = max(coarse[i]-100, 0)
-        idx1 = min(coarse[i]+100, avg.shape[1])
+    for i, trace, coarse0 in coarse_gen:
+        if coarse0 is None:# or i in corrupted_idx:
+            continue
+        coarse[i] = coarse0
+        idx0 = max(coarse0-100, 0)
+        idx1 = min(coarse0+100, len(trace))
+        try:
+            window = trace[idx0:idx1]
+        except TypeError:
+            print(coarse0, idx0, idx1)
+            raise
         # We should be able to run this through multiprocessing and we don't have to pass
         # the entire radargram through
-        delta[i], snr[i] = fine_tracking_trace(avg[i, idx0:idx1], idx0, b3, b4, b5)
+        delta[i], snr[i] = fine_tracking_trace(window, idx0, b3, b4, b5)
 
-    return delta, snr
+    return coarse, delta, snr
 
 def fine_tracking_trace(window_samples: np.ndarray, idx0: int, b3: float, b4: float, b5: float):
     """ Fit the altimetry model to the relevant window in the trace """
