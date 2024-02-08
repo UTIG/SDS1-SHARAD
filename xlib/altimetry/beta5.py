@@ -478,6 +478,26 @@ def slow_time_averaging(radargram: np.ndarray, coh_window: int, sar_window: int)
         avg = abs(radargram)
 
     return avg
+def slow_time_averaging_gen(radargram: np.ndarray, coh_window: int, sar_window: int):
+    # Perform averaging in slow time. Pulse is averaged over the 1/4 the
+    # distance of the first pulse-limited footprint and according to max
+    # slope specification.
+    max_window = max(coh_window, sar_window)
+
+    if sar_window > 1:
+        for ii, trace in enumerate(radargram):
+            pass
+        avg = np.empty(radargram.shape) # float array same size as radargram
+        for i in range(avg.shape[1]):
+            # Get a padded horizontal slice
+            slice_ext = np.pad(radargram[:, i], (max_window, max_window), 'edge')
+            slice_avg = running_mean(abs(slice_ext), sar_window)
+            avg[:, i] = abs(slice_avg)[max_window:-max_window]
+    else:
+        for trace in radargram:
+            yield abs(trace)
+
+    return avg
 
 
 
@@ -583,11 +603,7 @@ def fine_tracking(coarse_gen, ntraces):
         coarse[i] = coarse0
         idx0 = max(coarse0-100, 0)
         idx1 = min(coarse0+100, len(trace))
-        try:
-            window = trace[idx0:idx1]
-        except TypeError:
-            print(coarse0, idx0, idx1)
-            raise
+        window = trace[idx0:idx1]
         # We should be able to run this through multiprocessing and we don't have to pass
         # the entire radargram through
         delta[i], snr[i] = fine_tracking_trace(window, idx0, b3, b4, b5)
