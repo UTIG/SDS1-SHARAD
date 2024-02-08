@@ -111,7 +111,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     MB = 1024*1024
     # Process transect in blocks of up to this many traces
     blocktraces = 100_000
-    # idx_end = 1000
+    idx_end = 1000
     time0 = time.time()
     #============================
     # Read and prepare input data
@@ -252,9 +252,10 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         # Construct radargram
         radargram = np.empty((iiend, 3600), dtype=np.complex64)
 
-        for rec, trace in enumerate(wvfrm_gen): # for rec in range(len(wvfrm)):
-            radargram[rec] = np.roll(trace, int(phase[rec]-tx0))
-            #radargram[rec] = np.roll(wvfrm[rec], int(phase[rec + idx_start] - tx0))
+
+        phaseroll_gen = roll_radar_phase(wvfrm_gen, phase, tx0)
+        for rec, trace_rolled in enumerate(phaseroll_gen):
+            radargram[rec] = trace_rolled
 
         time1 = time.time()
         logging.debug("Waveform smoothing: %0.2f sec", time1-time0)
@@ -372,19 +373,6 @@ def trace_gen(radargram: np.ndarray):
         yield trace
 
 
-def calc_doppler_trace(radargram, dp_wdw: int, tracenum: int):
-    """ calculate the zero doppler for the given trace in the radargram """
-    if tracenum < dp_wdw or tracenum >= (radargram.shape[0] - dp_wdw):
-        # Return the radargram trace unchanged
-        return radargram[tracenum], None
-    else:
-        # If it's in the middle, do an fft and get the zero doppler bin
-        #print(radargram.dtype)
-        #print(radargram[tracenum-dp_wdw:tracenum+dp_wdw].shape)
-        #sys.exit(0)
-        doppler_r = np.fft.fft(radargram[tracenum-dp_wdw:tracenum+dp_wdw], axis=0)
-        return doppler_r[0], radargram[tracenum-dp_wdw:tracenum+dp_wdw]
-
 def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsamples: int):
     """ calculate the zero doppler for the given trace in the radargram
     and return them.
@@ -407,7 +395,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsample
         if ii < dp_wdw:
             tracenum = ii
             assert tracenum0 + 1 == tracenum
-            yield tracenum, trace, None # return unmodified trace
+            yield tracenum, trace # return unmodified trace
             tracenum0 = tracenum
         elif dp_wdw <= ii < 2*dp_wdw - 1:
             pass # keep filling buffer but don't yield anything
@@ -423,17 +411,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsample
             assert tracenum < (ntraces - dp_wdw)
             assert tracenum0 + 1 == tracenum
 
-            # Figure out what indexes the buffer represents
-            buf0idx = tracenum - dp_wdw
-            buf1idx = tracenum + dp_wdw
-            assert (buf1idx - buf0idx) == buffer.shape[0], "shape mismatch"
-            assert buf1idx == ii+1, "buffer filling mismatch: buf1idx=%d ii=%d tracenum=%d dp_wdw=%d" % \
-                                  (buf1idx, ii, tracenum, dp_wdw)
-
-            assert buf0idx == bidx[0], "ii=%d buf0idx=%d bidx[0]=%d" % (ii, buf0idx, bidx[0])
-            assert buf1idx == (bidx[-1] + 1), "ii=%d buf1idx=%d bidx[-1]+1 = %d" % (ii, buf1idx, bidx[-1]+1)
-
-            yield tracenum, doppler_r[0], buffer
+            yield tracenum, doppler_r[0]
             tracenum0 = tracenum
 
     # Return unmodified traces at the end
@@ -441,7 +419,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsample
     assert dp_wdw == len(buffer[dp_wdw:])
     for tracenum, trace in enumerate(buffer[dp_wdw:], start=ntraces - dp_wdw):
         assert tracenum >= (ntraces - dp_wdw)
-        yield tracenum, trace, None
+        yield tracenum, trace
 
 def zero_doppler_filter(gen_radargram, arr_radargram: np.ndarray, ft_avg: int, ntraces: int, nsamples: int):
     """ Zero Doppler Filter
@@ -459,22 +437,7 @@ def zero_doppler_filter(gen_radargram, arr_radargram: np.ndarray, ft_avg: int, n
     #wvfrm = np.empty(cmp_track.shape, dtype=np.complex64)
     #for i, trace in enumerate(radargram):
     gen_doppler = gen_doppler_trace_buffered(gen_radargram, dp_wdw, ntraces, nsamples)
-    for i, (jj, doppler_r, buff1) in enumerate(gen_doppler):
-        assert i == jj, "Iteration mismatch: (i=%d, jj=%d)" % (i, jj)
-        #doppler_r2, buff2 = calc_doppler_trace(arr_radargram, dp_wdw, i)
-        if buff1 is None:
-            assert buff1 == buff2
-        else:
-            try:
-                np.testing.assert_allclose(abs(buff1), abs(buff2))
-                np.testing.assert_allclose(np.real(buff1), np.real(buff2))
-            except AssertionError:
-                print("bufdiff at %d" % (i,))
-
-        try:
-            np.testing.assert_allclose(abs(doppler_r), abs(doppler_r2))
-        except AssertionError:
-            print("diff at %d" % (i,))
+    for i, (jj, doppler_r) in enumerate(gen_doppler):
         rmean = running_mean(doppler_r, ft_avg)
         trace = rmean - np.mean(rmean)
         #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
@@ -483,7 +446,15 @@ def zero_doppler_filter(gen_radargram, arr_radargram: np.ndarray, ft_avg: int, n
         trace[-10:] = trace[-30:-20]
         yield trace
         #wvfrm[i] = trace
-    #return wvfrm
+
+
+def roll_radar_phase(wvfrm_gen, phase: np.array, tx0: int):
+    # for rec in range(len(wvfrm)):
+    for trace, trace_phase in zip(wvfrm_gen, phase):
+        shiftn = int(trace_phase - tx0)
+        yield np.roll(trace, shiftn)
+
+
 
 def slow_time_averaging(radargram: np.ndarray, coh_window: int, sar_window: int):
     # Perform averaging in slow time. Pulse is averaged over the 1/4 the
