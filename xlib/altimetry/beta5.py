@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 __authors__ = ['Gregor Steinbruegge (JPL), Gregor.B.Steinbruegge@jpl.nasa.gov']
 
-__version__ = '1.2'
+__version__ = '1.3'
 __history__ = {
     '1.0':
         {'date': 'March 05, 2019',
@@ -40,13 +40,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from misc import prog as prg
 from misc import coord as crd
 import cmp.pds3lbl as pds3
-
-
-#def beta5_altimetry_blocked(cmp_path, science_path, label_science, label_aux,
-#                    use_spice=False, ft_avg=10,
-#                    max_slope=25, noise_scale=20, fix_pri=None, fine=True,
-#                    idx_start=0, idx_end=None):
-
 
 
 
@@ -130,13 +123,6 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     logging.debug("Size of 'aux' data: %0.2f MB, dimensions %r", sys.getsizeof(aux)/MB, aux.shape)
 
 
-    #re = pd.read_hdf(cmp_path, key='real').values[idx_start:idx_end]
-    #im = pd.read_hdf(cmp_path, key='imag').values[idx_start:idx_end]
-    ##cmp_track = np.empty(re.size, dtype=np.complex64)
-    #cmp_track = re+1j*im
-    #del re
-    #del im
-    #logging.debug("Size of 'cmp' data: %0.2f MB, dimensions %r", sys.getsizeof(cmp_track)/MB, cmp_track.shape)
     tecu_filename = cmp_path.replace('.h5', '_TECU.txt')
     tecu = np.genfromtxt(tecu_filename)[idx_start:idx_end, 0]
 
@@ -229,144 +215,81 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     #========================
     # Actual pulse processing
     #========================
-    spots_all = None
-    for idx_start1 in range(idx_start, iiend, blocktraces):
-        idx_end1 = min(idx_start1 + blocktraces, iiend)
-
-        idx_start2 = idx_start1 - idx_start
-        idx_end2 = idx_end1 - idx_start
-    
-        #re = pd.read_hdf(cmp_path, key='real').values[idx_start1:idx_end1]
-        #im = pd.read_hdf(cmp_path, key='imag').values[idx_start1:idx_end1]
-        #cmp_track = np.empty((iiend, 3600), dtype=np.complex64)
-        read_gen = gen_hdf_complex_traces(cmp_path, idx_start1, idx_end1)
-        #for ii, cplx in enumerate(gen_hdf_complex_traces(cmp_path, idx_start1, idx_end1)):
-        #    cmp_track[ii] = cplx
-        #cmp_track = re+1j*im
-        #del re
-        #del im
-        #logging.debug("Size of 'cmp' data: %0.2f MB, dimensions %r", sys.getsizeof(cmp_track)/MB, cmp_track.shape)
 
 
-        if ft_avg is None:
-            wvfrm_gen = trace_gen(read_gen)
+    logging.debug("cmp_path=%s", cmp_path)
+    read_gen = gen_hdf_complex_traces(cmp_path, idx_start, idx_end)
+
+
+    if ft_avg is None:
+        wvfrm_gen = trace_gen(read_gen)
+    else:
+        wvfrm_gen = zero_doppler_filter(read_gen, ft_avg, ntraces=iiend, nsamples=3600)
+
+    phaseroll_gen0 = roll_radar_phase(wvfrm_gen, phase, tx0)
+    phaseroll_gen = map(lambda arr: arr.astype(np.complex64), phaseroll_gen0)
+
+
+    # Pulse is averaged over the 1/4 the
+    # distance of the first pulse-limited footprint and according to max
+    # slope specification.
+    # Slow time averaging could use some padding
+
+
+    gen_sta0 = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend, 3600)
+    gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
+
+    #np.testing.assert_allclose(avg, avg2)
+
+
+    coarse_gen = coarse_detection_gen(gen_sta, noise_scale, shift_param, corrupted_idx)
+
+    time1 = time.time()
+    logging.debug("Coarse detection: %0.2f sec", time1-time0)
+    time0 = time1
+    fine = False
+    if fine:
+        coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend)
+    else:
+        coarse = np.empty((iiend,), dtype=int)
+        for ii, _, x in coarse_gen:
+            coarse[ii] = x
+
+        delta, snr = coarse, np.zeros((iiend,))
+
+    time1 = time.time()
+    logging.debug("Fine tracking: %0.2f sec", time1-time0)
+    time0 = time1
+
+    # Ionospheric delay
+    disp = 1.69E-6/20E6*tecu*1E+16
+    dt_ion = disp/(2*np.pi*20E6)
+    # Time-of-Flight (ToF)
+    tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
+    # One-way range in km
+    d = tx*c/2000
+
+    # Elevation from Mars CoM
+    r = sc-d
+
+    # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
+    # Seems like it just wants to be a python list.
+    # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
+
+    spots = np.empty((len(r), 8))
+    columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', \
+               'idx_coarse', 'idx_fine', 'range', 'snr']
+
+    for i in range(len(r)):
+        if i in corrupted_idx:
+            spots[i, :] = [ets[i], lat[i], lon[i], -1, -1, -1, -1, -1]
         else:
-            wvfrm_gen = zero_doppler_filter(read_gen, ft_avg, ntraces=iiend, nsamples=3600)
-
-        # Construct radargram
-        #radargram = np.empty((iiend, 3600), dtype=np.complex64)
+            spots[i, :] = [ets[i], lat[i], lon[i], r[i], \
+                       (coarse-shift_param)[i], (delta-shift_param)[i], r[i], snr[i]]
 
 
-        phaseroll_gen0 = roll_radar_phase(wvfrm_gen, phase, tx0)
-        phaseroll_gen = map(lambda arr: arr.astype(np.complex64), phaseroll_gen0)
-
-        #for rec, trace_rolled in enumerate(phaseroll_gen):
-        #    radargram[rec] = trace_rolled
-
-        time1 = time.time()
-        logging.debug("Waveform smoothing: %0.2f sec", time1-time0)
-        time0 = time1
-
-        #logging.debug("Size of radargram: %0.2f MB", sys.getsizeof(radargram)/MB)
-        #del cmp_track
-        #del wvfrm
-
-        # Pulse is averaged over the 1/4 the
-        # distance of the first pulse-limited footprint and according to max
-        # slope specification.
-        # Slow time averaging could use some padding
-        #avg = slow_time_averaging(radargram, coh_window, sar_window)
-
-
-        gen_sta0 = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend, 3600)
-        gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
-        #avg = np.empty(radargram.shape) # float array same size as radargram
-
-        #for i1, trace in enumerate(gen_sta):
-        #    avg[i1] = trace
-        #assert (i1+1) == iiend, "Short output (i1=%d, should be %d)" % (i1, iiend)
-
-        #np.testing.assert_allclose(avg, avg2)
-
-        time1 = time.time()
-        logging.debug("Slow time averaging: %0.2f sec", time1-time0)
-        time0 = time1
-        #logging.debug("Size of 'avg' data: %0.2f MB", sys.getsizeof(avg)/MB)
-        #del radargram
-
-        """ 
-        import matplotlib.pyplot as plt
-        fig,ax = plt.subplots(figsize=(12,4))
-        plt.imshow(np.transpose(20*np.log10(abs(avg[:,0:1500])+1e-4)),aspect='auto')
-        cbar = plt.colorbar()
-        cbar.set_label('[dB]')
-        plt.show()
-        """
-        """ 
-        import cmp.plotting
-        print('control')
-        rx_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
-        tx0=data['RECEIVE_WINDOW_OPENING_TIME'][0]
-        tx=np.empty(len(data))
-        for rec in range(len(data)):
-            tx[rec]=data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
-        cmp.plotting.plot_radargram(10*np.log10(np.abs(avg)**2),tx,samples=3600)
-        """
-
-        #coarse = coarse_detection(avg, noise_scale, shift_param, corrupted_idx)
-        coarse_gen = coarse_detection_gen(gen_sta, noise_scale, shift_param, corrupted_idx)
-
-        time1 = time.time()
-        logging.debug("Coarse detection: %0.2f sec", time1-time0)
-        time0 = time1
-        fine = True
-        if fine:
-            coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend)
-        else:
-            coarse = np.empty((iiend,), dtype=int)
-            for ii, _, x in coarse_gen:
-                coarse[ii] = x
-
-            delta, snr = coarse, np.zeros((iiend,))
-        #del avg
-        time1 = time.time()
-        logging.debug("Fine tracking: %0.2f sec", time1-time0)
-        time0 = time1
-
-        # Ionospheric delay
-        disp = 1.69E-6/20E6*tecu*1E+16
-        dt_ion = disp/(2*np.pi*20E6)
-        # Time-of-Flight (ToF)
-        tx = (range_window_start+delta-phase+tx0)*0.0375E-6+pri-11.98E-6-dt_ion
-        # One-way range in km
-        d = tx*c/2000
-
-        # Elevation from Mars CoM
-        r = sc-d
-
-        # GNG TODO: Does pandas want this to be a np array or could it be a list of lists?
-        # Seems like it just wants to be a python list.
-        # https://www.geeksforgeeks.org/python-pandas-dataframe/#Basics
-
-        spots = np.empty((len(r), 8))
-        columns = ['et', 'spot_lat', 'spot_lon', 'spot_radius', \
-                   'idx_coarse', 'idx_fine', 'range', 'snr']
-
-        for i in range(len(r)):
-            if i in corrupted_idx:
-                spots[i, :] = [ets[i], lat[i], lon[i], -1, -1, -1, -1, -1]
-            else:
-                spots[i, :] = [ets[i], lat[i], lon[i], r[i], \
-                           (coarse-shift_param)[i], (delta-shift_param)[i], r[i], snr[i]]
-
-        # join spots to new spots
-        if spots_all is None:
-            spots_all = spots
-        else:
-            spots_all = np.concatenate((spots_all, spots), axis=0)
-
-    df = pd.DataFrame(spots_all, columns=columns)
-    np.save('beta5.npy', spots_all) # for debugging
+    df = pd.DataFrame(spots, columns=columns)
+    np.save('beta5.npy', spots) # for debugging
     time1 = time.time()
     logging.debug("LSQ, Frame Conversion, DataFrame: %0.2f sec", time1-time0)
     time0 = time1
@@ -378,11 +301,11 @@ def gen_hdf_complex_traces(cmp_path, idx_start, idx_end):
     """
     # TODO: can we make iterator==True to reduce memory
     kwargs = {'path_or_buf': cmp_path, 'iterator': False}
-    blocksize = 1000
-    if idx_start is not None:
-        kwargs['start'] = idx_start
-    if idx_end is not None:
-        kwargs['end'] = idx_end
+    blocksize = 10000
+    #if idx_start is not None:
+    #    kwargs['start'] = idx_start
+    #if idx_end is not None:
+    #    kwargs['end'] = idx_end
 
     try:
         re_iter = pd.read_hdf(key='real', **kwargs)
@@ -391,8 +314,10 @@ def gen_hdf_complex_traces(cmp_path, idx_start, idx_end):
         print(cmp_path)
         raise
 
-    for re, im in zip(re_iter.values[idx_start:idx_end], im_iter.values[idx_start:idx_end]):
-        yield (re + 1j*im) #.astype(np.complex64)
+    for i0 in range(idx_start, idx_end, blocksize):
+        i1 = min(i0 + blocksize, idx_end)
+        for re, im in zip(re_iter.values[i0:i1], im_iter.values[i0:i1]):
+            yield (re + 1j*im) #.astype(np.complex64)
 
 def trace_gen(radargram: np.ndarray):
     for trace in radargram:
@@ -482,28 +407,6 @@ def roll_radar_phase(wvfrm_gen, phase: np.array, tx0: int):
 
 
 
-def slow_time_averaging(radargram: np.ndarray, coh_window: int, sar_window: int):
-    # Perform averaging in slow time. Pulse is averaged over the 1/4 the
-    # distance of the first pulse-limited footprint and according to max
-    # slope specification.
-    max_window = max(coh_window, sar_window)
-
-    if sar_window > 1:
-        avg = np.empty(radargram.shape) # float array same size as radargram
-        for i in range(avg.shape[1]):
-            # Get a padded horizontal slice
-            slice_ext = np.pad(radargram[:, i], (max_window, max_window), 'edge')
-            slice_avg = running_mean(abs(slice_ext), sar_window)
-            avg[:, i] = abs(slice_avg)[max_window:-max_window]
-            if i == 0:
-                logging.info("coh_window=%d, sar_window=%d max_window=%d, slice_ext.shape=%r; slice_avg.shape=%r; avg.shape=%r",
-                            coh_window, sar_window, max_window, slice_ext.shape, slice_avg.shape, avg.shape)
-                logging.debug("-Running_mean(x.shape=%r, N=%d)", slice_ext.shape, sar_window)
-                logging.info("keeping from running_mean(%d,-%d)", max_window, max_window)
-    else:
-        avg = abs(radargram)
-
-    return avg
 
 def pad_radargram(gen_radargram, pad_pre, pad_post, mode='edge'):
     """ Pad radargram by duplicating the edge trace
@@ -553,61 +456,37 @@ def running_mean_gen(radargram, N: int):
 
     n2a, n2b = (N // 2), (N - ((N // 2)+1))
     gen1 = cumsum_gen(radargram)
-    nyield1, nyield3 = 0, 0 # debugging counter
-    nyield2 = 0
-    nitems = 0
+    z0 = None
     for ii, sumtrace in enumerate(gen1):
-        nitems += 1
-        if ii < n2a: # yield for indices from res[0:N//2]
-
-            yield np.zeros_like(sumtrace)
-            nyield1 += 1
-
-        if ii == 0: # TODO: pad?
+        if ii == 0:
+            z0 = np.zeros_like(sumtrace)
             # yield an extra zero for np.insert(x, 0, 0)
-            csumbuffer.append(np.zeros_like(sumtrace))
+            csumbuffer.append(z0)
+
+        if ii < n2a: # yield for indices from res[0:N//2]
+            yield z0
+
         csumbuffer.append(sumtrace)
 
         if len(csumbuffer) > N: # really  len(csumbuffer) == N
-            #logging.debug("ii=%d lenbuffer=%d", ii, len(csumbuffer))
-            res = (csumbuffer[-1] - csumbuffer[0]) / N
-            # buffer output to not put len(radargram)-N//2+1
-            #buffer.append((ii-n2a, res))
-            csumbuffer.pop(0) # remove first element after use
-            #if len(buffer) >= n2b:
-            #    i0, res = buffer.pop(0)
-            #    logging.debug("yield result to ii=%d. i0=%d n2b=%d", ii, i0, n2b)
+            res = (csumbuffer[-1] - csumbuffer.pop(0)) / N
             yield res
-            nyield2 += 1
-    if sumtrace is not None:
-        logging.debug("running_mean N=%d nyield=%d nyield2=%d ii=%d yielding %d post-csum zeros. total=%d lenbuffer=%d",
-                        N, nyield1, nyield2, ii, n2b, nyield1 + nyield2 + n2b, len(buffer))
-        #endn = N//2-1
-        for i0 in range(N//2):
-            # yield zeros for stuff at the end
-            #logging.debug("yield zero pad result to ii=%d. i0=%d n2b=%d", ii, ii - n2a + i0, n2b)
-            yield np.zeros_like(sumtrace)
-            nyield3 += 1
 
-    logging.debug("nyield=%d %d %d total=%d, expected %d", nyield1, nyield2, nyield3, nyield1+nyield2+nyield3, nitems)
-    assert nyield1 == n2a
-    assert nyield1 + nyield2 + nyield3 == nitems, "inconsistent number of output values"
+    if sumtrace is not None:
+        for _ in range(N//2):
+            yield z0 # np.zeros_like(sumtrace)
 
 
 def skip_traces(gen_radargram, skip_pre: int, skip_post: int):
     assert skip_pre >= 0 and skip_post >= 0
     buffer = []
-    nyield = 0 # debugging counter
     for ii, trace in enumerate(gen_radargram):
         if ii < skip_pre:
             continue
         # Return the last item if we know it's not within the last skip_post traces
-        buffer.append((ii, trace))
+        buffer.append(trace)
         if len(buffer) > skip_post:
-            yield buffer.pop(0)[1] # dequeue first item and return the trace
-            nyield += 1
-    logging.debug("skip_traces input length=%d traces, output length=%d traces; skip_pre=%d skip_post=%d; final buffer had %d traces",
-                  ii, nyield, skip_pre, skip_post, len(buffer))
+            yield buffer.pop(0) # dequeue first item and return the trace
 
 
 def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces: int, nsamples: int):
@@ -615,16 +494,9 @@ def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces
     max_window = max(coh_window, sar_window)
 
     if sar_window > 1:
-        #npad = sar_window
         gen_radargram_ext = pad_radargram(radargram, max_window, max_window, 'edge')
         gen_abs = map(abs, gen_radargram_ext)
         gen_sum = running_mean_gen(gen_abs, sar_window)
-        #for ii, _ in enumerate(gen_sum):
-        #    pass#print(ii, ntraces)
-        #ext_len = ntraces + max_window + max_window
-        #assert (ii+1) == ext_len, "Incorrect sumoutput length. Was %d, should be %d. ntraces=%d max_window=%d" \
-        #                     % (ii+1, ext_len, ntraces, max_window)
-        #sys.exit(1)
         gen4 = skip_traces(gen_sum, max_window, max_window)
 
         for trace in gen4:
@@ -634,47 +506,6 @@ def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces
             yield abs(trace)
 
 
-
-def coarse_detection(avg: np.ndarray, noise_scale: float, shift_param, corrupted_idx):
-    # Coarse detection
-    coarse = np.zeros(len(avg), dtype=int)
-    deriv = np.zeros((len(avg), 3599))
-
-    # We need the fast time partial derivatives of the nearby traces (but we don't need all of them)
-    for i in range(len(avg)):
-        deriv[i] = np.abs(np.diff(avg[i]))
-
-    # TODO: does this yield to parallel prefix sum or vectorizing?
-    noise = np.sqrt(np.var(deriv[:, -1000:], axis=1))*noise_scale
-    logging.info("Noise shape: %r", noise.shape)
-    for i in range(len(deriv)):
-        if i in corrupted_idx:
-            coarse[i] = 0
-            continue
-        #found = False
-        j0 = int(shift_param[i] + 20)
-        j1 = int(min(shift_param[i] + 1020, deriv.shape[1]))
-        # Find the noise level to set the threshold to, and set the starting
-        # lvl to that, to accelerate the search.
-        # Round up to the next highest level
-        if not np.isnan(noise[i]) and noise[i] > 0:
-            lvlstart = np.ceil(np.max(deriv[i]) / noise[i] * 10.0) / 10.0
-            lvlstart = min(max(lvlstart, 0.1), 1.0)
-        else:
-            lvlstart = 1.0
-        #lvlstart = 1.0
-        #logging.debug("lvlstart={:f}".format(lvlstart))
-
-        for lvl in np.arange(lvlstart, 0, -0.1):
-
-            noise_threshold = noise[i]*lvl
-            idxes = np.argwhere(deriv[i][j0:j1] > noise_threshold)
-            if len(idxes) > 0:
-                coarse[i] = idxes[0] + j0
-                #found = True
-                break
-
-    return coarse
 
 
 def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corrupted_idx):
@@ -689,11 +520,8 @@ def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corru
             #coarse0 = 0
             yield i, trace, None #coarse0
             continue
-        try:
-            deriv0 = np.abs(np.diff(trace))
-        except ValueError:
-            print("trace=", repr(trace))
-            raise
+
+        deriv0 = np.abs(np.diff(trace))
         noise0 = np.sqrt(np.var(deriv0[-1000:])) * noise_scale
 
         j0 = int(shift_param0 + 20)
