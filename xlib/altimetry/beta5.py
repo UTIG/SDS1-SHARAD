@@ -236,22 +236,22 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         idx_start2 = idx_start1 - idx_start
         idx_end2 = idx_end1 - idx_start
     
-        re = pd.read_hdf(cmp_path, key='real').values[idx_start1:idx_end1]
-        im = pd.read_hdf(cmp_path, key='imag').values[idx_start1:idx_end1]
+        #re = pd.read_hdf(cmp_path, key='real').values[idx_start1:idx_end1]
+        #im = pd.read_hdf(cmp_path, key='imag').values[idx_start1:idx_end1]
         #cmp_track = np.empty((iiend, 3600), dtype=np.complex64)
         read_gen = gen_hdf_complex_traces(cmp_path, idx_start1, idx_end1)
         #for ii, cplx in enumerate(gen_hdf_complex_traces(cmp_path, idx_start1, idx_end1)):
         #    cmp_track[ii] = cplx
-        cmp_track = re+1j*im
-        del re
-        del im
+        #cmp_track = re+1j*im
+        #del re
+        #del im
         #logging.debug("Size of 'cmp' data: %0.2f MB, dimensions %r", sys.getsizeof(cmp_track)/MB, cmp_track.shape)
 
 
         if ft_avg is None:
             wvfrm_gen = trace_gen(read_gen)
         else:
-            wvfrm_gen = zero_doppler_filter(read_gen, cmp_track, ft_avg, ntraces=iiend, nsamples=3600)
+            wvfrm_gen = zero_doppler_filter(read_gen, ft_avg, ntraces=iiend, nsamples=3600)
 
         # Construct radargram
         #radargram = np.empty((iiend, 3600), dtype=np.complex64)
@@ -447,7 +447,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsample
         assert tracenum >= (ntraces - dp_wdw)
         yield tracenum, trace
 
-def zero_doppler_filter(gen_radargram, arr_radargram: np.ndarray, ft_avg: int, ntraces: int, nsamples: int):
+def zero_doppler_filter(gen_radargram, ft_avg: int, ntraces: int, nsamples: int):
     """ Zero Doppler Filter
     TODO: save the doppler array to a memmapped array to a temp directory so that
     it can be paged out
