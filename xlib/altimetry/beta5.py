@@ -273,34 +273,23 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         # distance of the first pulse-limited footprint and according to max
         # slope specification.
         # Slow time averaging could use some padding
-        avg = slow_time_averaging(radargram, coh_window, sar_window)
+        #avg = slow_time_averaging(radargram, coh_window, sar_window)
 
 
-        avg2 = np.empty(radargram.shape) # float array same size as radargram
-        for i1, (i2, trace) in enumerate(slow_time_averaging_gen(radargram, coh_window, sar_window, iiend, 3600)):
-            assert i1 == i2, "i1=%d i2=%d" % (i1, i2)
-            avg2[i1] = trace
-        assert (i1+1) == iiend, "Short output (i1=%d, should be %d)" % (i1, iiend)
+        gen_sta0 = slow_time_averaging_gen(radargram, coh_window, sar_window, iiend, 3600)
+        gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
+        #avg = np.empty(radargram.shape) # float array same size as radargram
 
-        #np.testing.assert_allclose(np.mean(avg, axis=1), np.mean(avg2, axis=1))
-        j0 = 1801
-        np.testing.assert_allclose(avg[sar_window:-sar_window], avg2[sar_window:-sar_window])
-        try:
-            np.testing.assert_allclose(avg[0:sar_window, j0], avg2[0:sar_window, j0])
-        except AssertionError:
-            z = np.empty((sar_window, 3))
-            z[:, 0] = avg[0:sar_window, j0]
-            z[:, 1] = avg2[0:sar_window, j0]
-            z[:, 2] = abs(avg[0:sar_window, j0] - avg2[0:sar_window, j0])
-            print(z)
-            raise
-        #np.testing.assert_allclose(avg[-sar_window:, j0], avg2[-sar_window:, j0])
-        np.testing.assert_allclose(avg, avg2)
+        #for i1, trace in enumerate(gen_sta):
+        #    avg[i1] = trace
+        #assert (i1+1) == iiend, "Short output (i1=%d, should be %d)" % (i1, iiend)
+
+        #np.testing.assert_allclose(avg, avg2)
 
         time1 = time.time()
         logging.debug("Slow time averaging: %0.2f sec", time1-time0)
         time0 = time1
-        logging.debug("Size of 'avg' data: %0.2f MB", sys.getsizeof(avg)/MB)
+        #logging.debug("Size of 'avg' data: %0.2f MB", sys.getsizeof(avg)/MB)
         del radargram
 
         """ 
@@ -323,7 +312,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         """
 
         #coarse = coarse_detection(avg, noise_scale, shift_param, corrupted_idx)
-        coarse_gen = coarse_detection_gen(avg2, noise_scale, shift_param, corrupted_idx)
+        coarse_gen = coarse_detection_gen(gen_sta, noise_scale, shift_param, corrupted_idx)
 
         time1 = time.time()
         logging.debug("Coarse detection: %0.2f sec", time1-time0)
@@ -336,8 +325,8 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
             for ii, _, x in coarse_gen:
                 coarse[ii] = x
 
-            delta, snr = coarse, np.zeros(len(avg))
-        del avg
+            delta, snr = coarse, np.zeros((iiend,))
+        #del avg
         time1 = time.time()
         logging.debug("Fine tracking: %0.2f sec", time1-time0)
         time0 = time1
@@ -636,14 +625,11 @@ def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces
         #sys.exit(1)
         gen4 = skip_traces(gen_sum, max_window, max_window)
 
-        for ii, trace in enumerate(gen4):
-            yield ii, abs(trace)
-
-        if trace is None: # empty radargram
-            return
+        for trace in gen4:
+            yield abs(trace)
     else:
         for ii, trace in enumerate(radargram):
-            yield ii, abs(trace)
+            yield abs(trace)
 
 
 
@@ -701,8 +687,11 @@ def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corru
             #coarse0 = 0
             yield i, trace, None #coarse0
             continue
-
-        deriv0 = np.abs(np.diff(trace))
+        try:
+            deriv0 = np.abs(np.diff(trace))
+        except ValueError:
+            print("trace=", repr(trace))
+            raise
         noise0 = np.sqrt(np.var(deriv0[-1000:])) * noise_scale
 
         j0 = int(shift_param0 + 20)
