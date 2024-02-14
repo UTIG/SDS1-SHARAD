@@ -254,18 +254,20 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
             wvfrm_gen = zero_doppler_filter(read_gen, cmp_track, ft_avg, ntraces=iiend, nsamples=3600)
 
         # Construct radargram
-        radargram = np.empty((iiend, 3600), dtype=np.complex64)
+        #radargram = np.empty((iiend, 3600), dtype=np.complex64)
 
 
-        phaseroll_gen = roll_radar_phase(wvfrm_gen, phase, tx0)
-        for rec, trace_rolled in enumerate(phaseroll_gen):
-            radargram[rec] = trace_rolled
+        phaseroll_gen0 = roll_radar_phase(wvfrm_gen, phase, tx0)
+        phaseroll_gen = map(lambda arr: arr.astype(np.complex64), phaseroll_gen0)
+
+        #for rec, trace_rolled in enumerate(phaseroll_gen):
+        #    radargram[rec] = trace_rolled
 
         time1 = time.time()
         logging.debug("Waveform smoothing: %0.2f sec", time1-time0)
         time0 = time1
 
-        logging.debug("Size of radargram: %0.2f MB", sys.getsizeof(radargram)/MB)
+        #logging.debug("Size of radargram: %0.2f MB", sys.getsizeof(radargram)/MB)
         #del cmp_track
         #del wvfrm
 
@@ -276,7 +278,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         #avg = slow_time_averaging(radargram, coh_window, sar_window)
 
 
-        gen_sta0 = slow_time_averaging_gen(radargram, coh_window, sar_window, iiend, 3600)
+        gen_sta0 = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend, 3600)
         gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
         #avg = np.empty(radargram.shape) # float array same size as radargram
 
@@ -290,7 +292,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         logging.debug("Slow time averaging: %0.2f sec", time1-time0)
         time0 = time1
         #logging.debug("Size of 'avg' data: %0.2f MB", sys.getsizeof(avg)/MB)
-        del radargram
+        #del radargram
 
         """ 
         import matplotlib.pyplot as plt
