@@ -14,8 +14,12 @@ __history__ = {
     '1.2':
         {'date': 'October 05, 2021',
          'author': 'Gregor Steinbruegge, JPL',
-         'info': 'Checks for corrupted data & wrong range window start.'}}
-
+         'info': 'Checks for corrupted data & wrong range window start.'},
+    '1.3':
+        {'date': 'February 8, 2023',
+         'author': 'Gregory Ng, UTIG',
+         'info': 'Rewrite in functional iterator style that operates per-trace and improves memory efficiency'},
+}
 
 # TODO:
 # reorder imports
@@ -265,8 +269,34 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         #del cmp_track
         #del wvfrm
 
+        # Pulse is averaged over the 1/4 the
+        # distance of the first pulse-limited footprint and according to max
+        # slope specification.
         # Slow time averaging could use some padding
         avg = slow_time_averaging(radargram, coh_window, sar_window)
+
+
+        avg2 = np.empty(radargram.shape) # float array same size as radargram
+        for i1, (i2, trace) in enumerate(slow_time_averaging_gen(radargram, coh_window, sar_window, iiend, 3600)):
+            assert i1 == i2, "i1=%d i2=%d" % (i1, i2)
+            avg2[i1] = trace
+        assert (i1+1) == iiend, "Short output (i1=%d, should be %d)" % (i1, iiend)
+
+        #np.testing.assert_allclose(np.mean(avg, axis=1), np.mean(avg2, axis=1))
+        j0 = 1801
+        np.testing.assert_allclose(avg[sar_window:-sar_window], avg2[sar_window:-sar_window])
+        try:
+            np.testing.assert_allclose(avg[0:sar_window, j0], avg2[0:sar_window, j0])
+        except AssertionError:
+            z = np.empty((sar_window, 3))
+            z[:, 0] = avg[0:sar_window, j0]
+            z[:, 1] = avg2[0:sar_window, j0]
+            z[:, 2] = abs(avg[0:sar_window, j0] - avg2[0:sar_window, j0])
+            print(z)
+            raise
+        #np.testing.assert_allclose(avg[-sar_window:, j0], avg2[-sar_window:, j0])
+        np.testing.assert_allclose(avg, avg2)
+
         time1 = time.time()
         logging.debug("Slow time averaging: %0.2f sec", time1-time0)
         time0 = time1
@@ -293,7 +323,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         """
 
         #coarse = coarse_detection(avg, noise_scale, shift_param, corrupted_idx)
-        coarse_gen = coarse_detection_gen(avg, noise_scale, shift_param, corrupted_idx)
+        coarse_gen = coarse_detection_gen(avg2, noise_scale, shift_param, corrupted_idx)
 
         time1 = time.time()
         logging.debug("Coarse detection: %0.2f sec", time1-time0)
@@ -474,30 +504,146 @@ def slow_time_averaging(radargram: np.ndarray, coh_window: int, sar_window: int)
             slice_ext = np.pad(radargram[:, i], (max_window, max_window), 'edge')
             slice_avg = running_mean(abs(slice_ext), sar_window)
             avg[:, i] = abs(slice_avg)[max_window:-max_window]
+            if i == 0:
+                logging.info("coh_window=%d, sar_window=%d max_window=%d, slice_ext.shape=%r; slice_avg.shape=%r; avg.shape=%r",
+                            coh_window, sar_window, max_window, slice_ext.shape, slice_avg.shape, avg.shape)
+                logging.debug("-Running_mean(x.shape=%r, N=%d)", slice_ext.shape, sar_window)
+                logging.info("keeping from running_mean(%d,-%d)", max_window, max_window)
     else:
         avg = abs(radargram)
 
     return avg
-def slow_time_averaging_gen(radargram: np.ndarray, coh_window: int, sar_window: int):
-    # Perform averaging in slow time. Pulse is averaged over the 1/4 the
-    # distance of the first pulse-limited footprint and according to max
-    # slope specification.
+
+def pad_radargram(gen_radargram, pad_pre, pad_post, mode='edge'):
+    """ Pad radargram by duplicating the edge trace
+    To be equivalent to np.pad(radargram, padding, 'edge')
+    """
+    trace = None
+    for ii, trace in enumerate(gen_radargram):
+        if ii == 0:
+            # emit padding
+            for i0 in range(pad_pre):
+                if mode == 'zeros':
+                    yield np.zeros_like(trace)
+                elif mode == 'edge':
+                    yield trace
+        yield trace
+
+    if trace is not None:
+        for i0 in range(pad_post):
+            if mode == 'zeros':
+                yield np.zeros_like(trace)
+            elif mode == 'edge':
+                yield trace
+
+def cumsum_gen(traces_gen):
+    """ Compute and return a cumulative sum generator, inserting """
+    accum = None
+    for ii, trace in enumerate(traces_gen):
+        if accum is None:
+            accum = np.zeros_like(trace)
+
+        accum = accum + trace
+        yield accum
+
+def running_mean_gen(radargram, N: int):
+    """ Generator-style running mean, using cumulative sum
+    TODO: compare non-cumsum accuracy 
+
+    # Implements generator-based version of the following:
+    res = np.zeros(len(x), dtype=x.dtype)
+    cumsum = np.cumsum(np.insert(x, 0, 0), dtype=x.dtype)
+    res[N//2:-N//2+1] = (cumsum[N:] - cumsum[:-N]) / N
+    return res
+
+    """
+    buffer = [] # Circular buffer of output values
+    csumbuffer = [] # Circular buffer of cumulative sums
+
+    n2a, n2b = (N // 2), (N - ((N // 2)+1))
+    gen1 = cumsum_gen(radargram)
+    nyield1, nyield3 = 0, 0 # debugging counter
+    nyield2 = 0
+    nitems = 0
+    for ii, sumtrace in enumerate(gen1):
+        nitems += 1
+        if ii < n2a: # yield for indices from res[0:N//2]
+
+            yield np.zeros_like(sumtrace)
+            nyield1 += 1
+
+        if ii == 0: # TODO: pad?
+            # yield an extra zero for np.insert(x, 0, 0)
+            csumbuffer.append(np.zeros_like(sumtrace))
+        csumbuffer.append(sumtrace)
+
+        if len(csumbuffer) > N: # really  len(csumbuffer) == N
+            #logging.debug("ii=%d lenbuffer=%d", ii, len(csumbuffer))
+            res = (csumbuffer[-1] - csumbuffer[0]) / N
+            # buffer output to not put len(radargram)-N//2+1
+            #buffer.append((ii-n2a, res))
+            csumbuffer.pop(0) # remove first element after use
+            #if len(buffer) >= n2b:
+            #    i0, res = buffer.pop(0)
+            #    logging.debug("yield result to ii=%d. i0=%d n2b=%d", ii, i0, n2b)
+            yield res
+            nyield2 += 1
+    if sumtrace is not None:
+        logging.debug("running_mean N=%d nyield=%d nyield2=%d ii=%d yielding %d post-csum zeros. total=%d lenbuffer=%d",
+                        N, nyield1, nyield2, ii, n2b, nyield1 + nyield2 + n2b, len(buffer))
+        #endn = N//2-1
+        for i0 in range(N//2):
+            # yield zeros for stuff at the end
+            #logging.debug("yield zero pad result to ii=%d. i0=%d n2b=%d", ii, ii - n2a + i0, n2b)
+            yield np.zeros_like(sumtrace)
+            nyield3 += 1
+
+    logging.debug("nyield=%d %d %d total=%d, expected %d", nyield1, nyield2, nyield3, nyield1+nyield2+nyield3, nitems)
+    assert nyield1 == n2a
+    assert nyield1 + nyield2 + nyield3 == nitems, "inconsistent number of output values"
+
+
+def skip_traces(gen_radargram, skip_pre: int, skip_post: int):
+    assert skip_pre >= 0 and skip_post >= 0
+    buffer = []
+    nyield = 0 # debugging counter
+    for ii, trace in enumerate(gen_radargram):
+        if ii < skip_pre:
+            continue
+        # Return the last item if we know it's not within the last skip_post traces
+        buffer.append((ii, trace))
+        if len(buffer) > skip_post:
+            yield buffer.pop(0)[1] # dequeue first item and return the trace
+            nyield += 1
+    logging.debug("skip_traces input length=%d traces, output length=%d traces; skip_pre=%d skip_post=%d; final buffer had %d traces",
+                  ii, nyield, skip_pre, skip_post, len(buffer))
+
+
+def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces: int, nsamples: int):
+    # Perform averaging in slow time.
     max_window = max(coh_window, sar_window)
 
     if sar_window > 1:
-        for ii, trace in enumerate(radargram):
-            pass
-        avg = np.empty(radargram.shape) # float array same size as radargram
-        for i in range(avg.shape[1]):
-            # Get a padded horizontal slice
-            slice_ext = np.pad(radargram[:, i], (max_window, max_window), 'edge')
-            slice_avg = running_mean(abs(slice_ext), sar_window)
-            avg[:, i] = abs(slice_avg)[max_window:-max_window]
-    else:
-        for trace in radargram:
-            yield abs(trace)
+        #npad = sar_window
+        gen_radargram_ext = pad_radargram(radargram, max_window, max_window, 'edge')
+        gen_abs = map(abs, gen_radargram_ext)
+        gen_sum = running_mean_gen(gen_abs, sar_window)
+        #for ii, _ in enumerate(gen_sum):
+        #    pass#print(ii, ntraces)
+        #ext_len = ntraces + max_window + max_window
+        #assert (ii+1) == ext_len, "Incorrect sumoutput length. Was %d, should be %d. ntraces=%d max_window=%d" \
+        #                     % (ii+1, ext_len, ntraces, max_window)
+        #sys.exit(1)
+        gen4 = skip_traces(gen_sum, max_window, max_window)
 
-    return avg
+        for ii, trace in enumerate(gen4):
+            yield ii, abs(trace)
+
+        if trace is None: # empty radargram
+            return
+    else:
+        for ii, trace in enumerate(radargram):
+            yield ii, abs(trace)
 
 
 
@@ -623,7 +769,8 @@ def fine_tracking_trace(window_samples: np.ndarray, idx0: int, b3: float, b4: fl
     snr = res.x[1]
     return delta, snr
 
-def running_mean(x, N):
+def running_mean(x, N: int):
+    #logging.debug("Running_mean(x.shape=%r, N=%d)", x.shape, N)
     res = np.zeros(len(x), dtype=x.dtype)
     cumsum = np.cumsum(np.insert(x, 0, 0), dtype=x.dtype)
     res[N//2:-N//2+1] = (cumsum[N:] - cumsum[:-N]) / N
