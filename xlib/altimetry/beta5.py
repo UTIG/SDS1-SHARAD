@@ -29,6 +29,9 @@ from math import tan, pi, erf, sqrt
 import logging
 import sys
 import os
+import itertools
+import multiprocessing
+
 import numpy as np
 from scipy.constants import c
 import spiceypy as spice
@@ -108,7 +111,7 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     MB = 1024*1024
     # Process transect in blocks of up to this many traces
     blocktraces = 100_000
-    idx_end = 1000
+    #idx_end = 1000
     time0 = time.time()
     #============================
     # Read and prepare input data
@@ -247,9 +250,9 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     time1 = time.time()
     logging.debug("Coarse detection: %0.2f sec", time1-time0)
     time0 = time1
-    fine = False
+    #fine = True
     if fine:
-        coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend)
+        coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend, nproc=1)
     else:
         coarse = np.empty((iiend,), dtype=int)
         for ii, _, x in coarse_gen:
@@ -314,10 +317,8 @@ def gen_hdf_complex_traces(cmp_path, idx_start, idx_end):
         print(cmp_path)
         raise
 
-    for i0 in range(idx_start, idx_end, blocksize):
-        i1 = min(i0 + blocksize, idx_end)
-        for re, im in zip(re_iter.values[i0:i1], im_iter.values[i0:i1]):
-            yield (re + 1j*im) #.astype(np.complex64)
+    for re, im in zip(re_iter.values[idx_start:idx_end], im_iter.values[idx_start:idx_end]):
+        yield (re + 1j*im) #.astype(np.complex64)
 
 def trace_gen(radargram: np.ndarray):
     for trace in radargram:
@@ -548,7 +549,7 @@ def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corru
         if not yielded:
             yield i, trace, None
 
-def fine_tracking(coarse_gen, ntraces):
+def fine_tracking(coarse_gen, ntraces: int, nproc=1):
     """ Perform least-squares fit of waveform according to beta-5 re-tracking model
     avg: ntraces x nsamples radargram
     coarse: ntraces x 1 integer array of coarse surface detection
@@ -558,25 +559,45 @@ def fine_tracking(coarse_gen, ntraces):
     delta = np.zeros(ntraces)
     snr = np.zeros(ntraces)
 
+    paramgen = fine_tracking_params(coarse_gen)
+
+    if nproc <= 1:
+        for i, (coarse0, delta0, snr0) in enumerate(itertools.starmap(fine_tracking_trace, paramgen)):
+            if delta0 is None and snr0 is None:
+                continue
+            coarse[i], delta[i], snr[i] = delta0, snr0
+    else:
+        with multiprocessing.Pool(processes=nproc) as pool:
+            for i, (coarse0, delta0, snr0) in enumerate(pool.starmap(fine_tracking_trace, paramgen)):
+                if delta0 is None and snr0 is None:
+                    continue
+                coarse[i], delta[i], snr[i] = coarse0, delta0, snr0
+    return coarse, delta, snr
+
+def fine_tracking_params(coarse_gen):
     b3 = 100
     b4 = 2
     b5 = 3E-2
 
     for i, trace, coarse0 in coarse_gen:
         if coarse0 is None:# or i in corrupted_idx:
+            yield coarse0, None, None, None, None, None
             continue
-        coarse[i] = coarse0
+
         idx0 = max(coarse0-100, 0)
         idx1 = min(coarse0+100, len(trace))
         window = trace[idx0:idx1]
         # We should be able to run this through multiprocessing and we don't have to pass
         # the entire radargram through
-        delta[i], snr[i] = fine_tracking_trace(window, idx0, b3, b4, b5)
+        yield coarse0, window, idx0, b3, b4, b5
 
-    return coarse, delta, snr
 
-def fine_tracking_trace(window_samples: np.ndarray, idx0: int, b3: float, b4: float, b5: float):
+
+def fine_tracking_trace(coarse0, window_samples: np.ndarray, idx0: int, b3: float, b4: float, b5: float):
     """ Fit the altimetry model to the relevant window in the trace """
+    if window_samples is None:
+        return coarse0, None, None
+
     wdw = 10*np.log10(window_samples)
     b1 = np.mean(wdw[0:128])
     b2 = max(wdw)-b1
@@ -586,7 +607,7 @@ def fine_tracking_trace(window_samples: np.ndarray, idx0: int, b3: float, b4: fl
 
     delta = res.x[2] + idx0
     snr = res.x[1]
-    return delta, snr
+    return coarse0, delta, snr
 
 def running_mean(x, N: int):
     #logging.debug("Running_mean(x.shape=%r, N=%d)", x.shape, N)
