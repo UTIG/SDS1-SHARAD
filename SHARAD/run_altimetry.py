@@ -37,7 +37,9 @@ def main():
                         choices=('hdf5', 'csv', 'none'),
                         help="Output file format")
     parser.add_argument('-j', '--jobs', type=int, default=4,
-                        help="Number of jobs (cores) to use for processing")
+                        help="Number of orbit jobs to process simultaneously")
+    parser.add_argument('--finethreads', type=int, default=8,
+                        help="Number of threads to use when processing fine tracking")
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
     parser.add_argument('-n', '--dryrun', action="store_true",
@@ -84,8 +86,9 @@ def main():
                     'outfile': outfile,
                     'idx_start': 0,
                     'idx_end': None,
+                    'finethreads': args.finethreads,
                     'save_format': args.ofmt})
-                logging.debug("[{:d}] {:s}".format(i+1, str(process_list[-1])))
+                logging.debug("[%d] %s", i+1, str(process_list[-1]))
                 i += 1
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
@@ -95,7 +98,7 @@ def main():
     if args.dryrun:
         sys.exit(0)
 
-    logging.info("Start processing {:d} tracks".format(len(process_list)))
+    logging.info("Start processing %d tracks", len(process_list))
 
     if nb_cores <= 1:
         for i, t in enumerate(process_list):
@@ -110,7 +113,7 @@ def main():
     print('done')
 
 
-def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
+def alt_processor(inpath:str, outfile: str, finethreads: int, idx_start=0, idx_end=None, save_format=''):
     try:
         # create cmp path
         path_root_alt = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
@@ -143,26 +146,24 @@ def alt_processor(inpath, outfile, idx_start=0, idx_end=None, save_format=''):
         result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
                                     idx_start=idx_start, idx_end=idx_end,
                                     use_spice=False, ft_avg=10, max_slope=25,
-                                    noise_scale=20, fine=True)
+                                    noise_scale=20, finethreads=finethreads)
 
         #plt.plot(result['spot_radius'])
         #plt.show()
 
-        if save_format == '' or save_format == 'none':
+        if save_format in ('', 'none'):
             return 0
 
         logging.info("Writing to " + outfile)
         outputdir = os.path.dirname(outfile)
 
-        if not os.path.exists(outputdir):
-            os.makedirs(outputdir)
+        os.makedirs(outputdir, exist_ok=True)
 
         if save_format == 'hdf5':
             orbit_data = {'orbit'+str(obn): result}
             #os.system("rm " + outfile)
-            h5 = hdf.hdf(outfile, mode='w')
-            h5.save_dict('beta5', orbit_data)
-            h5.close()
+            with hdf.hdf(outfile, mode='w') as h5:
+                h5.save_dict('beta5', orbit_data)
         elif save_format == 'csv':
             #fname1 = fname.replace('_a.dat', '.csv.gz')
             #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)

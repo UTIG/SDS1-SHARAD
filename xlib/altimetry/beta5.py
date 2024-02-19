@@ -48,9 +48,10 @@ import cmp.pds3lbl as pds3
 
 
 
-def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
-                    use_spice=False, ft_avg=10,
-                    max_slope=25, noise_scale=20, fix_pri=None, fine=True,
+def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_aux: str,
+                    use_spice=False, ft_avg: int=10,
+                    max_slope:float=25, noise_scale:float=20, fix_pri=None,
+                    finethreads:int=1,
                     idx_start=0, idx_end=None):
 
     """
@@ -91,8 +92,11 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
         the input data, otherwise it can be set to a fixed code.
         Fixing it avoids reading the bitcolumns in the input, making
         the reading faster.
-    fine (optional): boolean
-        Apply fine detection with beta-5 model fit. Default is True.
+    finethreads: int
+        Apply fine detection with beta-5 model fit, and how many parallel processes
+        0 = Don't do fine detection (previously fine=False)
+        1 = do fine detection without multiprocessing
+        2+ use multiprocessing
 
     Output
     ------
@@ -250,9 +254,8 @@ def beta5_altimetry(cmp_path, science_path, label_science, label_aux,
     time1 = time.time()
     logging.debug("Coarse detection: %0.2f sec", time1-time0)
     time0 = time1
-    #fine = True
-    if fine:
-        coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend, nproc=1)
+    if finethreads > 0:
+        coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend, finethreads=finethreads)
     else:
         coarse = np.empty((iiend,), dtype=int)
         for ii, _, x in coarse_gen:
@@ -304,18 +307,9 @@ def gen_hdf_complex_traces(cmp_path, idx_start, idx_end):
     """
     # TODO: can we make iterator==True to reduce memory
     kwargs = {'path_or_buf': cmp_path, 'iterator': False}
-    blocksize = 10000
-    #if idx_start is not None:
-    #    kwargs['start'] = idx_start
-    #if idx_end is not None:
-    #    kwargs['end'] = idx_end
 
-    try:
-        re_iter = pd.read_hdf(key='real', **kwargs)
-        im_iter = pd.read_hdf(key='imag', **kwargs)
-    except TypeError:
-        print(cmp_path)
-        raise
+    re_iter = pd.read_hdf(key='real', **kwargs)
+    im_iter = pd.read_hdf(key='imag', **kwargs)
 
     for re, im in zip(re_iter.values[idx_start:idx_end], im_iter.values[idx_start:idx_end]):
         yield (re + 1j*im) #.astype(np.complex64)
@@ -518,7 +512,6 @@ def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corru
     for i, (trace, shift_param0) in enumerate(zip(avg, shift_param)):
         yielded = False
         if i in corrupted_idx:
-            #coarse0 = 0
             yield i, trace, None #coarse0
             continue
 
@@ -549,7 +542,7 @@ def coarse_detection_gen(avg: np.ndarray, noise_scale: float, shift_param, corru
         if not yielded:
             yield i, trace, None
 
-def fine_tracking(coarse_gen, ntraces: int, nproc=1):
+def fine_tracking(coarse_gen, ntraces: int, finethreads:int=1):
     """ Perform least-squares fit of waveform according to beta-5 re-tracking model
     avg: ntraces x nsamples radargram
     coarse: ntraces x 1 integer array of coarse surface detection
@@ -560,18 +553,28 @@ def fine_tracking(coarse_gen, ntraces: int, nproc=1):
     snr = np.zeros(ntraces)
 
     paramgen = fine_tracking_params(coarse_gen)
+    time0 = time.time()
+    paramgen = list(paramgen)
+    time1 = time.time()
+    logging.debug("Fine tracking part 1 time: %0.2f seconds", time1 - time0)
+    time0 = time1
 
-    if nproc <= 1:
+    if finethreads <= 1:
         for i, (coarse0, delta0, snr0) in enumerate(itertools.starmap(fine_tracking_trace, paramgen)):
             if delta0 is None and snr0 is None:
                 continue
-            coarse[i], delta[i], snr[i] = delta0, snr0
+            coarse[i], delta[i], snr[i] = coarse0, delta0, snr0
     else:
-        with multiprocessing.Pool(processes=nproc) as pool:
+        with multiprocessing.Pool(processes=finethreads) as pool:
             for i, (coarse0, delta0, snr0) in enumerate(pool.starmap(fine_tracking_trace, paramgen)):
                 if delta0 is None and snr0 is None:
                     continue
                 coarse[i], delta[i], snr[i] = coarse0, delta0, snr0
+
+    time1 = time.time()
+    logging.debug("Fine tracking part 2 time: %0.2f seconds", time1 - time0)
+    time0 = time1
+
     return coarse, delta, snr
 
 def fine_tracking_params(coarse_gen):
