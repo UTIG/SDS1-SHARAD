@@ -5,7 +5,52 @@ __history__ = {
     '1.0':
         {'date': 'September 6 2018',
          'author': 'Gregor Steinbruegge, UTIG',
-         'info': 'First release.'}}
+         'info': 'First release.'},
+    '1.1':
+        {'date': 'February 19, 2024',
+         'author': 'Gregory Ng, UTIG',
+         'info': 'Implement fine tracking multiprocessing'},
+    
+}
+           
+"""
+
+On freeze, I think we can run run_altimetry with a -j flag of 8 and an
+--finethreads flag of 8. This will set typical CPU utilization somewhere
+between 8 and 64 cores as it goes through the altimetry processing. During
+most of the radar processing it uses 1 job per transect, and then only during
+the fine tracking phase will it use 8 jobs per transect. The fine tracking
+phase takes about 10 times longer than all the previous phases on freeze.
+
+Increasing the -j flag increases peak memory usage and disk read bandwidth
+requirements (because we're reading multiple transects in parallel), while
+increasing --finejobs will have no effect on peak memory usage (because at
+this stage we're only carrying a small window of samples around the surface).
+However, very high values of finejobs have a quickly diminishing return on
+processing time.
+
+This should be compatible with efficient processing on freeze and on tacc. On
+TACC, this works, but if we have 128 cores to work with, then maybe we could
+bump this to {j=8, finejobs=16} or {j=8,finejobs=32}? Or push your luck with
+{j=16,finejobs=8}?
+
+Here is some math to support this:
+
+Memory profiing showed that there was a baseline python process VmSize of
+about 2 GB (to load all the python code) and then memory went up commensurate
+with intermediate variables. For a 1.5 GB input file you could budget maybe +3
+GB? So we could budget memory usage of 2.0 + 3.0 *j gigabytes, where 'j' is
+the number specified in the -j flag to run_altimetry.py
+
+So that is to say that when we run on TACC, I think we should limit the number
+of parallel jobs (-j flag) to no more than maybe 3 or 4 for vm-small. This
+math says that you could do up to 63 jobs on the regular sized machine under
+/ultra-ideal/ circumstances?
+
+"""
+
+
+
 
 import sys
 import os
