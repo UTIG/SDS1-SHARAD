@@ -231,7 +231,7 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     if ft_avg is None:
         wvfrm_gen = trace_gen(read_gen)
     else:
-        wvfrm_gen = zero_doppler_filter(read_gen, ft_avg, ntraces=iiend, nsamples=3600)
+        wvfrm_gen = zero_doppler_filter(read_gen, ft_avg, ntraces=iiend)
 
     phaseroll_gen0 = roll_radar_phase(wvfrm_gen, phase, tx0)
     phaseroll_gen = map(lambda arr: arr.astype(np.complex64), phaseroll_gen0)
@@ -243,7 +243,7 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     # Slow time averaging could use some padding
 
 
-    gen_sta0 = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend, 3600)
+    gen_sta0 = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend)
     gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
 
     #np.testing.assert_allclose(avg, avg2)
@@ -319,7 +319,7 @@ def trace_gen(radargram: np.ndarray):
         yield trace
 
 
-def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsamples: int):
+def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int):
     """ calculate the zero doppler for the given trace in the radargram
     and return them.
     We maintain a circular buffer in order to do the FFTs
@@ -327,12 +327,15 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsample
     if ntraces == 0:
         return
     assert ntraces > 2*dp_wdw, "Hasn't been tested with short transects!"
-    assert nsamples <= 3600, "Unexpected number of samples"
-    buffer = np.empty((2*dp_wdw, nsamples), dtype=np.complex128)
+    buffer = None
     bidx = np.zeros((2*dp_wdw,), dtype=int)
     tracenum0 = -1
     #assert dp_wdw == len(buffer[dp_wdw:])
     for ii, trace in enumerate(gen_radargram):
+        if buffer is None:
+            nsamples = len(trace)
+            buffer = np.empty((2*dp_wdw, nsamples), dtype=np.complex128)
+
         # Shift data in buffer
         buffer[0:-1, :] = buffer[1:, :]
         buffer[-1] = trace
@@ -367,7 +370,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int, nsample
         assert tracenum >= (ntraces - dp_wdw)
         yield tracenum, trace
 
-def zero_doppler_filter(gen_radargram, ft_avg: int, ntraces: int, nsamples: int):
+def zero_doppler_filter(gen_radargram, ft_avg: int, ntraces: int):
     """ Zero Doppler Filter
     TODO: save the doppler array to a memmapped array to a temp directory so that
     it can be paged out
@@ -377,13 +380,17 @@ def zero_doppler_filter(gen_radargram, ft_avg: int, ntraces: int, nsamples: int)
     assert ft_avg > 0
     dp_wdw = 30
 
-    buffer = np.empty((2*dp_wdw, nsamples), dtype=np.complex128)
+    buffer = None
 
     # Perform smoothing of the waveform aka averaging in fast time
     #wvfrm = np.empty(cmp_track.shape, dtype=np.complex64)
     #for i, trace in enumerate(radargram):
-    gen_doppler = gen_doppler_trace_buffered(gen_radargram, dp_wdw, ntraces, nsamples)
+    gen_doppler = gen_doppler_trace_buffered(gen_radargram, dp_wdw, ntraces)
     for i, (jj, doppler_r) in enumerate(gen_doppler):
+        if buffer is None:
+            nsamples = len(doppler_r)
+            buffer = np.empty((2*dp_wdw, nsamples), dtype=np.complex128)
+
         rmean = running_mean(doppler_r, ft_avg)
         trace = rmean - np.mean(rmean)
         #wvfrm[i] = running_mean(np.abs(cmp_track[i]),10)
@@ -484,7 +491,7 @@ def skip_traces(gen_radargram, skip_pre: int, skip_post: int):
             yield buffer.pop(0) # dequeue first item and return the trace
 
 
-def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces: int, nsamples: int):
+def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces: int):
     # Perform averaging in slow time.
     max_window = max(coh_window, sar_window)
 
