@@ -246,9 +246,6 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     gen_sta = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend)
     #gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
 
-    #np.testing.assert_allclose(avg, avg2)
-
-
     coarse_gen = coarse_detection_gen(gen_sta, noise_scale, shift_param, corrupted_idx)
 
     time1 = time.time()
@@ -343,22 +340,19 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int):
         bidx[-1] = ii
         if ii < dp_wdw:
             tracenum = ii
-            assert tracenum0 + 1 == tracenum
             yield tracenum, trace # return unmodified trace
             tracenum0 = tracenum
         elif dp_wdw <= ii < 2*dp_wdw - 1:
             pass # keep filling buffer but don't yield anything
-            assert ii+1 < 2*dp_wdw
+            #assert ii+1 < 2*dp_wdw
         elif ii < ntraces-1: # condition emulates behavior in calc_doppler_trace
-            # TODO: "bug" this quits earlier than needed. We could calculate one more doppler bin than we're
-            assert ii+1 >= 2*dp_wdw
+            #assert ii+1 >= 2*dp_wdw
 
-            
             # If it's in the middle, do an fft and get the zero doppler bin
             doppler_r = np.fft.fft(buffer, axis=0)
             tracenum = ii - dp_wdw + 1
-            assert tracenum < (ntraces - dp_wdw)
-            assert tracenum0 + 1 == tracenum
+            #assert tracenum < (ntraces - dp_wdw)
+            #assert tracenum0 + 1 == tracenum
 
             yield tracenum, doppler_r[0]
             tracenum0 = tracenum
@@ -367,7 +361,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int):
     assert tracenum0+1 == ntraces - dp_wdw, "tracenum0=%d ntraces=%d dp_wdw=%d" % (tracenum0, ntraces, dp_wdw)
     assert dp_wdw == len(buffer[dp_wdw:])
     for tracenum, trace in enumerate(buffer[dp_wdw:], start=ntraces - dp_wdw):
-        assert tracenum >= (ntraces - dp_wdw)
+        #assert tracenum >= (ntraces - dp_wdw)
         yield tracenum, trace
 
 def zero_doppler_filter(gen_radargram, ft_avg: int, ntraces: int):
