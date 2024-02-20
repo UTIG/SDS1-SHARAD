@@ -214,9 +214,9 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     max_window = max(coh_window, sar_window)
 
 
-    time1 = time.time()
-    logging.debug("Compute SAR apertures: %0.2f sec", time1-time0)
-    time0 = time1
+    #time1 = time.time()
+    #logging.debug("Compute SAR apertures: %0.2f sec", time1-time0)
+    #time0 = time1
 
 
     #========================
@@ -248,9 +248,9 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
 
     coarse_gen = coarse_detection_gen(gen_sta, noise_scale, shift_param, corrupted_idx)
 
-    time1 = time.time()
-    logging.debug("Coarse detection: %0.2f sec", time1-time0)
-    time0 = time1
+    #time1 = time.time()
+    #logging.debug("Coarse detection: %0.2f sec", time1-time0)
+    #time0 = time1
     if finethreads > 0:
         coarse, delta, snr = fine_tracking(coarse_gen, ntraces=iiend, finethreads=finethreads)
     else:
@@ -261,7 +261,7 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
         delta, snr = coarse, np.zeros((iiend,))
 
     time1 = time.time()
-    logging.debug("Fine tracking: %0.2f sec", time1-time0)
+    logging.debug("Pulse processing: %0.2f sec", time1-time0)
     time0 = time1
 
     # Ionospheric delay
@@ -292,7 +292,7 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
 
 
     df = pd.DataFrame(spots, columns=columns)
-    np.save('beta5.npy', spots) # for debugging
+    #np.save('beta5.npy', spots) # for debugging
     time1 = time.time()
     logging.debug("LSQ, Frame Conversion, DataFrame: %0.2f sec", time1-time0)
     time0 = time1
