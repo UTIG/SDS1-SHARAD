@@ -491,15 +491,15 @@ def slow_time_averaging_gen(radargram, coh_window: int, sar_window: int, ntraces
 
     if sar_window > 1:
         gen_radargram_ext = pad_radargram(radargram, max_window, max_window, 'edge')
-        gen_abs = map(abs, gen_radargram_ext)
+        gen_abs = map(np.abs, gen_radargram_ext)
         gen_sum = running_mean_gen(gen_abs, sar_window)
         gen4 = skip_traces(gen_sum, max_window, max_window)
 
         for trace in gen4:
-            yield abs(trace)
+            yield trace
     else:
         for ii, trace in enumerate(radargram):
-            yield abs(trace)
+            yield np.abs(trace)
 
 
 
