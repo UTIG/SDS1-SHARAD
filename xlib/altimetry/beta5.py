@@ -233,8 +233,8 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     else:
         wvfrm_gen = zero_doppler_filter(read_gen, ft_avg, ntraces=iiend)
 
-    phaseroll_gen0 = roll_radar_phase(wvfrm_gen, phase, tx0)
-    phaseroll_gen = map(lambda arr: arr.astype(np.complex64), phaseroll_gen0)
+    phaseroll_gen = roll_radar_phase(wvfrm_gen, phase, tx0)
+    #phaseroll_gen = map(lambda arr: arr.astype(np.complex64), phaseroll_gen0)
 
 
     # Pulse is averaged over the 1/4 the
@@ -243,8 +243,8 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     # Slow time averaging could use some padding
 
 
-    gen_sta0 = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend)
-    gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
+    gen_sta = slow_time_averaging_gen(phaseroll_gen, coh_window, sar_window, iiend)
+    #gen_sta = map(lambda arr: arr.astype(np.float64), gen_sta0)
 
     #np.testing.assert_allclose(avg, avg2)
 
