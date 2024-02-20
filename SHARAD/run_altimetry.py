@@ -34,6 +34,8 @@ TACC, this works, but if we have 128 cores to work with, then maybe we could
 bump this to {j=8, finejobs=16} or {j=8,finejobs=32}? Or push your luck with
 {j=16,finejobs=8}?
 
+However one problem is that you can't multiprocess inside of other multiprocessing
+
 Here is some math to support this:
 
 Memory profiing showed that there was a baseline python process VmSize of
@@ -83,7 +85,7 @@ def main():
                         help="Output file format")
     parser.add_argument('-j', '--jobs', type=int, default=4,
                         help="Number of orbit jobs to process simultaneously")
-    parser.add_argument('--finethreads', type=int, default=8,
+    parser.add_argument('--finethreads', type=int, default=1,
                         help="Number of threads to use when processing fine tracking")
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
@@ -125,16 +127,23 @@ def main():
             outfile = os.path.join(args.output, relpath, 'beta5',
                                    data_file.replace('.dat', '.h5'))
 
-            if not os.path.exists(outfile) and not os.path.exists(outfile.replace('_a_a.h5', '_a_s.h5')):
-                process_list.append({
-                    'inpath': path,
-                    'outfile': outfile,
-                    'idx_start': 0,
-                    'idx_end': None,
-                    'finethreads': args.finethreads,
-                    'save_format': args.ofmt})
-                logging.debug("[%d] %s", i+1, str(process_list[-1]))
-                i += 1
+            if os.path.exists(outfile):
+                logging.info("Not adding %s to jobs.  %s already exists", path, outfile)
+                continue
+            outfile2 = outfile.replace('_a_a.h5', '_a_s.h5')
+            if os.path.exists(outfile2):
+                logging.info("Not adding %s to jobs.  %s already exists", path, outfile2)
+                continue
+
+            process_list.append({
+                'inpath': path,
+                'outfile': outfile,
+                'idx_start': 0,
+                'idx_end': None,
+                'finethreads': args.finethreads,
+                'save_format': args.ofmt})
+            logging.debug("[%d] %s", i+1, str(process_list[-1]))
+            i += 1
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
@@ -150,11 +159,11 @@ def main():
             result = alt_processor(**t)
             print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
     else:
-        pool = multiprocessing.Pool(nb_cores)
-        results = [pool.apply_async(alt_processor, [], t) for t in process_list]
-        for i, result in enumerate(results):
-            flag = result.get() # Wait for result
-            print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
+        with multiprocessing.Pool(nb_cores) as pool:
+            results = [pool.apply_async(alt_processor, [], t) for t in process_list]
+            for i, result in enumerate(results):
+                flag = result.get() # Wait for result
+                print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
     print('done')
 
 
