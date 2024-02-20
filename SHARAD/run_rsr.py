@@ -306,6 +306,9 @@ def main():
             help='Name of the function (in pdf module) to use for the fit')
     parser.add_argument('-d', '--delete', action='store_true',
             help='Delete and reprocess files already processed, only if [orbit] is [all]')
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                        help="Root directory (default: environment variable SDS")
+
 
     args = parser.parse_args()
 
@@ -313,7 +316,12 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-    senv = SHARADEnv.SHARADEnv()
+
+    # Construct directory names
+    data_path = os.path.join(args.SDS, 'targ/xtra/SHARAD')
+    orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
+
+    senv = SHARADEnv.SHARADEnv(data_path=data_path, orig_path=orig_path)
 
     #--------------------------
     # Requested Orbits handling

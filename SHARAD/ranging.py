@@ -1,3 +1,4 @@
+import os
 import numpy as np
 #import pandas as pd
 #import spiceypy as spice
@@ -29,12 +30,13 @@ def find(name, path='/disk/kea/SDS/orig/supl/xtra-pds/'):
             return os.path.join(root, name)
     return None
 
-science_label = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-aux_label = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+SDS = os.getenv('SDS', '/disk/kea/SDS')
+science_label = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+aux_label = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 group = 'sharad'
-h5file = hdf('cor_mc11.h5', mode='r')
+with hdf('cor_mc11.h5', mode='r') as h5file:
 data = h5file.to_dict(group)
-h5file.close()
+
 xover = np.load('xover/cor_mc11e_xover.npy')
 res = []
 test = []

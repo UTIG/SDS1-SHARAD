@@ -132,11 +132,11 @@ PROCESSORS = {
 
 def run_command(cmd, output):
     output = output.replace("targ", "note")
-    if (not os.path.exists(os.path.dirname(output))):
-        os.makedirs(os.path.dirname(output))
-    out = open(output+".stdout", "w")
-    err = open(output+".stderr", "w")
-    return subprocess.run(cmd, stdout=out, stderr=err)
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    with open(output+".stdout", "w") as outfh, \
+         open(output+".stderr", "w") as errfh:
+        res = subprocess.run(cmd, stdout=outfh, stderr=errfh)
+    return res
 
 def temptracklist(infile):
     """ Create a temporary file with one track in it,
@@ -170,7 +170,7 @@ def manual(cmd, infile):
     if c == 'y':
         subprocess.run(cmd)
 
-def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'):
+def read_tracklist(filename: str, sharad_root: str):
     """ Read the tracklist and parse for relevant information
     The tracklist contains a list of "orig" input filenames.
     """
@@ -181,8 +181,8 @@ def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD
             if not infile:
                 continue
 
-            path_file = os.path.relpath(infile, SHARADroot)
-            #path_file = infile.replace(SHARADroot, '')
+            path_file = os.path.relpath(infile, sharad_root)
+            #path_file = infile.replace(sharad_root, '')
             assert path_file.endswith('_a.dat')
             data_file = os.path.basename(path_file).replace('_a.dat', '')
             path_file = os.path.dirname(path_file)
@@ -203,10 +203,11 @@ def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD
 
 
 def main():
+
     parser = argparse.ArgumentParser(description='SHARAD Pipeline')
     parser.add_argument('tasks', nargs='*', help="Tasks to run",
                         default=['rsr', 'foc'])
-    parser.add_argument('-o', '--output', default='/disk/kea/SDS/targ/xtra/SHARAD',
+    parser.add_argument('-o', '--output', default=None,
                         help="Output base directory")
 
     parser.add_argument('-j', '--jobs', type=int, default=1,
@@ -225,6 +226,10 @@ def main():
                         help="Dry run. Build task list but do not run")
     parser.add_argument('--tracklist', default="elysium.txt",
                         help="List of tracks to process")
+
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                        help="Root directory (default: environment variable SDS")
+
     parser.add_argument('-r', '--maxrequests', type=int, default=0,
                         help="Maximum number of processing requests to process")
     # Use --maxrequests 1 instead of -1
@@ -242,23 +247,28 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="pipeline: [%(levelname)-7s] %(message)s")
 
-    lookup = read_tracklist(args.tracklist)
+
+    if args.output is None:
+        args.output = os.path.join(SDS, 'targ/xtra/SHARAD')
+    # strip trailing slash
+    args.output = args.output.rstrip('/')
+
+    # Root ORIG directory
+    sharad_root = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
+    lookup = read_tracklist(args.tracklist, sharad_root=sharad_root)
 
 
     # Build list of processes
     logging.info("Building task list")
     process_list = []
-    # strip trailing slash
-    args.output = args.output.rstrip('/')
-    path_outroot = args.output
 
-    logging.debug("Base output directory: %s", path_outroot)
+    logging.debug("Base output directory: %s", args.output)
 
     nrequests = 0
     SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
 
     tasks = build_task_order(args.tasks, PROCESSORS)
-    
+
     for outprefix in tasks:
         prod = PROCESSORS[outprefix]
         indir = ''
@@ -268,7 +278,7 @@ def main():
         for lookup_line, item in enumerate(lookup, start=1):
             infile = item['infile']
             ivars = item.copy()
-            ivars['orig_root'] = SHARADroot.rstrip('/')
+            ivars['orig_root'] = sharad_root.rstrip('/')
             ivars['targ_root'] = args.output
 
             intimes = [] # input file names and modification times

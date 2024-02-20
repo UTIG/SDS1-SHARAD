@@ -76,9 +76,8 @@ import beta5 as b5
 
 def main():
     desc = 'Run SHARAD altimetry processing'
-    default_output_path = '/disk/kea/SDS/targ/xtra/SHARAD/alt'
     parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument('-o', '--output', default=default_output_path,
+    parser.add_argument('-o', '--output', default=None,
                         help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5',
                         choices=('hdf5', 'csv', 'none'),
@@ -95,6 +94,10 @@ def main():
                         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0,
                         help="Maximum number of tracks to process")
+
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                        help="Root directory (default: environment variable SDS")
+
     args = parser.parse_args()
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
@@ -102,16 +105,19 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="run_altimetry: [%(levelname)-7s] %(message)s")
 
+    if args.output is None:
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/alt')
+
     # Set number of cores
     nb_cores = args.jobs
-    kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
+    kernel_path = os.path.join(args.SDS, 'orig/supl/kernels/mro/mro_v01.tm')
     spice.furnsh(kernel_path)
 
     # Build list of processes
     logging.info('build task list')
     process_list = []
-    path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-    path_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    path_root = os.path.join(args.SDS, 'targ/xtra/SHARAD/cmp/')
+    path_edr = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
 
     ext = {'hdf5':'.h5', 'csv':'.csv', 'none':''}
 
@@ -138,6 +144,7 @@ def main():
             process_list.append({
                 'inpath': path,
                 'outfile': outfile,
+                'SDS': args.SDS,
                 'idx_start': 0,
                 'idx_end': None,
                 'finethreads': args.finethreads,
@@ -167,12 +174,12 @@ def main():
     print('done')
 
 
-def alt_processor(inpath:str, outfile: str, finethreads: int, idx_start=0, idx_end=None, save_format=''):
+def alt_processor(inpath:str, outfile: str, SDS: str, finethreads: int, idx_start=0, idx_end=None, save_format=''):
     try:
         # create cmp path
-        path_root_alt = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
-        path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-        path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+        path_root_alt = os.path.join(SDS, 'targ/xtra/SHARAD/alt/')
+        path_root_cmp = os.path.join(SDS, 'targ/xtra/SHARAD/cmp/')
+        path_root_edr = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
         # Relative path to this file
         fname = os.path.basename(inpath)
         obn = fname[2:9] # orbit name
@@ -184,8 +191,8 @@ def alt_processor(inpath:str, outfile: str, finethreads: int, idx_start=0, idx_e
         cmp_path = os.path.join(path_root_cmp, reldir, 'ion',
                                 fname.replace('_a.dat', '_s.h5'))
         #cmp_path = path_root_cmp+path_file+'ion/'+data_file.replace('_a.dat','_s.h5')
-        label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+        label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+        aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
         science_path = inpath.replace('_a.dat', '_s.dat')
         if not os.path.exists(cmp_path):

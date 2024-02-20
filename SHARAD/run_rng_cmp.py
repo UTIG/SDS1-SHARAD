@@ -41,7 +41,7 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
 
-def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
+def cmp_processor(infile, outdir, SDS, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
                   chrp_filt=True, verbose=False, saving=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
@@ -67,15 +67,15 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
     #if chrp_filt:
         time_start = time.time()
         # Get science data structure
-        label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+        label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+        aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
         # Load data
         science_path = infile.replace('_a.dat', '_s.dat')
         data = pds3.read_science(science_path, label_path, science=True)
         aux  = pds3.read_science(infile      , aux_path,   science=False)
 
         stamp1 = time.time()-time_start
-        logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
+        logging.debug("%s: data loaded in %0.1f seconds", taskname, stamp1)
 
         # Array of indices to be processed
         if idx_start is None or idx_end is None:
@@ -83,7 +83,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             idx_end = len(data)
         idx = np.arange(idx_start, idx_end)
 
-        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
+        logging.debug('%s: Length of track: %d', taskname, len(idx))
 
         # Chop raw data
         raw_data = np.zeros((len(idx), 3600), dtype=np.complex128)
@@ -145,15 +145,14 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             E_track[start:end, 1] = sigma
 
         stamp3 = time.time() - time_start - stamp1
-        logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
+        logging.debug('%s Data compressed in %0.2f seconds', taskname, stamp3)
 
         if saving:
             data_file   = os.path.basename(infile)
             outfilebase = data_file.replace('_a.dat', '_s.h5')
             outfile     = os.path.join(outdir, outfilebase)
-            logging.debug('{:s}: Saving to folder: {:s}'.format(taskname,outdir))
-            if not os.path.exists(outdir):
-                os.makedirs(outdir)
+            logging.debug('%s: Saving to folder: %s', taskname,outdir)
+            os.makedirs(outdir, exist_ok=True)
 
             # restructure of data save
             real = np.array(np.round(cmp_track.real), dtype=np.int16)
@@ -178,16 +177,16 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             cmp.plotting.plot_radargram(cmp_track, tx, samples=3600)
 
     except Exception: # pylint: disable=W0703
-        logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
+        logging.error('%s: Error processing file %s', taskname, infile)
         for line in traceback.format_exc().split("\n"):
-            logging.error('{:s}: {:s}'.format(taskname, line))
+            logging.error('%s: %s'.format(taskname, line)
         return 1
-    logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
+    logging.info('%s: Success processing file %s', taskname, infile)
     return 0
 
 def main():
     parser = argparse.ArgumentParser(description='Run range compression')
-    parser.add_argument('-o', '--output', default='/disk/kea/SDS/targ/xtra/SHARAD/cmp',
+    parser.add_argument('-o', '--output', default=None,
                         help="Output base directory")
 
     parser.add_argument('-j', '--jobs', type=int, default=4,
@@ -200,6 +199,8 @@ def main():
                         help="List of tracks to process")
     parser.add_argument('--maxtracks', type=int, default=0,
                         help="Maximum number of tracks to process")
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                        help="Root directory (default: environment variable SDS")
 
     args = parser.parse_args()
 
@@ -207,6 +208,9 @@ def main():
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="run_rng_cmp: [%(levelname)-7s] %(message)s")
+
+    if args.output is None:
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/cmp')
 
     # Set number of cores
     nb_cores = args.jobs
@@ -233,7 +237,7 @@ def main():
         #idx_end = h5file[orbit]['idx_end'][0]
 
         # check if file has already been processed
-        path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/', '')
+        path_file = infile.replace(os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/'), '')
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
         outdir    = os.path.join(path_outroot, path_file, 'ion')
@@ -251,7 +255,7 @@ def main():
     if args.dryrun:
         sys.exit(0)
 
-    logging.info("Start processing {:d} tracks".format(len(process_list)))
+    logging.info("Start processing %d tracks", len(process_list))
 
     start_time = time.time()
 
@@ -270,11 +274,11 @@ def main():
         for i, result in enumerate(results):
             dummy = result.get()
             if dummy == 1:
-                logging.error("{:s}: Problem running pulse compression".format(process_list[i][4]))
+                logging.error("%s: Problem running pulse compression",process_list[i][4])
             else:
-                logging.info("{:s}: Finished pulse compression".format(process_list[i][4]))
+                logging.info("%s: Finished pulse compression", process_list[i][4])
 
-    logging.info("Done in {:0.2f} seconds".format(time.time() - start_time))
+    logging.info("Done in %0.2f seconds", time.time() - start_time)
 
 
 if __name__ == "__main__":

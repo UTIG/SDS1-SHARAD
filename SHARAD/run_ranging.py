@@ -45,7 +45,8 @@ def main():
     parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
     parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
     parser.add_argument('--maxechoes', type=int, default=0, help="Maximum number of echoes to process in a track")
-    parser.add_argument('--SDS', default=os.getenv('SDS'), help="Override SDS environment variable")
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                        help="Root directory (default: environment variable SDS")
     parser.add_argument('--clutteronly', action="store_true", help="Cluttergram simulation only")
 
     args = parser.parse_args()
@@ -63,8 +64,8 @@ def main():
     # Build list of processes
     logging.info('build task list')
     process_list = []
-    path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-    path_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    path_root = os.path.join(args.SDS, 'targ/xtra/SHARAD/cmp/')
+    path_edr = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
     path_out = args.output
 
     ext = {'hdf5':'.h5','csv':'.csv', 'none':''}
@@ -90,18 +91,19 @@ def main():
                     #'outputfile' : outfile,
                     'idx_start' : idx_start,
                     'idx_end' : idx_end,
+                    'SDS': args.SDS,
                     'save_format' : args.ofmt,
                     'tasknum': tasknum,
                     'clutterfile': clutterfile,
                     'b_noprogress': b_noprogress,
                     'maxechoes': args.maxechoes,
                     })
-                logging.debug("[{:d}] {:s}".format(tasknum, str(process_list[-1])))
+                logging.debug("[%d] %s", tasknum, str(process_list[-1]))
                 tasknum += 1
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
-        logging.info("Limiting to first {:d} tracks".format(args.maxtracks))
+        logging.info("Limiting to first %d tracks", args.maxtracks)
         process_list = process_list[0:args.maxtracks]
 
     if len(process_list) % 2 != 0:
@@ -114,16 +116,16 @@ def main():
 
     rlist = [] # result list
     if args.jobs <= 1:
-        for i, t in enumerate(process_list):
+        for i, t in enumerate(process_list, start=1):
             result = process_rng(**t)
             rlist.append(result) # tuple of two numbers
-            logging.info("Finished task {:d} of {:d}".format(i+1, len(process_list)))
+            logging.info("Finished task %d of %d".format(i, len(process_list)))
     else:
         pool = multiprocessing.Pool(args.jobs)
         results = [pool.apply_async(process_rng, [], t) for t in process_list]
-        for i, result in enumerate(results):
+        for i, result in enumerate(results, start=1):
             rlist.append(result.get())
-            logging.info("Finished task {:d} of {:d}".format(i+1, len(process_list)))
+            logging.info("Finished task %d of %d".format(i, len(process_list)))
     logging.info('done with tasks.')
 
 
@@ -165,15 +167,14 @@ def main():
     if args.qcdir:
         # Save debugging outputs to qc directory if requested
         logging.debug("Saving qc to " + args.qcdir)
-        if not os.path.exists(args.qcdir):
-            os.makedirs(args.qcdir)
+        os.makedirs(args.qcdir, exist_ok=True)
         np.save(os.path.join(args.qcdir, 'ranging_result.npy'), rlist)
         plt.savefig(os.path.join(args.qcdir, 'ranging_result.pdf'))
 
     plt.show()
 
 
-def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0, clutterfile=None,
+def process_rng(inpath, SDS, idx_start=None, idx_end=None, save_format='', tasknum=0, clutterfile=None,
                 b_noprogress=False, bplot=False, maxechoes=0):
 
     """
@@ -194,10 +195,10 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
     try:
         taskname = "task{:03d}".format(tasknum)
         # create cmp path
-        path_root_rng = '/disk/kea/SDS/targ/xtra/SHARAD/rng/'
-        path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-        path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-        dtm_path = '/disk/daedalus/sds/orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff'
+        path_root_rng = os.path.join(SDS, 'targ/xtra/SHARAD/rng/')
+        path_root_cmp = os.path.join(SDS, 'targ/xtra/SHARAD/cmp/')
+        path_root_edr = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
+        dtm_path = os.path.join(SDS, 'orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff')
         # Relative path to this file
         fname = os.path.basename(inpath)
         obn = fname[2:9] # orbit name
@@ -207,8 +208,8 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
         logging.debug("reldir: " + reldir)
         logging.debug("path_root_edr: " + path_root_edr)
         cmp_path = os.path.join(path_root_cmp, reldir, 'ion', fname.replace('_a.dat','_s.h5') )
-        label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_label = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+        label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+        aux_label = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
         science_path = inpath.replace('_a.dat','_s.dat')
 
@@ -219,7 +220,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
             logging.warning(cmp_path + " does not exist")
             return 0
 
-        logging.info("{:s}: Reading {:s}".format(taskname, cmp_path))
+        logging.info("%s: Reading %s", taskname, cmp_path)
         co_data = 10
 
         if os.path.exists(clutterfile):
@@ -231,8 +232,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
             clutter_load_path = None
             clutter_save_path = clutterfile
             clutter_save_dir = os.path.dirname(clutterfile)
-            if not os.path.exists(clutter_save_dir):
-                os.makedirs(clutter_save_dir)
+            os.makedirs(clutter_save_dir, exist_ok=True)
 
 
         sim = icd.gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_path,
@@ -249,7 +249,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
         result = np.zeros((20, 3))
         for co_sim in range(12, 25):
 
-            logging.debug("{:s}: icd_ranging(co_sim={:d})".format(taskname, co_sim))
+            logging.debug("%s: icd_ranging(co_sim=%d)", taskname, co_sim)
             #ranging_func = icd.icd_ranging_3
 
             # icd_ranging_cg3 returns delta, dz, min(md)
@@ -262,7 +262,7 @@ def process_rng(inpath, idx_start=None, idx_end=None, save_format='', tasknum=0,
                                #cluttergram_path=clutter_load_path, save_clutter_path=clutter_save_path,
                                do_progress=not b_noprogress, maxechoes=maxechoes)
             j = co_sim - 5
-            logging.info("{:s}: result[{:d}] = {:f} {:f} {:f}".format(taskname, j, \
+            logging.info("%s: result[%d] = %f %f %f", taskname, j, \
                result[j][0], result[j][1], result[j][2]))
 
         if bplot:

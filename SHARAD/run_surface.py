@@ -346,6 +346,9 @@ def main():
                         help='Delete and reprocess files already processed, \
                         only if [orbit] is [all]')
 
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                            help="Root directory (default: environment variable SDS")
+
     args = parser.parse_args()
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
@@ -355,8 +358,11 @@ def main():
     # debug output only if not multiprocessing
     assert not(args.output and args.jobs > 1)
 
-    logging.debug("Building SHARADEnv")
-    senv = SHARADEnv.SHARADEnv()
+    # Construct directory names
+    data_path = os.path.join(args.SDS, 'targ/xtra/SHARAD')
+    orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
+
+    senv = SHARADEnv.SHARADEnv(data_path=data_path, orig_path=orig_path)
 
     #--------------------------
     # Requested Orbits handling

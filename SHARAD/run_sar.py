@@ -28,19 +28,20 @@ from scipy.constants import c
 
 
 
-def sar_processor(path, idx_start=None, idx_end=None,
+def sar_processor(path, SDS, idx_start=None, idx_end=None,
                   sar_window=200):
 
 
-    kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
+    kernel_path = os.path.join(SDS, 'orig/supl/kernels/mro/mro_v01.tm')
     # create cmp path
-    path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/', '')
+    edr_path = os.path.join(SDS, orig/supl/xtra-pds/SHARAD/EDR/')
+    path_file = path.replace(edr_path, '')
     data_file = path_file.split('/')[-1]
     path_file = path_file.replace(data_file, '')
     sfile = data_file.replace('_a.dat', '_s.npy')
     cmp_path = path_root + path_file + 'ion/' + sfile
-    label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-    aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+    label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+    aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
     science_path = path.replace('_a.dat', '_s.dat')
 
     cmp_track = np.load(cmp_path)

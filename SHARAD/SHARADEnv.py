@@ -110,9 +110,15 @@ def make_orbit_info(filename):
 
 class SHARADEnv:
     """ Class for interacting with data files in the SHARAD dataset """
-    def __init__(self, data_path='/disk/kea/SDS/targ/xtra/SHARAD',
-                 orig_path='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'):
+    def __init__(self, data_path:str=None, orig_path:str=None):
         """Get various parameters defining the dataset  """
+
+        if data_path is None:
+            data_path = '/disk/kea/SDS/targ/xtra/SHARAD'
+            logging.warning("Creating SHARADEnv with default data_path parameters, which is deprecated")
+        if orig_path is None:
+            orig_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
+            logging.warning("Creating SHARADEnv with default orig_path parameters, which is deprecated")
 
         self.out = {}
         self.orbitinfo = {}
@@ -142,7 +148,7 @@ class SHARADEnv:
         label_files = glob.glob(globpat)
         label_files.sort()
 
-        logging.debug("Found {:d} label files".format(len(label_files)))
+        logging.debug("Found %d label files", len(label_files))
 
         ## For each label file, get the full name of the basename everything
         ## before the extension

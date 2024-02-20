@@ -40,6 +40,7 @@ import warnings
 import importlib.util
 import multiprocessing
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -87,6 +88,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                   - input: (required) path to EDR
                   - output: (required) path to output file (or None to omit saving)
                   - sharadroot: path to root of SHARAD data
+                  - SDS: Root directory (usually /disk/kea/SDS)
                   - idx_start: (optional)
                   - idx_end: (optional)
       focuser   : Flag for which SAR focuser to use.
@@ -128,52 +130,52 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         idx_start = taskinfo.get('idx_start', None)
         idx_end = taskinfo.get('idx_end', None)
+        SDS = taskinfo.get('SDS', os.getenv('SDS', '/disk/kea/SDS'))
         path = taskinfo['input']
         outputfile = taskinfo['output']
 
         # print info in debug mode
-        logging.debug("{:s}: SAR method: {:s}".format(taskname, focuser))
+        logging.debug("%s: SAR method: %s", taskname, focuser)
         if focuser == 'Delay Doppler v1':
             number_of_looks = np.floor(procparam['ddv1_aperture_time [s]'] * 2 * procparam['ddv1_bandwidth [Hz]'])
-            logging.debug("{:s}: SAR column posting interval [m]: {:f}".format(taskname, procparam['ddv1_posting_distance [m]']))
-            logging.debug("{:s}: SAR aperture length [s]: {:f}".format(taskname, procparam['ddv1_aperture_time [s]']))
-            logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, procparam['ddv1_bandwidth [Hz]']))
-            logging.debug('{:s}: SAR number of looks: {:d}'.format(taskname, int(number_of_looks)))
+            logging.debug("%s: SAR column posting interval [m]: %f", taskname, procparam['ddv1_posting_distance [m]'])
+            logging.debug("%s: SAR aperture length [s]: %f", taskname, procparam['ddv1_aperture_time [s]'])
+            logging.debug('%s: SAR Doppler bandwidth [Hz]: %f', taskname, procparam['ddv1_bandwidth [Hz]'])
+            logging.debug('%s: SAR number of looks: %d', int(number_of_looks))
             del number_of_looks
         elif focuser == 'Matched Filter':
             number_of_looks = np.floor(procparam['mf_aperture_time [s]'] * 2 * procparam['mf_bandwidth [Hz]'])
-            logging.debug("{:s}: SAR column posting interval [m]: {:f}".format(taskname, procparam['mf_posting_distance [m]']))
-            logging.debug("{:s}: SAR aperture length [s]: {:f}".format(taskname, procparam['mf_aperture_time [s]']))
-            logging.debug('{:s}: SAR Doppler bandwidth [Hz]: {:f}'.format(taskname, procparam['mf_bandwidth [Hz]']))
-            logging.debug('{:s}: SAR number of looks: {:d}'.format(taskname, int(number_of_looks)))
-            logging.debug('{:s}: SAR matched filter recalc interval: {:d}'.format(taskname, procparam['mf_recalc_int [samples]']))
-            logging.debug('{:s}: SAR subsurface permittivity: {:f}'.format(taskname, procparam['mf_Er']))
+            logging.debug("%s: SAR column posting interval [m]: %f", taskname, procparam['mf_posting_distance [m]'])
+            logging.debug("%s: SAR aperture length [s]: %f", taskname, procparam['mf_aperture_time [s]'])
+            logging.debug('%s: SAR Doppler bandwidth [Hz]: %f', taskname, procparam['mf_bandwidth [Hz]'])
+            logging.debug('%s: SAR number of looks: %d', taskname, int(number_of_looks))
+            logging.debug('%s: SAR matched filter recalc interval: %d', taskname, procparam['mf_recalc_int [samples]'])
+            logging.debug('%s: SAR subsurface permittivity: %f', taskname, procparam['mf_Er'])
             del number_of_looks
         elif focuser == 'Delay Doppler v2':
-            logging.debug("{:s}: SAR range line interpolation interval [m]: {:f}".format(taskname, procparam['ddv2_interpolate_dx [m]']))
-            logging.debug("{:s}: SAR column posting interval [range lines]: {:f}".format(taskname, procparam['ddv2_posting_interval [range lines]']))
-            logging.debug('{:s}: SAR aperture distance [km]: {:f}'.format(taskname, procparam['ddv2_aperture_dist [km]']))
+            logging.debug("%s: SAR range line interpolation interval [m]: %f".format(taskname, procparam['ddv2_interpolate_dx [m]'])
+            logging.debug("%s: SAR column posting interval [range lines]: %f".format(taskname, procparam['ddv2_posting_interval [range lines]'])
+            logging.debug('%s: SAR aperture distance [km]: %f'.format(taskname, procparam['ddv2_aperture_dist [km]']))
             if len(procparam['ddv2_trim [samples]']) != 0:
-                logging.debug('{:s}: SAR fast-time trim [samples]: {:f}'.format(taskname, procparam['ddv2_trim [samples]']))
+                logging.debug('%f: SAR fast-time trim [samples]: %f'.format(taskname, procparam['ddv2_trim [samples]'])
 
-        SDS = '/disk/kea/SDS'
         # create cmp path
         if sharad_root is None:
             sharad_root = os.path.join(SDS, 'targ/xtra/SHARAD')
         path_root = os.path.join(sharad_root, 'cmp/')
 
-        inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+        inputroot = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
         path_file = os.path.relpath(path, inputroot)
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
         #h5_file = data_file.replace('_a.dat', '_s_1bit.h5')
         h5_file = data_file.replace('_a.dat', '_s.h5')
         cmp_path = os.path.join(path_root, path_file, 'ion', h5_file)
-        label_path = SDS + '/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_path   = SDS + '/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+        label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+        aux_path   = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
         science_path = path.replace('_a.dat', '_s.dat')
 
-        logging.debug("{:s}: Loading cmp data from {:s}".format(taskname, cmp_path))
+        logging.debug("%s: Loading cmp data from %s", taskname, cmp_path)
 
         # load the range compressed and ionosphere corrected data
 
@@ -194,17 +196,17 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             taskname, idx_start, idx_end, len(cmp_track)))
 
         # load the relevant EDR files
-        logging.debug("{:s}: Loading science data from EDR file: {:s}".format(taskname, science_path))
+        logging.debug("%s: Loading science data from EDR file: %s".format(taskname, science_path)
         data = pds3.read_science(science_path, label_path, science=True,
                                  bc=True)[idx_start:idx_end]
 
         auxfile = science_path.replace('_s.dat', '_a.dat')
-        logging.debug("{:s}: Loading auxiliary data from EDR file: {:s}".format(taskname, auxfile))
+        logging.debug("%s: Loading auxiliary data from EDR file: %s".format(taskname, auxfile)
         aux = pds3.read_science(auxfile, aux_path,
                                 science=False, bc=False)[idx_start:idx_end]
 
-        logging.debug("{:s}: EDR sci data length: {:d}".format(taskname, len(data)))
-        logging.debug("{:s}: EDR aux data length: {:d}".format(taskname, len(aux)))
+        logging.debug("%s: EDR sci data length: %d".format(taskname, len(data))
+        logging.debug("%s: EDR aux data length: %d".format(taskname, len(aux))
 
         # load relevant spacecraft position information from EDR files
         pri_code = data['PULSE_REPETITION_INTERVAL'].values
@@ -240,7 +242,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         """
 
         # execute sar processing
-        logging.debug("{:s}: Start of SAR processing".format(taskname))
+        logging.debug("%s: Start of SAR processing", taskname)
         if focuser == 'Delay Doppler v1':
             sardata, columns = sar.delay_doppler_v1(cmp_track, procparam['ddv1_posting_distance [m]'],
                                                     procparam['ddv1_aperture_time [s]'],
@@ -264,10 +266,8 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         # save the result
         if saving and outputfile is not None:
             new_path = os.path.dirname(outputfile)
-            logging.debug("{:s}: Saving to file: {:s}".format(taskname, outputfile))
-
-            if not os.path.exists(new_path):
-                os.makedirs(new_path)
+            logging.debug("%s: Saving to file: %s", .format(taskname, outputfile))
+            os.makedirs(new_path, exist_ok=True)
 
             if saving == "hdf5":
                 if focuser != 'Delay Doppler v2':
@@ -308,26 +308,22 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         logging.error('{:s}: Error processing {:s}'.format(taskname, path))
         for line in traceback.format_exc().split("\n"):
-            logging.error('{:s}: {:s}'.format(taskname, line))
+            logging.error('%s: %s', taskname, line)
 
         return 1
 
-    logging.debug('{:s}: Successfully processed file: {:s}'.format(taskname, path))
+    logging.debug('%s: Successfully processed file: %s', taskname, path)
 
     return 0
 
 
 
 def main():
-    SDS = os.getenv('SDS', '/disk/kea/SDS')
-
-    #input_default = os.path.join(SDS, 'targ/xtra/SHARAD')
-    output_default = os.path.join(SDS, 'targ/xtra/SHARAD/foc/')
 
     parser = argparse.ArgumentParser(description='Run SAR processing')
     parser.add_argument('-i', '--input', default=None,
                         help="Input base SHARAD directory")
-    parser.add_argument('-o', '--output', default=output_default,
+    parser.add_argument('-o', '--output', default=None,#output_default,
                         help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5',
                         choices=('hdf5', 'npy', 'none'),
@@ -348,12 +344,22 @@ def main():
     parser.add_argument('--maxtracks', default=None, type=int,
                         help="Max number of tracks to process")
 
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+                        help="Root directory (default: environment variable SDS")
+
     args = parser.parse_args()
+
 
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="run_sar2: [%(levelname)-7s] %(message)s")
+
+
+    if args.output is None:
+        #input_default = os.path.join(SDS, 'targ/xtra/SHARAD')
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/foc/')
+
 
     # Set number of cores
     ncores = args.jobs
@@ -383,12 +389,12 @@ def main():
     }
     if args.params is not None:
         # Load a json file if specified
-        logging.debug("Loading processing parameters from {:s}".format(args.params))
+        logging.debug("Loading processing parameters from %s", args.params)
         with open(args.params, 'r') as configfile:
             try:
                 processing_parameters = json.load(configfile)
             except json.decoder.JSONDecodeError as e:
-                logging.error("Problem parsing {:s}".format(args.params))
+                logging.error("Problem parsing %s", args.params)
                 raise e
 
 
@@ -400,15 +406,15 @@ def main():
 
     # Build list of processes
     process_list = []
-    logging.info("Making task list from {:s}".format(args.tracklist))
-    inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
+    logging.info("Making task list from %s", args.tracklist)
+    inputroot = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR')
     for i, path in enumerate(lookup):
     #for orbit in keys:
     #    gob = int(orbit.replace('/orbit', ''))
     #    path = lookup[gob]
     #    idx_start = h5file[orbit]['idx_start'][0]
     #    idx_end = h5file[orbit]['idx_end'][0]
-        logging.debug("[{:03d} of {:03d}] Making task for {:s}".format(i+1, len(lookup), path))
+        logging.debug("[%03d of %03d] Making task for %s", i+1, len(lookup), path)
 
         # check if file has already been processed
         path_file = os.path.relpath(path, inputroot)
@@ -434,7 +440,7 @@ def main():
 
         outputfile = os.path.join(new_path, data_file.replace('_a.dat', '_s.h5'))
 
-        logging.debug("Looking for {:s}".format(new_path))
+        logging.debug("Looking for %s", new_path)
 
         # For these orbits, process only the range described by these start/end indexes
         orbit_indexes = {
@@ -557,17 +563,18 @@ def main():
             'input': path,
             'output': outputfile,
             'sharad_root': args.input,
+            'SDS': args.SDS,
             'idx_start': orbit_index[0],
             'idx_end': orbit_index[1],
         }
         process_list.append(task)
-        logging.debug("{:s} input:  {:s}".format(task['name'], task['input']))
-        logging.debug("{:s} output: {:s}".format(task['name'], task['output']))
+        logging.debug("%s input:  %s", task['name'], task['input'])
+        logging.debug("%s output: %s", task['name'], task['output'])
 
     #h5file.close()
 
     if args.maxtracks:
-        logging.info("Processing first {:d} tracks".format(args.maxtracks))
+        logging.info("Processing first %d tracks", args.maxtracks)
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
@@ -575,7 +582,7 @@ def main():
         print(process_list)
         sys.exit(0)
 
-    logging.info("Start processing {:d} tracks".format(len(process_list)))
+    logging.info("Start processing %d tracks", len(process_list))
     start_time = time.time()
 
 #    params_pos = (posting,aperture,bandwidth,focuser,recalc,Er)
@@ -587,7 +594,7 @@ def main():
             #sar_processor( *params2, **params_named )
     else:
         run_mp(ncores, processing_parameters, focuser, params_named, process_list)
-    logging.info("Done in {:0.1f} seconds".format(time.time() - start_time))
+    logging.info("Done in %0.1f seconds", time.time() - start_time)
 
 def run_mp(ncores, processing_parameters, focuser, params_named, process_list):
     pool = multiprocessing.Pool(ncores)
@@ -596,12 +603,12 @@ def run_mp(ncores, processing_parameters, focuser, params_named, process_list):
                                  params_named['saving'], params_named['debug']))
                for t in process_list]
 
-    for i, result in enumerate(results):
+    for i, result in enumerate(results, start=1):
         if result.get() == 1:
             lvl, fmtstr = logging.ERROR, "Task {:d} of {:d} had a problem."
         else:
             lvl, fmtstr = logging.INFO, "Task {:d} of {:d} successful."
-        logging.log(lvl, fmtstr.format(i+1, len(process_list)))
+        logging.log(lvl, fmtstr.format(i, len(process_list)))
 
 
 

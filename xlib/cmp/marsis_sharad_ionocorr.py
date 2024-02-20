@@ -89,29 +89,30 @@ altimetry_error = np.zeros((10, int((maxSZA - minSZA) / dSZA)))
 altimetry_error[0, :] = np.arange(60, 100, dSZA, dtype=float)
 
 
+SDS = os.getenv('SDS', '/disk/kea/SDS')
 
 # import MOLA dataset for the NE quarter of MARS
 if area == 'NP AREA1':
-    molaS = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr44n090hb.img')
-    molaN = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr88n090hb.img')
+    molaS = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr44n090hb.img'))
+    molaN = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr88n090hb.img'))
     mola = np.concatenate((molaN, molaS), axis=0); del molaS, molaN
     mola_limits = [0, 88, 90, 180]
-#    mola = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr90n000gb.img')
+#    mola = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr90n000gb.img'))
 #    mola_limits = [0, 90, 0, 180]
 elif area == 'OlympiaUndae':
-    molaW = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr88n090hb.img')
-    molaE = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr88n180hb.img')
+    molaW = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr88n090hb.img'))
+    molaE = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr88n180hb.img'))
     mola = np.concatenate((molaW, molaE), axis=1); del molaW, molaE
     mola_limits = [44, 88, 90, 270]
-#    molaW = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr90n000gb.img')
-#    molaE = L2.load_mola('/disk/kea/SDS/orig/supl/xtra-pds/MOLA/megr90n180gb.img')
+#    molaW = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr90n000gb.img'))
+#    molaE = L2.load_mola(os.path.join(SDS, 'orig/supl/xtra-pds/MOLA/megr90n180gb.img'))
 #    mola = np.concatenate((molaW, molaE), axis=1); del molaW, molaE
 #    mola_limits = [0, 90, 0, 360]
 
 # normalize MOLA to IAU2000
 mola = L2.normalize_mola(mola, mola_limits, ddeg=128)
 
-SHARAD_root="/disk/kea/SDS/targ/xtra/SHARAD"
+SHARAD_root = os.path.join(SDS, "targ/xtra/SHARAD")
 
 # look into chunking the data in order to be able to load the data within each
 # SZA bin
@@ -136,15 +137,16 @@ chunks = chunks.astype(int)
 # loop through the various SZA bins and calculate a TEC
 #ii = 39
 #if ii == 39:
+p_SDS = Path(SDS)
 for ii in range(np.size(sza_bin, axis=1)):
 #for ii in range(0, 50):
 #for ii in [24, 70, 79]:
     
-    path1 = Path('/disk/kea/SDS/targ/xtra/MARSIS/sza/' + area + '/' + str(dSZA) + ' dSZA/' + 
+    path1 = SDS / Path('targ/xtra/MARSIS/sza/' + area + '/' + str(dSZA) + ' dSZA/' + 
             str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.npz')
 
     if path1.exists():
-        path2 = Path('/disk/kea/SDS/targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + 
+        path2 = SDS / Path('targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + 
             str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.h5')
         if path2.exists():
 
@@ -166,8 +168,9 @@ for ii in range(np.size(sza_bin, axis=1)):
 
                     # load the data correpsonding to the particular SZA bin
                     # under analysis
-                    mar_data = np.load('/disk/kea/SDS/targ/xtra/MARSIS/sza/' + area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.npz')
-                    sha_fn = '/disk/kea/SDS/targ/xtra/SHARAD/sza/' + area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA) + '/data.h5'
+                    sza_bin_relpath = area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA)
+                    mar_data = np.load(os.path.join(SDS, 'targ/xtra/MARSIS/sza', sza_bin_relpath, 'data.npz')
+                    sha_fn = os.path.join(SDS, 'targ/xtra/SHARAD/sza', sza_bin_relpath, 'data.h5')
 
                     # chunk the raw sharad data
                     start_ind = jj * chunk_sharad_size

@@ -51,9 +51,8 @@ debug = False
 
 
 # define files to be read in
-fil = open(file)
-a = fil.readlines()
-fil.close()
+with open(file) as fil:
+    a = fil.readlines()
 
 # extract specularity for each line
 ii = 0
