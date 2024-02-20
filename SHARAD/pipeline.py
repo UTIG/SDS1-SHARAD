@@ -56,7 +56,8 @@ import importlib.util
 import re
 import subprocess
 import tempfile
-import psutil
+
+#import psutil
 
 
 PROCESSORS = [
@@ -372,7 +373,7 @@ def main():
         # Wait for everything using this processor to finish
         logging.info("Waiting for " + prod["Name"] + " to finish.");
         for result in results:
-            logging.debug("CPU percent: " + str(psutil.cpu_percent()))
+            #logging.debug("CPU percent: " + str(psutil.cpu_percent()))
             result.get()
     logging.info("All done.");
     return 0
