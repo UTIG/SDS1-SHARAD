@@ -6,18 +6,21 @@ scipy==1.10.0
 numpy==1.23.5
 # pandas>=0.24.2
 pandas==1.5.3
-pvl>=0.3.0
-spiceypy>=3.1.1
-geopandas==0.13.2
-pytest>=6.2.1
-
+pvl==0.3.0
+spiceypy==6.0.0
+geopandas==0.8.1
+pytest==6.2.1
+tables==3.9.2
 # pygdal version must match version of osgeo on freeze.
 # If this fails, make sure you have sourced env/cshrc
 pygdal==3.2.1.10
 
 
-rsr>=1.0.5
+rsr==1.0.7
 #subradar>=1.1.0
-subradar==1.1.1
+subradar==1.1.2
+# subradar 1.1.2 has a bug where it doesn't call out this dependency
+# https://github.com/cgrima/subradar/issues/9
+hdf5storage==0.1.19
 
 coverage

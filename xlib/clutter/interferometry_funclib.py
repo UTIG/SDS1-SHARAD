@@ -465,7 +465,7 @@ def stacked_correlation_map(cmpA, cmpB, fresnel, n=2, az_step=1):
                     corrmap[jj, ii] = np.abs(np.divide(top, bottom))
             else:
                 # running mean method of windowed average
-                ttopm = np.empty((ttop.shape[0] - 1, len(val)), dtype=np.complex)
+                ttopm = np.empty((ttop.shape[0] - 1, len(val)), dtype=complex)
                 tbot_am = np.empty((tbot_a.shape[0] - 1, len(val)))
                 tbot_bm = np.empty((tbot_b.shape[0] - 1, len(val)))
                 for jj in range(len(val)):
@@ -540,7 +540,7 @@ def stacked_interferogram(cmpA, cmpB, fresnel, rollphase, roll=True, n=2, az_ste
             val = (indices[ii] + val).astype(int)
 
             # running mean method
-            temp = np.empty((corr.shape[0] - 1, len(val)), dtype=np.complex)
+            temp = np.empty((corr.shape[0] - 1, len(val)), dtype=complex)
             for jj in range(len(val)):
                 temp[:, jj] = running_mean(corr[:, val[jj]], n)
             output[0:-1, ii] = np.angle(np.mean(temp, axis=1))

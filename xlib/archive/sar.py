@@ -42,7 +42,7 @@ def sar_proc(idx, sc_pos, data, aux, corr_window, track):
 
         et = np.zeros(corr_window+1)
         phase = np.zeros(corr_window+1)
-        signal = np.zeros(corr_window+1, dtype=np.complex)
+        signal = np.zeros(corr_window+1, dtype=complex)
         alongtrack = np.zeros(corr_window+1)
         record = np.zeros((corr_window+1, 2048))
 

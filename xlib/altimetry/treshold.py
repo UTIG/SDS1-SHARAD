@@ -20,7 +20,7 @@ import numpy as np
 import spiceypy as spice
 import pandas as pd
 from scipy.constants import c
-from scipy.ndimage.interpolation import shift
+from scipy.ndimage import shift
 #import matplotlib.pyplot as plt
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))

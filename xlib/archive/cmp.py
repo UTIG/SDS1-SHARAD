@@ -332,7 +332,7 @@ def iono_bruce_refchirp(maxE, resolution, A=None, txval=20, rxval=20):
         A = np.pad(A,(0,2268-2048),'constant',constant_values=0)
 
     phi = 2*np.pi*(t*FL+a/2*t**2)
-    fs = np.zeros((maxE*resolution,3600),dtype=np.complex_)
+    fs = np.zeros((maxE*resolution,3600),dtype=complex)
     for i in range(0,maxE*resolution):
         E = i/resolution
         phi2 = E*1E+16/0.29*(FL+a*t)**(-1.93)

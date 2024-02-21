@@ -331,7 +331,7 @@ def gen_doppler_trace_buffered(gen_radargram, dp_wdw: int, ntraces: int):
     for ii, trace in enumerate(gen_radargram):
         if buffer is None:
             nsamples = len(trace)
-            buffer = np.empty((2*dp_wdw, nsamples), dtype=np.complex128)
+            buffer = np.empty((2*dp_wdw, nsamples), dtype=complex)
 
         # Shift data in buffer
         buffer[0:-1, :] = buffer[1:, :]
@@ -383,7 +383,7 @@ def zero_doppler_filter(gen_radargram, ft_avg: int, ntraces: int):
     for i, (jj, doppler_r) in enumerate(gen_doppler):
         if buffer is None:
             nsamples = len(doppler_r)
-            buffer = np.empty((2*dp_wdw, nsamples), dtype=np.complex128)
+            buffer = np.empty((2*dp_wdw, nsamples), dtype=complex)
 
         rmean = running_mean(doppler_r, ft_avg)
         trace = rmean - np.mean(rmean)

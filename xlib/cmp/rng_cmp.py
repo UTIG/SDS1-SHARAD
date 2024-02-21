@@ -48,7 +48,7 @@ def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
     if iono:
         if custom is None:
             # Initialize filter array
-            fs = np.empty((maxTECU*resolution, 3600), dtype=np.complex_)
+            fs = np.empty((maxTECU*resolution, 3600), dtype=complex)
             for i in range(0, maxTECU*resolution):
                 # Calculate empiric E value
                 E = i*1E+16/(0.29*resolution)
@@ -413,7 +413,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
     return 0
 
 def chop_raw_data(data, idx, idx_start):
-    raw_data = np.zeros((len(idx), 3600), dtype=np.complex)
+    raw_data = np.zeros((len(idx), 3600), dtype=complex)
     for j in range(3600):
         k = 'sample' + str(j)
         raw_data[:, j] = data[k][idx].values
