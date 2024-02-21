@@ -153,9 +153,12 @@ def read_science(data_path, label_path, science=True, bc=True):
     # GNG QUESTION: should this thing "break" on a successful load?
     try:
         if science:
-            science_label = pvl.load(data_path.replace('_a_s.dat', '_a.lbl'))
+            science_label_filename = data_path.replace('_a_s.dat', '_a.lbl')
+            science_label = pvl.load(science_label_filename)
         else:
-            science_label = pvl.load(data_path.replace('_a_a.dat', '_a.lbl'))
+            science_label_filename = data_path.replace('_a_a.dat', '_a.lbl')
+            science_label = pvl.load(science_label_filename)
+        logging.debug("Read science label from %s", science_label_filename)
     except Exception as e: # TODO: be more specific: FileNotFound exception?
         logging.info("pds3lbl: Handling exception %r", e)
         new_path, _ = data_path.rsplit('/', 1)
@@ -170,13 +173,14 @@ def read_science(data_path, label_path, science=True, bc=True):
 
     if science:
         mode_id = science_label['FILE']['INSTRUMENT_MODE_ID']
-        if mode_id in bits8: pseudo_samples = 3600
-        elif mode_id in bits6: pseudo_samples = 2700
-        elif mode_id in bits4: pseudo_samples = 1800
+        if mode_id in bits8:
+            pseudo_samples = 3600
+        elif mode_id in bits6:
+            pseudo_samples = 2700
+        elif mode_id in bits4:
+            pseudo_samples = 1800
         else:
-            # GNG: TODO: raise an exception?
-            print('Error while reading science label! Invalid mode id', mode_id)
-            return 0
+            raise ValueError('Error while reading science label! Invalid mode id %d' % mode_id)
 
         # If it is science data, this has to be added here since it is not
         # contained in the science ancilliary label file
@@ -223,6 +227,7 @@ def read_science(data_path, label_path, science=True, bc=True):
             conv[:, 0:3600:2] = s[:, 0:1800] >> 4
             conv[:, 1:3600:2] = s[:, 0:1800] & 0xff
             for i in range(3600):
+                # TODO: should this below be conv[:, i]?  GNG
                 dfr['sample'+str(i)] = pd.Series(conv, index=dfr.index)
         else:
             raise ValueError("Unexpected value for pseudo_samples = %d" % pseudo_samples)
@@ -258,8 +263,6 @@ def read_science(data_path, label_path, science=True, bc=True):
 
                 conv = np.array([bit_select2(bits, start_bit, dtype) for bits in bitdata])
                 dfr[name] = pd.Series(conv, index=dfr.index)
-
-    raise Exception('Quit Early for testing')
 
     return dfr
 
