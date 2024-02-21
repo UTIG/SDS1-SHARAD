@@ -50,8 +50,9 @@ def read_science(data_path, label_path, science=True, bc=True):
     label file.
     """
 
-    logging.debug("pds3lbl::read_science reading data  " + data_path)
-    logging.debug("pds3lbl::read_science reading label " + label_path)
+    logging.debug("pds3lbl::read_science science=%r bc=%r", science, bc)
+    logging.debug("pds3lbl::read_science reading data  %s", data_path)
+    logging.debug("pds3lbl::read_science reading label %s", label_path)
 
     # Dictionary for PDS3 data types: Note that floats are currently limited
     # to 64 bit. Higher precisions will be returned as bitstrings. Dates are
@@ -155,7 +156,8 @@ def read_science(data_path, label_path, science=True, bc=True):
             science_label = pvl.load(data_path.replace('_a_s.dat', '_a.lbl'))
         else:
             science_label = pvl.load(data_path.replace('_a_a.dat', '_a.lbl'))
-    except Exception: # TODO: be more specific: FileNotFound exception?
+    except Exception as e: # TODO: be more specific: FileNotFound exception?
+        logging.info("pds3lbl: Handling exception %r", e)
         new_path, _ = data_path.rsplit('/', 1)
         os.chdir(new_path)
         for filename in glob.glob("*.LBL"):
@@ -210,24 +212,21 @@ def read_science(data_path, label_path, science=True, bc=True):
         s = out['samples']
         conv = np.empty((len(s), 3600), dtype='i1')
         if pseudo_samples == 2700:
-            for j in range(len(s)):
-                conv[j] = [x for y in [
-                    [s[j][i]>>2,
-                   ((s[j][i] << 4) & 0x3f) | s[j][i+1] >> 4,
-                   ((s[j][i+1] << 2) & 0x3f) | s[j][i+2] >> 6,
-                     s[j][i+2] & 0x3f] for i in range(0, 2700, 3)] for x in y]
-            for i in range(0, 3600):
+            conv[:, 0:3600:4] = (                                (s[:, 0:2700:3] >> 2))
+            conv[:, 1:3600:4] = ((s[:, 0:2700:3] << 4) & 0x3f) | (s[:, 1:2700:3] >> 4)
+            conv[:, 2:3600:4] = ((s[:, 1:2700:3] << 2) & 0x3f) | (s[:, 2:2700:3] >> 6)
+            conv[:, 3:3600:4] = ((s[:, 2:2700:3] & 0x3f))
+
+            for i in range(3600):
                 dfr['sample' + str(i)] = pd.Series(conv[:, i], index=dfr.index)
         elif pseudo_samples == 1800:
-            for j in range(len(s)):
-                conv[j] = [x for y in [[s[j][i] >> 4, s[j][i] & 0xf]
-                          for i in range(1800)] for x in y]
-            for i in range(0, 3600):
+            conv[:, 0:3600:2] = s[:, 0:1800] >> 4
+            conv[:, 1:3600:2] = s[:, 0:1800] & 0xff
+            for i in range(3600):
                 dfr['sample'+str(i)] = pd.Series(conv, index=dfr.index)
         else:
-            # GNG: TODO: raise an exception?
-            print('This error should not occur. Something horribly went wrong')
-            return 0
+            raise ValueError("Unexpected value for pseudo_samples = %d" % pseudo_samples)
+
     if bc:
         # Replace the bitstrings
         # Read bitcolumns. These have been previously saved in np.void format
@@ -255,11 +254,13 @@ def read_science(data_path, label_path, science=True, bc=True):
                 if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
                     dtype = 'bool'
                 if G_DEBUG:
-                    logging.debug("start_bit={:d} nb_bits={:d} dtype=s"\
-                                  .format(start_bit, nb_bits, dtype))
+                    logging.debug("start_bit=%d nb_bits=%d dtype=s", start_bit, nb_bits, dtype)
 
                 conv = np.array([bit_select2(bits, start_bit, dtype) for bits in bitdata])
                 dfr[name] = pd.Series(conv, index=dfr.index)
+
+    raise Exception('Quit Early for testing')
+
     return dfr
 
 def tobit(string):
