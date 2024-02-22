@@ -104,7 +104,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     if rdg is None: # pragma: no cover
         raise DataMissingException("No CMP data for orbit %s", orbit)
 
-    if alt_data == True:
+    if alt_data: # == True:
         alt = senv.alt_data(orbit, typ='beta5', ext='h5', quality_flag=True)
         if alt is None: # pragma: no cover
             logging.info("No Altimetry Data for orbit %s", orbit)
@@ -171,7 +171,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     #----------
     # Archiving
 
-    if alt_data == False:
+    if not alt_data:
         flag = np.full(len(surf_y), 0)
     out = {'y':surf_y, 'amp':surf_amp, 'flag':flag, } 
            #'noise':noise, 'pdb':20*np.log10(surf_amp)}
@@ -424,8 +424,7 @@ def main():
                 # Debugging output
                 outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
                 logging.debug("Saving to %s", outfile)
-                if not os.path.exists(args.output):
-                    os.makedirs(args.output)
+                os.makedirs(args.output, exist_ok=True)
                 np.save(outfile, srf)
         else:
             # Do use the multiprocessing package
