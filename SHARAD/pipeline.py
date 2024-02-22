@@ -59,7 +59,7 @@ import tempfile
 
 #import psutil
 
-# Assumes dictionary is ordered (python3.9)
+# Assumes dictionary is ordered (python3.7)
 assert sys.version_info[0:2] >= (3,7), "Dictionaries aren't ordered!"
 # key is previous 'OutPrefix'
 PROCESSORS = {
@@ -110,7 +110,6 @@ PROCESSORS = {
         "Processor": "run_sar2.py",
         "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
                       "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
-        "OutPrefix": "foc",
         # TODO: GNG -- suggest spaces become underscores
         # Other flags might result in other outputs.  For these we need a different command line
         # option makes sense.
@@ -126,7 +125,6 @@ PROCESSORS = {
         "Inputs": ["_s.h5", "_s_TECU.txt"],
         "Processor": "run_ranging.py",
         "Libraries": ["xlib/misc/hdf.py", "xlib/rng/icd.py"],
-        "OutPrefix": "rng",
         "Outdir": "icd",
         "Outputs": ["_a.cluttergram.npy"],
     },
@@ -258,7 +256,11 @@ def main():
 
     nrequests = 0
     SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-    for outprefix, prod in PROCESSORS.items():
+
+    tasks = build_task_order(args.tasks, PROCESSORS)
+    
+    for outprefix in tasks:
+        prod = PROCESSORS[outprefix]
         indir = ''
         proc = ''
         results = []
@@ -378,9 +380,13 @@ def main():
     logging.info("All done.");
     return 0
 
-def build_task_order(tasks, processors, maxdepth=100, depth=0):
+def build_task_order(tasks, processors):
     """ Given a list of task names from the command line,
     get the list of all the tasks to be done.
+    This currently assumes just one prerequisite, but that would be
+    easy to fix.
+    Tasks are output in an order that processes one final product first then
+    goes to the next "final" product.
     """
     # Construct list of dependencies in reverse order
     tasks_out1 = []
@@ -388,7 +394,7 @@ def build_task_order(tasks, processors, maxdepth=100, depth=0):
     for task in reversed(tasks):
         tasks_out1.append(task)
         prereq = processors[task]['InPrefix']
-        while prereq != '':
+        while prereq != '': # assumes no cycles or branches in dependencies
             tasks_out1.append(prereq)
             prereq = processors[prereq]
 
