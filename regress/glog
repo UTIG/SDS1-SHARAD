@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Log the run of a script to a fixed file.
+S0=`basename $0`
+D0=`dirname $0`
+LOGDIR=$D0/logs
+
+PREFIX=`basename $1`
+FILENAME=${PREFIX}-`date '+%Y%j%H%M%S.log'`
+FILEPATH=$LOGDIR/$FILENAME
+
+mkdir -p $LOGDIR
+echo "$S0: $*"
+echo "$S0: Logging to $FILEPATH"
+# Combine stderr and stdout to stdout
+$* 2>&1 | tee $FILEPATH
+echo "$S0: Logged to $FILEPATH"
+ENDTIME=`date '+%Y%j-%H%M%S'`
+echo "$S0: Command completed at $ENDTIME" >> $FILEPATH
