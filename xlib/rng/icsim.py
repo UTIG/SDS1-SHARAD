@@ -141,7 +141,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     # Calculate cartesian coordinates for all coordinates on the map being used.
     logging.debug("Precomputing cartesian coordinates of interest")
-    dem_mask = np.zeros_like(dem, dtype=np.bool)
+    dem_mask = np.zeros_like(dem, dtype=bool)
     for pos in range(Necho1):
         # Extract DTM topography
         lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],

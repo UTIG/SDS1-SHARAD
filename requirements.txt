@@ -1,14 +1,14 @@
 bitstring>=3.1.5
-h5py>=2.9.0
+h5py==3.10.0
 # Lock scipy pandas etc around January 2023
 matplotlib==3.7.4
-scipy==1.10.0
-numpy==1.23.5
+scipy==1.11.4
+numpy==1.26.4
 # pandas>=0.24.2
-pandas==1.5.3
-pvl==0.3.0
+pandas==2.1.4
+pvl==1.3.2
 spiceypy==6.0.0
-geopandas==0.8.1
+geopandas==0.14.2
 pytest==6.2.1
 tables==3.9.2
 # pygdal version must match version of osgeo on freeze.
@@ -18,7 +18,8 @@ pygdal==3.2.1.10
 
 rsr==1.0.7
 #subradar>=1.1.0
-subradar==1.1.2
+#subradar==1.1.2
+subradar==1.1.0
 # subradar 1.1.2 has a bug where it doesn't call out this dependency
 # https://github.com/cgrima/subradar/issues/9
 hdf5storage==0.1.19
