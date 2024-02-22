@@ -113,9 +113,6 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
 
     """
     MB = 1024*1024
-    # Process transect in blocks of up to this many traces
-    blocktraces = 100_000
-    #idx_end = 1000
     time0 = time.time()
     #============================
     # Read and prepare input data
