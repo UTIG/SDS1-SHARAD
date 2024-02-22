@@ -59,9 +59,11 @@ import tempfile
 
 #import psutil
 
-
-PROCESSORS = [
-    {
+# Assumes dictionary is ordered (python3.9)
+assert sys.version_info[0:2] >= (3,7), "Dictionaries aren't ordered!"
+# key is previous 'OutPrefix'
+PROCESSORS = {
+    'cmp': {
         "Name": "Run Range Compression",
         "InPrefix": '',
         "Inputs": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
@@ -72,10 +74,9 @@ PROCESSORS = [
         "Outputs": [
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt",
-                    ]
-
+                    ],
     },
-    {
+    'alt': {
         "Name": "Run Altimetry",
         "InPrefix": "cmp",
         # Uses the outputs from run_rng_cmp.py
@@ -85,54 +86,51 @@ PROCESSORS = [
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         "Outputs": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
     },
-    {
+    'srf': {
         "Name": "Run Surface",
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
         "Processor": "run_surface.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
-        "OutPrefix": "srf",
         "Outputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
-    {
+    'rsr': {
         "Name": "Run RSR",
         "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
-        "OutPrefix": "rsr",
         "Outputs": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
     },
-#    Don't do SAR on TACC
-#    {
-#        "Name": "Run SAR",
-#        "InPrefix": "cmp",
-#        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
-#                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
-#        "Processor": "run_sar2.py",
-#        "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
-#                      "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
-        #"OutPrefix": "foc",
+    'foc': {
+        "Name": "Run SAR",
+        "InPrefix": "cmp",
+        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
+        "Processor": "run_sar2.py",
+        "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
+                      "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
+        "OutPrefix": "foc",
         # TODO: GNG -- suggest spaces become underscores
         # Other flags might result in other outputs.  For these we need a different command line
         # option makes sense.
-#        "Outputs": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
-#    },
+        "Outputs": ["{0[targ_root]}/foc/{0[path_file]}/5m/5 range lines/40km/{0[data_file]}_s.h5"],
+    },
     # Run ranging needs crossovers, so needs a track file with pairs of tracks
     # and record numbers.  This is a special data product so we can't run it
     # automatically.
-    #{
-    #    "Name": "Run Ranging",
-    #    "InPrefix": "cmp",
-    #    "Indir": "ion",
-    #    "Inputs": ["_s.h5", "_s_TECU.txt"],
-    #    "Processor": "run_ranging.py",
-    #    "Libraries": ["xlib/misc/hdf.py", "xlib/rng/icd.py"],
-    #    "OutPrefix": "rng",
-    #    "Outdir": "icd",
-    #    "Outputs": ["_a.cluttergram.npy"],
-    #},
-]
+    'rng': {
+        "Name": "Run Ranging",
+        "InPrefix": "cmp",
+        "Indir": "ion",
+        "Inputs": ["_s.h5", "_s_TECU.txt"],
+        "Processor": "run_ranging.py",
+        "Libraries": ["xlib/misc/hdf.py", "xlib/rng/icd.py"],
+        "OutPrefix": "rng",
+        "Outdir": "icd",
+        "Outputs": ["_a.cluttergram.npy"],
+    },
+}
 
 def run_command(cmd, output):
     output = output.replace("targ", "note")
@@ -208,6 +206,8 @@ def read_tracklist(filename, SHARADroot='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD
 
 def main():
     parser = argparse.ArgumentParser(description='SHARAD Pipeline')
+    parser.add_argument('tasks', nargs='*', help="Tasks to run",
+                        default=['rsr', 'foc'])
     parser.add_argument('-o', '--output', default='/disk/kea/SDS/targ/xtra/SHARAD',
                         help="Output base directory")
 
@@ -258,7 +258,7 @@ def main():
 
     nrequests = 0
     SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-    for prod in PROCESSORS:
+    for outprefix, prod in PROCESSORS.items():
         indir = ''
         proc = ''
         results = []
@@ -377,6 +377,28 @@ def main():
             result.get()
     logging.info("All done.");
     return 0
+
+def build_task_order(tasks, processors, maxdepth=100, depth=0):
+    """ Given a list of task names from the command line,
+    get the list of all the tasks to be done.
+    """
+    # Construct list of dependencies in reverse order
+    tasks_out1 = []
+
+    for task in reversed(tasks):
+        tasks_out1.append(task)
+        prereq = processors[task]['InPrefix']
+        while prereq != '':
+            tasks_out1.append(prereq)
+            prereq = processors[prereq]
+
+    tasks_done = set()
+    tasks_out2 = []
+    for task in reversed(tasks_out1): # return tasks to forward order
+        if task not in tasks_done:
+            tasks_done.add(task)
+            tasks_out2.append(task)
+    return tasks_out2
 
 if __name__ == "__main__":
     # execute only if run as a script
