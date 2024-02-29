@@ -162,9 +162,13 @@ class SHARADEnv:
         #out['orbit_path'] = ['/'.join(f.split('/')[-5:-1])
         #                 for f in label_files]
 
-        self.orbitinfo = defaultdict(list) # map orbit name prefix to full orbit name
+        self.orbitinfo = {} # map orbit name prefix to full orbit name
         for filename in label_files:
             orbit, orbitinfo = make_orbit_info(filename)
+
+            if orbit not in self.orbitinfo:
+                self.orbitinfo[orbit] = []
+
             self.orbitinfo[orbit].append(orbitinfo)
 
         # List files of available for all data products
