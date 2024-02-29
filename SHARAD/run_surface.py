@@ -361,27 +361,29 @@ def main():
     # Requested Orbits handling
 
     logging.debug("Checking orbit processing status")
-    available = senv.processed()['cmp'] # To convert to EDR orbit list
     processed = senv.processed()
-    processable = list(set(processed['cmp']) & set(processed['alt']))
-    processable_unprocessed = list(set(processable))
+    set_available = set(processed['cmp']) # To convert to EDR orbit list
+    set_processable = set_available & set(processed['alt'])
     if 'srf' in processed:
-        processable_unprocessed = list(set(processable) - set(processed['srf']))
+        set_processable_unprocessed = set_processable - set(processed['srf'])
+    else:
+        set_processable_unprocessed = set_processable
+
     logging.debug("Done checking orbit processing status")
 
     if args.orbits == ['all']:
-        requested = available
+        set_requested = set_available
     else:
-        requested = args.orbits
+        set_requested = set(args.orbits)
 
     if args.orbitlist:
         # Load list of files from orbit list
-        requested.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
+        set_requested.add(list(np.genfromtxt(args.orbitlist, dtype='str')))
 
     if args.delete:
-        args.orbits = list(set(processable) & set(requested))
+        args.orbits = list(set_processable & set_requested)
     else:
-        args.orbits = list(set(processable_unprocessed) & set(requested))
+        args.orbits = list(set_processable_unprocessed & set_requested)
 
     args.orbits.sort()
 
@@ -391,7 +393,7 @@ def main():
     logging.info("TOTAL: %d orbits to process", len(args.orbits))
 
     if args.dryrun:
-        logging.info("Dry run only -- Orbits: " + ' '.join(args.orbits))
+        logging.info("Dry run only -- Orbits:\n" + '\n'.join(args.orbits))
         #logging.info(f"TOTAL: {len(args.orbits)} to process")
         sys.exit(0)
 
