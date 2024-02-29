@@ -32,6 +32,7 @@ import os
 import sys
 import glob
 import logging
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -161,34 +162,29 @@ class SHARADEnv:
         #out['orbit_path'] = ['/'.join(f.split('/')[-5:-1])
         #                 for f in label_files]
 
-        # TODO: make orbitinfo a defaultdict
-        self.orbitinfo = {} # map orbit name prefix to full orbit name
+        self.orbitinfo = defaultdict(list) # map orbit name prefix to full orbit name
         for filename in label_files:
             orbit, orbitinfo = make_orbit_info(filename)
-
-            if orbit not in self.orbitinfo:
-                self.orbitinfo[orbit] = []
-
             self.orbitinfo[orbit].append(orbitinfo)
 
         # List files of avaialble for all data products
-        for orbit in self.orbitinfo:
-            for subid, suborbit in enumerate(self.orbitinfo[orbit]):
+        for orbit, suborbits in self.orbitinfo.items():
+            for subid, suborbit in enumerate(suborbits):
                 for typ in self.out:
                     if typ == 'EDR_path':
                         path = os.path.join(self.get_edr_path(),
-                                            self.orbitinfo[orbit][subid]['relpath']
+                                            suborbit['relpath']
                                             ) + '/*'
                     elif typ == 'foc_path':
                         path = os.path.join(self.out[typ],
-                                            self.orbitinfo[orbit][subid]['relpath']
+                                            suborbit['relpath']
                                             ) + '/*/*/*/*'
                     else:
                         path = os.path.join(self.out[typ],
-                                            self.orbitinfo[orbit][subid]['relpath']
+                                            suborbit['relpath']
                                             ) + '/**/' + suborbit['name'] + '*'
                     files = glob.glob(path)
-                    self.orbitinfo[orbit][subid][typ.replace('_','')] = files
+                    suborbit[typ.replace('_','')] = files
 
         #out['dataset'] = os.path.basename(out['data_path'])
         #logging.debug("dataset: " + out['dataset'])
