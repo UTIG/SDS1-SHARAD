@@ -263,7 +263,7 @@ def process_rng(inpath, SDS, idx_start=None, idx_end=None, save_format='', taskn
                                do_progress=not b_noprogress, maxechoes=maxechoes)
             j = co_sim - 5
             logging.info("%s: result[%d] = %f %f %f", taskname, j, \
-               result[j][0], result[j][1], result[j][2]))
+               result[j][0], result[j][1], result[j][2])
 
         if bplot:
             plt.scatter(np.arange(1,25,1), result[:,0], s=30)
