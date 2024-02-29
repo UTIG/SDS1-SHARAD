@@ -153,11 +153,11 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             logging.debug('%s: SAR subsurface permittivity: %f', taskname, procparam['mf_Er'])
             del number_of_looks
         elif focuser == 'Delay Doppler v2':
-            logging.debug("%s: SAR range line interpolation interval [m]: %f".format(taskname, procparam['ddv2_interpolate_dx [m]'])
-            logging.debug("%s: SAR column posting interval [range lines]: %f".format(taskname, procparam['ddv2_posting_interval [range lines]'])
-            logging.debug('%s: SAR aperture distance [km]: %f'.format(taskname, procparam['ddv2_aperture_dist [km]']))
+            logging.debug("%s: SAR range line interpolation interval [m]: %f", taskname, procparam['ddv2_interpolate_dx [m]'])
+            logging.debug("%s: SAR column posting interval [range lines]: %f", taskname, procparam['ddv2_posting_interval [range lines]'])
+            logging.debug('%s: SAR aperture distance [km]: %f', taskname, procparam['ddv2_aperture_dist [km]'])
             if len(procparam['ddv2_trim [samples]']) != 0:
-                logging.debug('%f: SAR fast-time trim [samples]: %f'.format(taskname, procparam['ddv2_trim [samples]'])
+                logging.debug('%f: SAR fast-time trim [samples]: %f', taskname, procparam['ddv2_trim [samples]'])
 
         # create cmp path
         if sharad_root is None:
@@ -196,17 +196,17 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             taskname, idx_start, idx_end, len(cmp_track)))
 
         # load the relevant EDR files
-        logging.debug("%s: Loading science data from EDR file: %s".format(taskname, science_path)
+        logging.debug("%s: Loading science data from EDR file: %s", taskname, science_path)
         data = pds3.read_science(science_path, label_path, science=True,
                                  bc=True)[idx_start:idx_end]
 
         auxfile = science_path.replace('_s.dat', '_a.dat')
-        logging.debug("%s: Loading auxiliary data from EDR file: %s".format(taskname, auxfile)
+        logging.debug("%s: Loading auxiliary data from EDR file: %s", taskname, auxfile)
         aux = pds3.read_science(auxfile, aux_path,
                                 science=False, bc=False)[idx_start:idx_end]
 
-        logging.debug("%s: EDR sci data length: %d".format(taskname, len(data))
-        logging.debug("%s: EDR aux data length: %d".format(taskname, len(aux))
+        logging.debug("%s: EDR sci data length: %d", taskname, len(data))
+        logging.debug("%s: EDR aux data length: %d", taskname, len(aux))
 
         # load relevant spacecraft position information from EDR files
         pri_code = data['PULSE_REPETITION_INTERVAL'].values
@@ -266,7 +266,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         # save the result
         if saving and outputfile is not None:
             new_path = os.path.dirname(outputfile)
-            logging.debug("%s: Saving to file: %s", .format(taskname, outputfile))
+            logging.debug("%s: Saving to file: %s", taskname, outputfile)
             os.makedirs(new_path, exist_ok=True)
 
             if saving == "hdf5":
