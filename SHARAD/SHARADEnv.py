@@ -132,7 +132,7 @@ class SHARADEnv:
 
     def index_files(self):
         """ Index files under the specified root directories """
-        logging.debug("Indexing files in {:s}".format(self.get_edr_path()))
+        logging.debug("Indexing files in %s", self.get_edr_path())
 
         self.out = {}
         # GNG TODO: make this use SDS environment variable
@@ -167,9 +167,9 @@ class SHARADEnv:
             orbit, orbitinfo = make_orbit_info(filename)
             self.orbitinfo[orbit].append(orbitinfo)
 
-        # List files of avaialble for all data products
+        # List files of available for all data products
         for orbit, suborbits in self.orbitinfo.items():
-            for subid, suborbit in enumerate(suborbits):
+            for suborbit in suborbits:
                 for typ in self.out:
                     if typ == 'EDR_path':
                         path = os.path.join(self.get_edr_path(),
@@ -304,8 +304,8 @@ class SHARADEnv:
                 orbit_key = list(data.keys())[0]
                 data = data[orbit_key]
             except (OSError, KeyError) as e:
-                logging.error("Can't read {:s}: {:s}".format(files[0], str(e)))
-                raise(e)
+                logging.error("Can't read %s: %s", files[0], str(e))
+                raise e
 
             out = {'et':data['block0_values'][:, 0]}
             for i, val in enumerate(data['block0_items'][:]):
@@ -538,7 +538,7 @@ class SHARADEnv:
         """
         auxdata = self.aux_data(orbit, count=1)
         if auxdata is None:
-            logging.debug("No data found for orbit '{:s}'".format(orbit))
+            logging.debug("No data found for orbit '%s'", orbit)
             return None
 
         # a=['2006-12-06T02:22:01.945' '2006-12-06T02:22:01.951'
@@ -547,8 +547,7 @@ class SHARADEnv:
             jsec = solar_longitude.ISO8601_to_J2000(tstamp)
             myear, _ = solar_longitude.Ls_J2000(jsec)
         except ValueError:
-            logging.error("Can't parse timestamp for orbit "
-                          "{:s}: '{:s}'".format(orbit, tstamp))
+            logging.error("Can't parse timestamp for orbit %s: %r", orbit, tstamp)
             myear, _ = None, None
 
         return myear
@@ -567,6 +566,7 @@ class SHARADEnv:
 
         sampling: int
             Sampling of the aux data
+        # TODO: remove verbose flag and just do logging
         """
 
         # Aux fields to extract
@@ -626,7 +626,7 @@ class SHARADEnv:
         orbits = self.processed()['cmp']
 
         for i, orbit in enumerate(orbits):
-            if verbose == True:
+            if verbose:
                 print(str(i) + '/' + str(len(orbits)) + ' : ' +orbit)
 
             if self.my(orbit):
