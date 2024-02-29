@@ -286,8 +286,7 @@ def archive_surface(senv, orbit_full, srf_data, typ):
     archive_path = os.path.join(senv.out['srf_path'],
                                 orbit_info['relpath'], typ)
 
-    if not os.path.exists(archive_path):
-        os.makedirs(archive_path)
+    os.makedirs(archive_path, exist_ok=True)
     fil = os.path.join(archive_path, orbit_full + '.txt')
     out.to_csv(fil, index=None, sep=',')
     logging.info('CREATED: %s', fil)
