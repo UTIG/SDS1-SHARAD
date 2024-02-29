@@ -238,18 +238,16 @@ class SHARADEnv:
                         list_ret.append(rec)
                 if b_single:
                     if len(list_ret) > 1:
-                        logging.warning("SHARADEnv found {:d} "
-                                        "files for orbit {:s}".format(
-                                        len(list_ret), orbit))
+                        logging.warning("SHARADEnv found %d files for orbit %s",
+                                        len(list_ret), orbit)
                     return list_ret[0]
                 else:
                     return list_ret
             else:
                 if b_single:
                     if len(self.orbitinfo[orbit]) > 1:
-                        logging.warning("SHARADEnv found {:d} "
-                                        "files for orbit {:s}".format(
-                                        len(self.orbitinfo[orbit]), orbit))
+                        logging.warning("SHARADEnv found %d files for orbit %s",
+                                        len(self.orbitinfo[orbit]), orbit)
                     return self.orbitinfo[orbit][0]
                 else:
                     return self.orbitinfo[orbit]
@@ -860,7 +858,7 @@ def test_orbit_info(senv):
     try:
         # Test what happens when you look for an orbit that doesn't exist
         oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
-        assert len(oinfo) == 1
+        assert len(oinfo) == 1, "len(oinfo) = %d. oinfo=%r" % (len(oinfo), oinfo)
         assert len(oinfo[0]) == 0 # should be a list with a dict
         assert isinstance(oinfo[0],dict) # should be just a dict
         oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', False)
