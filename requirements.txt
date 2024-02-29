@@ -11,6 +11,9 @@ spiceypy==6.0.0
 geopandas==0.14.2
 pytest==6.2.1
 tables==3.9.2
+# You may need to adjust the version to match the installed gdal version
+# See https://github.com/nextgis/pygdal
+# Can you do pygdal==3.2.1.* ?
 # pygdal version must match version of osgeo on freeze.
 # If this fails, make sure you have sourced env/cshrc
 pygdal==3.2.1.10
