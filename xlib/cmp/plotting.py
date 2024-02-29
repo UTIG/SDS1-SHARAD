@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.ndimage.interpolation import shift
+from scipy.ndimage import shift
 
 def plot_radargram(data, tx, save_path=None, samples=3600):
     radargram = np.zeros((len(data), 10000))

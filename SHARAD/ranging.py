@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 #from misc import coord
 #from scipy.constants import c
-#from scipy.ndimage.interpolation import shift
+#from scipy.ndimage import shift
 from misc.hdf import hdf
 import cmp.pds3lbl as pds3
 
