@@ -345,7 +345,7 @@ def main():
                         help="Max number of tracks to process")
 
     parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS")
+                        help="Root directory (default: environment variable SDS)")
 
     args = parser.parse_args()
 

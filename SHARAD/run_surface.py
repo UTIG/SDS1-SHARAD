@@ -340,7 +340,7 @@ def main():
                         only if [orbit] is [all]')
 
     parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                            help="Root directory (default: environment variable SDS")
+                            help="Root directory (default: environment variable SDS)")
 
     args = parser.parse_args()
 

@@ -46,7 +46,7 @@ def main():
     parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
     parser.add_argument('--maxechoes', type=int, default=0, help="Maximum number of echoes to process in a track")
     parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS")
+                        help="Root directory (default: environment variable SDS)")
     parser.add_argument('--clutteronly', action="store_true", help="Cluttergram simulation only")
 
     args = parser.parse_args()
