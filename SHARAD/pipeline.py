@@ -249,12 +249,12 @@ def main():
 
 
     if args.output is None:
-        args.output = os.path.join(SDS, 'targ/xtra/SHARAD')
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
     # strip trailing slash
     args.output = args.output.rstrip('/')
 
     # Root ORIG directory
-    sharad_root = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
+    sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
     lookup = read_tracklist(args.tracklist, sharad_root=sharad_root)
 
 
@@ -265,7 +265,7 @@ def main():
     logging.debug("Base output directory: %s", args.output)
 
     nrequests = 0
-    SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    #SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
 
     tasks = build_task_order(args.tasks, PROCESSORS)
 

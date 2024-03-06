@@ -407,7 +407,7 @@ def main():
     # Build list of processes
     process_list = []
     logging.info("Making task list from %s", args.tracklist)
-    inputroot = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR')
+    inputroot = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR')
     for i, path in enumerate(lookup):
     #for orbit in keys:
     #    gob = int(orbit.replace('/orbit', ''))
