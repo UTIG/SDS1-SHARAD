@@ -96,6 +96,7 @@ PROCESSORS = {
     },
     'rsr': {
         "Name": "Run RSR",
+        "InPrefix": "",
         "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
@@ -178,12 +179,12 @@ def read_tracklist(filename: str, sharad_root: str):
     with open(filename, 'rt') as fin:
         for line in fin:
             infile = line.strip()
-            if not infile:
+            if not infile or infile.startswith('#'):
                 continue
 
             path_file = os.path.relpath(infile, sharad_root)
             #path_file = infile.replace(sharad_root, '')
-            assert path_file.endswith('_a.dat')
+            assert path_file.endswith('_a.dat'), path_file
             data_file = os.path.basename(path_file).replace('_a.dat', '')
             path_file = os.path.dirname(path_file)
             #root_file, ext_file = os.path.splitext(data_file)
@@ -268,7 +269,11 @@ def main():
     #SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
 
     tasks = build_task_order(args.tasks, PROCESSORS)
+    cwd = os.path.dirname(__file__)
+    if cwd == '':
+        cwd = '.'
 
+    logging.debug("Tasks: %r", tasks)
     for outprefix in tasks:
         prod = PROCESSORS[outprefix]
         indir = ''
@@ -345,10 +350,10 @@ def main():
                     pool = multiprocessing.Pool(args.jobs)
                     if prod['Processor'] in ["run_rsr.py", "run_surface.py"]:
                         temp = None
-                        cmd = ['./' + prod['Processor'], item['orbit'], '-j 1']
+                        cmd = [os.path.join(cwd, prod['Processor']), item['orbit'], '-j 1']
                     else:
                         temp = temptracklist(infile)
-                        cmd = ['./' + prod['Processor'], '--tracklist', temp, '-j 1']
+                        cmd = [os.path.join(cwd, prod['Processor']), '--tracklist', temp, '-j 1']
                         if prod['Processor'] == "run_sar2.py":
                             # Add targ path which it uses to find input files
                             cmd += ['-i', ivars['targ_root']]
@@ -403,10 +408,17 @@ def build_task_order(tasks, processors):
 
     for task in reversed(tasks):
         tasks_out1.append(task)
+        print("task=", task)
         prereq = processors[task]['InPrefix']
+        assert isinstance(prereq, str), prereq
         while prereq != '': # assumes no cycles or branches in dependencies
             tasks_out1.append(prereq)
-            prereq = processors[prereq]
+            try:
+                prereq = processors[prereq]['InPrefix']
+            except KeyError:
+                print(prereq)
+                raise
+            assert isinstance(prereq, str), prereq
 
     tasks_done = set()
     tasks_out2 = []

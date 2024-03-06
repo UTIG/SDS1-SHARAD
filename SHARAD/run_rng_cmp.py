@@ -179,7 +179,7 @@ def cmp_processor(infile, outdir, SDS, idx_start=None, idx_end=None, taskname="T
     except Exception: # pylint: disable=W0703
         logging.error('%s: Error processing file %s', taskname, infile)
         for line in traceback.format_exc().split("\n"):
-            logging.error('%s: %s'.format(taskname, line)
+            logging.error('%s: %s', taskname, line)
         return 1
     logging.info('%s: Success processing file %s', taskname, infile)
     return 0
@@ -237,7 +237,7 @@ def main():
         #idx_end = h5file[orbit]['idx_end'][0]
 
         # check if file has already been processed
-        path_file = infile.replace(os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/'), '')
+        path_file = infile.replace(os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/'), '')
         data_file = os.path.basename(path_file)
         path_file = os.path.dirname(path_file)
         outdir    = os.path.join(path_outroot, path_file, 'ion')
