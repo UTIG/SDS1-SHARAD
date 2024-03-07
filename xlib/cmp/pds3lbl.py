@@ -22,13 +22,18 @@ import logging
 import gzip
 import sys
 import json
+from warnings import simplefilter
 
 import pandas as pd
 import numpy as np
 import bitstring as bs
 import pvl
 
-G_DEBUG = False
+# Ignore PerformanceWarning in pandas 2.0.0 and higher
+# https://stackoverflow.com/questions/68292862/performancewarning-dataframe-is-highly-fragmented-this-is-usually-the-result-o
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+
+G_DEBUG = True
 
 def read_science(data_path, label_path, science=True, bc=True):
 
@@ -227,8 +232,7 @@ def read_science(data_path, label_path, science=True, bc=True):
             conv[:, 0:3600:2] = s[:, 0:1800] >> 4
             conv[:, 1:3600:2] = s[:, 0:1800] & 0xff
             for i in range(3600):
-                # TODO: should this below be conv[:, i]?  GNG
-                dfr['sample'+str(i)] = pd.Series(conv, index=dfr.index)
+                dfr['sample'+str(i)] = pd.Series(conv[:, i], index=dfr.index)
         else:
             raise ValueError("Unexpected value for pseudo_samples = %d" % pseudo_samples)
 
@@ -259,7 +263,7 @@ def read_science(data_path, label_path, science=True, bc=True):
                 if 'BOOLEAN' in sub[1]['BIT_DATA_TYPE']:
                     dtype = 'bool'
                 if G_DEBUG:
-                    logging.debug("start_bit=%d nb_bits=%d dtype=s", start_bit, nb_bits, dtype)
+                    logging.debug("name=%s start_bit=%d nb_bits=%d dtype=%r", name, start_bit, nb_bits, dtype)
 
                 conv = np.array([bit_select2(bits, start_bit, dtype) for bits in bitdata])
                 dfr[name] = pd.Series(conv, index=dfr.index)
