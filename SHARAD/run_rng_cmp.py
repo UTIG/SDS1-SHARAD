@@ -79,15 +79,15 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
         # Array of indices to be processed
         if idx_start is None or idx_end is None:
-            idx_start = 0
-            idx_end = len(data)
+            idx_start, idx_end = 0, len(data)
         idx = np.arange(idx_start, idx_end)
 
         logging.debug('%s: Length of track: %d', taskname, len(idx))
 
         # Chop raw data
-        raw_data = np.zeros((len(idx), 3600), dtype=np.complex128)
-        for j in range(0, 3600):
+        nsamples = 3600
+        raw_data = np.empty((len(idx), nsamples), dtype=np.complex128)
+        for j in range(nsamples):
             raw_data[idx-idx_start, j] = data['sample'+str(j)][idx].values
 
         if data['COMPRESSION_SELECTION'][idx_start] == 0:
@@ -103,30 +103,15 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
 
         # Decompress the data
         decompressed = cmp.rng_cmp.decompress_sci_data(raw_data, compression, presum, bps, sdi)
+        del raw_data
         E_track = np.empty((idx_end-idx_start, 2))
         # Get groundtrack distance and define 30 km chunks
         tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
-        tlp0 = tlp[0]
-        chunks = []
-        i0 = 0
-        for i in range(len(tlp)):
-            if tlp[i] > tlp0+30:
-                chunks.append([i0, i])
-                i0 = i
-                tlp0 = tlp[i]
-        if not chunks: # if chunks is empty
-            chunks.append([0, idx_end-idx_start])
-        if (tlp[-1]-tlp[i0]) >= 15:
-            chunks.append([i0, idx_end-idx_start])
-        else:
-            chunks[-1][1] = idx_end-idx_start
-        #chunks = np.array(chunks)
-
+        chunks = calculate_chunks(tlp, 30.)
         logging.debug('%s: chunked into %d pieces', taskname, len(chunks))
+        cmp_track = np.empty(decompressed.shape + (2,), dtype=np.int16) # real and imaginary
         # Compress the data chunkwise and reconstruct
-        for i, chunk in enumerate(chunks):
-            start, end = chunk
-
+        for i, (start, end) in enumerate(chunks):
             #check if ionospheric correction is needed
             iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
             b_iono = len(iono_check) != 0
@@ -137,10 +122,9 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             # GNG: These concats seem relatively expensive.
             E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end],\
                                  chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
-            if i == 0:
-                cmp_track = cmp_data
-            else:
-                cmp_track = np.vstack((cmp_track, cmp_data))
+
+            cmp_track[start:end, :, 0] = np.round(cmp_data.real)
+            cmp_track[start:end, :, 1] = np.round(cmp_data.imag)
             E_track[start:end, 0] = E
             E_track[start:end, 1] = sigma
 
@@ -148,22 +132,19 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         logging.debug('%s Data compressed in %0.2f seconds', taskname, stamp3)
 
         if saving:
-            data_file   = os.path.basename(infile)
-            outfilebase = data_file.replace('_a.dat', '_s.h5')
-            outfile     = os.path.join(outdir, outfilebase)
+            outfile, outfile_tecu = output_filenames(infile, outdir)
             logging.debug('%s: Saving to folder: %s', taskname,outdir)
             os.makedirs(outdir, exist_ok=True)
 
             # restructure of data save
-            real = np.array(np.round(cmp_track.real), dtype=np.int16)
-            imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
-            dfreal = pd.DataFrame(real)
-            dfimag = pd.DataFrame(imag)
+            dfreal = pd.DataFrame(cmp_track[:, :, 0])
             dfreal.to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
+            del dfreal
+            dfimag = pd.DataFrame(cmp_track[:, :, 1])
             dfimag.to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
-            #np.save(new_path+data_file.replace('.dat','.npy'),cmp_track)
-            outfile_TECU = os.path.join(outdir, data_file.replace('_a.dat','_s_TECU.txt'))
-            np.savetxt(outfile_TECU, E_track)
+            del dfimag
+            #np.savez(outfile + "_int16.npz", real=cmp_track[:, :, 0], imag=cmp_track[:, :, 1])
+            np.savetxt(outfile_tecu, E_track)
 
         if radargram:
             # Plot a radargram
@@ -174,7 +155,7 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
             #for rec in range(len(data['RECEIVE_WINDOW_OPENING_TIME'])):
             for rec in range(len(data)):
                 tx[rec] = data['RECEIVE_WINDOW_OPENING_TIME'][rec]-tx0
-            cmp.plotting.plot_radargram(cmp_track, tx, samples=3600)
+            cmp.plotting.plot_radargram(cmp_track, tx, samples=nsamples)
 
     except Exception: # pylint: disable=W0703
         logging.error('%s: Error processing file %s', taskname, infile)
@@ -184,11 +165,51 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
     logging.info('%s: Success processing file %s', taskname, infile)
     return 0
 
+def calculate_chunks(tlp, chunklen_km):
+    chunks = []
+    tlp0 = tlp[0]
+    i0 = 0
+    for i, tlp1 in enumerate(tlp):
+        if tlp1 > tlp0 + chunklen_km:
+            chunks.append([i0, i])
+            i0 = i
+            tlp0 = tlp1
+    if not chunks: # if chunks is empty
+        chunks = [0, len(tlp)]
+    elif (tlp[-1]-tlp[i0]) >= (chunklen_km/2.):
+        chunks.append([i0, len(tlp)]) # add a new chunk
+    else: # append this chunk to the previous chunk
+        chunks[-1][1] = len(tlp)
+    return chunks #chunks = np.array(chunks)
+
+
+
+def output_filenames(infile: str, outdir: str):
+    data_file   = os.path.basename(infile)
+    outfilebase = data_file.replace('_a.dat', '_s.h5')
+    outfile     = os.path.join(outdir, outfilebase)
+    tecubase = data_file.replace('_a.dat','_s_TECU.txt')
+    outfile_tecu = os.path.join(outdir, tecubase)
+    return outfile, outfile_tecu
+
+def all_outputs_updated(infile: str, outdir: str):
+    """ For now, just check that outputs exist.
+    Later, we can calculate whether the modified timestamps
+    are also correct """
+    for outfile in output_filenames(infile, outdir):
+        if not os.path.exists(outfile):
+            return False
+        logging.debug("%s exists", outfile)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description='Run range compression')
     parser.add_argument('-o', '--output', default=None,
                         help="Output base directory")
 
+    parser.add_argument('--overwrite',  action="store_true",
+                        help="Overwrite outputs even if they exist")
     parser.add_argument('-j', '--jobs', type=int, default=4,
                         help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v', '--verbose', action="store_true",
@@ -226,27 +247,20 @@ def main():
     logging.info("Building task list")
     process_list = []
     path_outroot = args.output
+    path_inroot = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
 
-    logging.debug("Base output directory: " + path_outroot)
+    logging.debug("Base output directory: %s", path_outroot)
 
     for i, infile in enumerate(lookup):
-    #for orbit in keys:
-        #gob = int(orbit.replace('/orbit', ''))
-        #path = lookup[gob]
-        #idx_start = h5file[orbit]['idx_start'][0]
-        #idx_end = h5file[orbit]['idx_end'][0]
-
         # check if file has already been processed
-        path_file = infile.replace(os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/'), '')
-        data_file = os.path.basename(path_file)
-        path_file = os.path.dirname(path_file)
+        path_file = os.path.dirname(os.path.relpath(infile, path_inroot))
         outdir    = os.path.join(path_outroot, path_file, 'ion')
 
-        if not os.path.exists(outdir):
-            logging.debug("Adding " + infile)
-            process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
-        else:
+        if (not args.overwrite) and all_outputs_updated(infile, outdir):
             logging.debug('File already processed. Skipping ' + infile)
+            continue
+        logging.debug("Adding %s", infile)
+        process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
 
     #h5file.close()
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
@@ -267,16 +281,16 @@ def main():
             cmp_processor(*t, **named_params)
     else:
         # Multiprocessing
-        pool = multiprocessing.Pool(nb_cores)
-        results = [pool.apply_async(cmp_processor, t, \
-                   named_params) for t in process_list]
+        with multiprocessing.Pool(nb_cores) as pool:
+            results = [pool.apply_async(cmp_processor, t, \
+                       named_params) for t in process_list]
 
-        for i, result in enumerate(results):
-            dummy = result.get()
-            if dummy == 1:
-                logging.error("%s: Problem running pulse compression",process_list[i][4])
-            else:
-                logging.info("%s: Finished pulse compression", process_list[i][4])
+            for i, result in enumerate(results):
+                dummy = result.get()
+                if dummy == 1:
+                    logging.error("%s: Problem running pulse compression",process_list[i][4])
+                else:
+                    logging.info("%s: Finished pulse compression", process_list[i][4])
 
     logging.info("Done in %0.2f seconds", time.time() - start_time)
 
