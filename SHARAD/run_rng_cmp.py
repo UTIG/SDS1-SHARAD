@@ -41,8 +41,8 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
 
-def cmp_processor(infile, outdir, SDS, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
-                  chrp_filt=True, verbose=False, saving=False):
+def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
+                  chrp_filt=True, verbose=False, saving=False, SDS=None):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -62,7 +62,7 @@ def cmp_processor(infile, outdir, SDS, idx_start=None, idx_end=None, taskname="T
       cmp_pulses : Compressed pulses
 
     """
-
+    assert SDS is not None
     try:
     #if chrp_filt:
         time_start = time.time()
@@ -122,7 +122,7 @@ def cmp_processor(infile, outdir, SDS, idx_start=None, idx_end=None, taskname="T
             chunks[-1][1] = idx_end-idx_start
         #chunks = np.array(chunks)
 
-        logging.debug('{:s}: chunked into {:d} pieces'.format(taskname, len(chunks)))
+        logging.debug('%s: chunked into %d pieces', taskname, len(chunks))
         # Compress the data chunkwise and reconstruct
         for i, chunk in enumerate(chunks):
             start, end = chunk
@@ -131,8 +131,8 @@ def cmp_processor(infile, outdir, SDS, idx_start=None, idx_end=None, taskname="T
             iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
             b_iono = len(iono_check) != 0
             minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:0.3f}  Ionospheric Correction: {!r}'.format(
-                taskname, i, len(chunks), minsza, b_iono))
+            logging.debug('%s: chunk %03d/%03d Minimum SZA: %0.3f  Ionospheric Correction: %r',
+                taskname, i, len(chunks), minsza, b_iono)
 
             # GNG: These concats seem relatively expensive.
             E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end],\
@@ -259,7 +259,7 @@ def main():
 
     start_time = time.time()
 
-    named_params = {'saving':True, 'chrp_filt':True, 'verbose':args.verbose, 'radargram':False}
+    named_params = {'saving':True, 'chrp_filt':True, 'verbose':args.verbose, 'radargram':False, 'SDS': args.SDS}
 
     if nb_cores <= 1:
         # Single processing (for profiling)
