@@ -74,7 +74,6 @@ class TestBasic(unittest.TestCase):
         #E_0522001_001_SS19_700_A000.LBL
 
         datafile = os.path.join(ORIG, "mrosh_0001/data/edr05xxx/edr0518201/e_0518201_001_ss19_700_a_s.dat")
-        print(datafile)
         labelfile = os.path.join(ORIG, "mrosh_0001/label/science_ancillary.fmt")
         aux = pds3.read_science(datafile, labelfile, science=True)
 

@@ -22,11 +22,8 @@ __history__ = {
 
 import glob
 import os
-import pickle
 import logging
-import gzip
 import sys
-import json
 from warnings import simplefilter
 
 import pandas as pd
@@ -263,10 +260,6 @@ def build_bitstruct(pvlobj: pvl.PVLObject):
     """ From the pvl specification, build a bitstruct
     format string to be used with the bitstruct.unpack function """
 
-    # TODO: assert ascending order
-    #logging.debug("sub=%r", sub)
-    # GNG: TODO: should this be?
-    # if sub[0] == 'BIT_COLUMN':
     fmttokens, npdtype = [], []
     end_bit_prev = 0
     for sub in pvlobj:
