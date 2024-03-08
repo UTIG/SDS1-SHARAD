@@ -109,7 +109,7 @@ def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     return array[idx]
 
-def ita_comp(tx, rx, uncompressed):
+def ita_comp(tx, rx, uncompressed, SDS=None):
     """ Select calibrated reference chirp from tx and rx temperature """
     txtemp = [-20, -15, -10, -5, 0, 20, 40, 60]
     rxtemp = [-20, 0, 20, 40, 60]
@@ -119,8 +119,10 @@ def ita_comp(tx, rx, uncompressed):
     prefix_tx = 'm' if txval < 0 else 'p'
     prefix_rx = 'm' if rxval < 0 else 'p'
 
-    path = '/disk/daedalus/sharaddownload/mrosh_0001/calib/reference_chirp_' \
-          + prefix_tx+str(txval).zfill(2)+'tx_'+prefix_rx+str(rxval).zfill(2)+'rx.dat'
+    if SDS is None:
+        SDS = os.getenv('SDS', '/disk/kea/SDS')
+    chirpfile = 'reference_chirp_' + prefix_tx+str(txval).zfill(2)+'tx_'+prefix_rx+str(rxval).zfill(2)+'rx.dat'
+    path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/calib', chirpfile)
 
     cplx_ref_chirp = read_refchirp(path)
 
