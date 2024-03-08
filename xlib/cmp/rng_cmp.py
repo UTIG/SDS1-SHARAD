@@ -42,7 +42,7 @@ def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
     a = (10E+6/85.05E-6) # Frequency rate 10 MHz/85 mus
     t = np.arange(0, 85.05E-6, 0.0375E-6) # Times in rng window
 
-    # Chirp can beexpressed as an instantaneous angular frequency
+    # Chirp can be expressed as an instantaneous angular frequency
     phi = 2*np.pi*(t*fl+a/2*t**2)
 
     if iono:
@@ -94,7 +94,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
 
     Input:
     -----------
-        raw_data:       Track to be compressed [len(track) x 3600 samples]
+        data:       Track to be compressed [len(track) x 3600 samples]
         chirp_filter: If a filter is applied to the reference chirps
         iono (optional): If ionospheric correction is needed
         maxTECU:    Maximum TECU = TEC x 10E-16 to be expected
@@ -139,8 +139,8 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
                                  hist,
                                  p0=[len(data)/2, resolution*maxTECU/2, 20])
         except:
-            opt = [-1, 0, -1]
-            cov = [-1, -1, -1]
+            opt, cov = [-1, 0, -1], [-1, -1, -1]
+            pass #raise # Raise an error to get a more specific error
 
         if debug: # pragma: no cover
             print('Gauss fit opt/cov:', opt, cov)

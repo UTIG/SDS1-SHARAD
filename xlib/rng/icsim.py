@@ -714,7 +714,7 @@ def GetCornerCoordinates2(FileName):
     # How do we get center?
     # print(resp.decode())
 
-    print(gdal_info['extent']['coordinates'][0])
+
 
     list_lon, list_lat = zip(*gdal_info['extent']['coordinates'][0])
     return np.array([list_lat[0], list_lat[1], list_lat[3], list_lat[2], list_lat[4]]), \
@@ -758,9 +758,9 @@ def test_GetCornerCoordinates1():
     import os
     dtm = os.path.join(os.getenv('SDS'), 'orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff') # example DTM file
     x1 = GetCornerCoordinates(dtm)
-    print("x1=" + str(x1))
+    #print("x1=" + str(x1))
     x2 = GetCornerCoordinates2(dtm)
-    print("x2=" + str(x2))
+    #print("x2=" + str(x2))
     for idx in range(4):
         assert abs(x1[0][idx] - x2[0][idx]) < 1e-1 # lat
         assert abs(x1[1][idx] - x2[1][idx]) < 1e-1 # lon
@@ -814,7 +814,7 @@ Lower Right (  25.0000000, -25.0000000) (  0d 0' 1.52"E,  0d 0' 1.52"S)
 Center      ( -666800.000,  889075.000) ( 11d14'59.82"W, 15d 0' 0.26"N)""".split(b"\n")
     for line in data:
         lat1, lon1 = GetLatLon(line)
-        print(lat1,lon1)
+        assert isinstance(lat1, float) and isinstance(lon1, float)
 
 
 def test_icsim1(save_path=None, do_plot=False, do_progress=True):
