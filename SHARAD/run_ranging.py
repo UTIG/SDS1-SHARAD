@@ -112,20 +112,20 @@ def main():
     if args.dryrun:
         sys.exit(0)
 
-    logging.info("Start processing {:d} tracks".format(len(process_list)) )
+    logging.info("Start processing %d tracks", len(process_list))
 
     rlist = [] # result list
     if args.jobs <= 1:
         for i, t in enumerate(process_list, start=1):
             result = process_rng(**t)
             rlist.append(result) # tuple of two numbers
-            logging.info("Finished task %d of %d".format(i, len(process_list)))
+            logging.info("Finished task %d of %d", i, len(process_list))
     else:
         pool = multiprocessing.Pool(args.jobs)
         results = [pool.apply_async(process_rng, [], t) for t in process_list]
         for i, result in enumerate(results, start=1):
             rlist.append(result.get())
-            logging.info("Finished task %d of %d".format(i, len(process_list)))
+            logging.info("Finished task %d of %d", i, len(process_list))
     logging.info('done with tasks.')
 
 
