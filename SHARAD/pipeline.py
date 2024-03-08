@@ -20,7 +20,6 @@ __history__ = {
 # TODO: Parameters for SAR processing (these could change the output path).
 # TODO: Sandbox mode (input from sandbox is issue)
 # TODO: Use max tracks arg
-# TODO: Parallelism
 # TODO: --ignoretimes option. Should we call this --force ?
 
 
@@ -56,8 +55,11 @@ import importlib.util
 import re
 import subprocess
 import tempfile
+from collections import namedtuple
+from typing import List
 
 #import psutil
+FileInfo = namedtuple('FileInfo', 'mtime path')
 
 # Assumes dictionary is ordered (python3.7)
 assert sys.version_info[0:2] >= (3,7), "Dictionaries aren't ordered!"
@@ -83,11 +85,15 @@ PROCESSORS = {
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_altimetry.py",
+        "args": ['--finethreads', '8'],
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         "Outputs": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
     },
+    # Note: it is super inefficient to run multiple copies of run_surface
+    # because run_surface spends most of its time indexing the sharad environment
     'srf': {
         "Name": "Run Surface",
+        "InPrefix": "alt",
         "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5"],
         "Processor": "run_surface.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
@@ -96,7 +102,7 @@ PROCESSORS = {
     },
     'rsr': {
         "Name": "Run RSR",
-        "InPrefix": "",
+        "InPrefix": "srf",
         "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "Processor": "run_rsr.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
@@ -131,32 +137,47 @@ PROCESSORS = {
     },
 }
 
-def run_command(cmd, output):
-    output = output.replace("targ", "note")
+def delete_files(filelist: List[str], missing_ok=True):
+    for file in filelist:
+        try:
+            if file is not None:
+                os.unlink(file)
+        except OSError:
+            if not missing_ok:
+                raise
+def run_command(tasknum: int, cmd: str, output: str, delete_before: List[str], delete_after: List[str]):
+    output = output.replace("/targ/", "/note/")
     os.makedirs(os.path.dirname(output), exist_ok=True)
+    delete_files(delete_before)
+    logging.debug("CMD: %s", repr(cmd))
+    logging.debug("Task %d writing to %s.stdout", tasknum, output)
+    logging.debug("Task %d writing to %s.stderr", tasknum, output)
     with open(output+".stdout", "w") as outfh, \
          open(output+".stderr", "w") as errfh:
         res = subprocess.run(cmd, stdout=outfh, stderr=errfh)
+
+    if res.returncode == 0:
+        delete_files(delete_after)
+    logging.debug("Task %d done res=%d", tasknum, res.returncode)
     return res
 
-def temptracklist(infile):
+def temptracklist(infile: str, tasknum: int):
     """ Create a temporary file with one track in it,
     and return the path to it """
-    logging.debug("Writing temporary track list for input file:");
+    logging.debug("Task %d writing temporary track list for input file:", tasknum);
     logging.debug(infile);
-    temp = tempfile.NamedTemporaryFile(mode='w+', delete=False, prefix='pipeline_tracklist_')
-    temp.write(infile+'\n')
-    temp.close()
-    return temp.name
+    with tempfile.NamedTemporaryFile(mode='w+', delete=False, prefix='pipeline_tracklist_') as fhtemp:
+        print(infile, file=fhtemp)
+        return fhtemp.name
 
 def getmtime(path):
     try:
-        mtime = os.path.getmtime(path)
-    except OSError:
+        mtime = int(os.path.getmtime(path))
+    except OSError: # file doesn't exist
         mtime = -1
-    return mtime, path
+    return FileInfo(mtime, path)
 
-def manual(cmd, infile):
+def manual(cmd, infile): # pragma: no cover
     """ Interactively prompt whether to run a command """
     import getch
     print('Trackline: ' + infile);
@@ -233,13 +254,10 @@ def main():
 
     parser.add_argument('-r', '--maxrequests', type=int, default=0,
                         help="Maximum number of processing requests to process")
-    # Use --maxrequests 1 instead of -1
-    #parser.add_argument('-1', '--once', action="store_true",
-    #                    help="Just run one processor and exit.")
     parser.add_argument('--ignorelibs', action='store_true',
-                        help="Do not check times on libraries")
+                        help="Do not check times on processing software (libraries)")
     parser.add_argument('--ignoretimes', action='store_true',
-                        help="Do not check any times")
+                        help="Process data regardless of input/output file times")
 
     args = parser.parse_args()
 
@@ -265,9 +283,6 @@ def main():
 
     logging.debug("Base output directory: %s", args.output)
 
-    nrequests = 0
-    #SHARADroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-
     tasks = build_task_order(args.tasks, PROCESSORS)
     cwd = os.path.dirname(__file__)
     if cwd == '':
@@ -278,6 +293,7 @@ def main():
         prod = PROCESSORS[outprefix]
         indir = ''
         proc = ''
+        jobs = []
         results = []
         #outdir = ''
         for lookup_line, item in enumerate(lookup, start=1):
@@ -308,91 +324,66 @@ def main():
                 output = fmtstr.format(ivars) #output = os.path.join(outdir, data_file + o)
                 outtimes.append(getmtime(output))
 
+            if not args.ignoretimes and is_output_updated(intimes, outtimes, prod["Name"]):
+                logging.debug("Outputs are up to date")
+                continue
 
-            if len(intimes) == 0:
-                logging.error("No inputs for process")
-            intimes.sort()
+            # Files to delete before running task
+            delete_before = [x.path for x in outtimes]
 
-            if len(outtimes) == 0:
-                logging.error("No outputs for process")
-            outtimes.sort()
-
-            # Print considered input files for equivalence checking
-            for x in intimes:
-                logging.debug("INPUT:  %0.0f %s", *x)
-            for x in outtimes:
-                logging.debug("OUTPUT: %0.0f %s", *x)
-
-
-            if intimes[0][0] == -1: # Missing input files
-                for tim, filename in intimes:
-                    if tim == -1:
-                        logging.info("%s is missing input %s", prod['Name'], filename)
-            elif intimes[-1][0] < outtimes[0][0]:
-                logging.info("Up to date.")
+            # TODO: move this over to the dict
+            if prod['Processor'] in ["run_rsr.py", "run_surface.py"]:
+                tempfile1 = None
+                cmd = [os.path.join(cwd, prod['Processor']), item['orbit'], '--delete', '-j', '1']
             else:
-                if not args.ignoretimes or outtimes[0][0] == -1:
-                    if (outtimes[0][0] == -1):
-                        logging.info('Ready to process (no output file).')
-                    else:
-                        logging.info('Ready to process (old output file).')
-                        logging.info('Deleting old files.')
-                        for _, output in outtimes:
-                            os.unlink(output)
-                            try:
-                                os.rmdir(os.path.dirname(output))
-                            except OSError:
-                                # We don't care if it fails a few times
-                                pass
-                    logging.info("Output: %s", output)
-                    logging.debug("Processing %s", infile)
-                    # TODO: move this over to the dict
-                    pool = multiprocessing.Pool(args.jobs)
-                    if prod['Processor'] in ["run_rsr.py", "run_surface.py"]:
-                        temp = None
-                        cmd = [os.path.join(cwd, prod['Processor']), item['orbit'], '-j 1']
-                    else:
-                        temp = temptracklist(infile)
-                        cmd = [os.path.join(cwd, prod['Processor']), '--tracklist', temp, '-j 1']
-                        if prod['Processor'] == "run_sar2.py":
-                            # Add targ path which it uses to find input files
-                            cmd += ['-i', ivars['targ_root']]
+                tempfile1 = temptracklist(infile, lookup_line)
+                cmd = [os.path.join(cwd, prod['Processor']), '--tracklist', tempfile1, '-j', '1']
+                if prod['Processor'] == "run_sar2.py":
+                    # Add targ path which it uses to find input files
+                    cmd += ['-i', ivars['targ_root']]
 
-                    if args.vv:
-                        # Run processor with a verbose flag
-                        cmd.append('-v')
+            if 'args' in prod:
+                cmd += prod['args']
 
-                    logging.info("Invoking: %s", ' '.join(cmd))
-                    if args.manual:
-                        manual(cmd, infile)
-                    elif args.dryrun:
-                        logging.info("Dryrun")
-                    else:
-                        results.append(pool.apply_async(run_command, [cmd, output]))
-                        #subprocess.run(cmd)
-                    if False: # Remove temp file if it was created
-                        # Don't remove it before it is used!
-                        os.unlink(temp)
+            if args.vv:
+                # Run processor with a verbose flag
+                cmd.append('-v')
 
-                    nrequests += 1
-                    if args.maxrequests > 0 and nrequests >= args.maxrequests:
-                        logging.info("Only process %d requests.  Finishing.", args.maxrequests)
-                        # Wait for everything using this processor to finish
-                        for result in results:
-                            result.get()
-                        logging.info("Only process %d requests.  Quitting.", args.maxrequests)
-                        return 0
+            logging.info("Task %d: %r", lookup_line, cmd)
+            jobs.append((run_command, [lookup_line, cmd, output, delete_before, [tempfile1]]))
+            # Limit number of jobs as requested on command line
+            if args.maxrequests > 0 and len(jobs) >= args.maxrequests:
+                break
+        # end for lookup (end create job list)
 
-        # FIXME; This else got lost somehow.
-        #else:
-            #logging.debug('File already processed. Skipping %s', infile)
+        if args.dryrun:
+            logging.info("Dryrun")
+            continue # don't run
 
-        # Wait for everything using this processor to finish
-        logging.info("Waiting for " + prod["Name"] + " to finish.");
-        for result in results:
-            #logging.debug("CPU percent: " + str(psutil.cpu_percent()))
-            result.get()
-    logging.info("All done.");
+
+        # Now that job list has been created, execute it either single-threaded
+        # or using multiprocessing
+        if args.jobs <= 1 or len(jobs) <= 1:
+            for f_run, runargs in jobs:
+                f_run(*runargs)
+        else:
+            # TODO: sort jobs from longest to shortest to improve parallelism,
+            # or allow the processor to do this
+            with multiprocessing.Pool(args.jobs) as pool:
+                results = []
+                # TODO: map_async or starmap?
+                for f_run, runargs in jobs:
+                    results.append(pool.apply_async(f_run, runargs))
+                    #results.append(pool.apply_async(run_command, [cmd, output]))
+
+                # Wait for everything using this processor to finish
+                logging.info("Waiting for " + prod["Name"] + " to finish.");
+                for n, result in enumerate(results, start=1):
+                    #logging.debug("CPU percent: " + str(psutil.cpu_percent()))
+                    logging.debug("Result %d of %d done", n, len(jobs))
+                    logging.debug("Command %d was %r", n, jobs[n-1][1])
+                    result.get()
+        logging.info("All done.");
     return 0
 
 def build_task_order(tasks, processors):
@@ -427,6 +418,69 @@ def build_task_order(tasks, processors):
             tasks_done.add(task)
             tasks_out2.append(task)
     return tasks_out2
+
+def delete_output_files(outtimes):
+    """ Delete the output files if they exist,
+    and also remove parent directories """
+    logging.info('Deleting old files.')
+    for mtime, output in outtimes:
+        if mtime == -1:
+            continue
+        os.unlink(output)
+        try:
+            os.rmdir(os.path.dirname(output))
+        except OSError:
+            pass # We don't care if it fails a few times
+
+def is_output_updated(intimes, outtimes, name):
+    """ Compares input times to output times, and
+    returns true if all output times are later (greater) than
+    all input times and all output files exist
+    Assume times of -1 or None mean the file is missing.
+    If any input files are missing, returns True
+    """
+    if len(intimes) == 0:
+        logging.error("No inputs for process")
+    intimes.sort()
+
+    if len(outtimes) == 0:
+        logging.error("No outputs for process")
+    outtimes.sort()
+
+    # Print considered input files for equivalence checking
+    for x in intimes:
+        logging.debug("INPUT:  %r %s", *x)
+    for x in outtimes:
+        logging.debug("OUTPUT: %r %s", *x)
+
+
+    if intimes[0].mtime == -1: # Missing input files
+        for finfo in intimes:
+            if finfo.mtime == -1:
+                logging.info("%s is missing input %s", name, finfo.path)
+        return False
+    elif (outtimes[0].mtime != -1) and (intimes[-1].mtime < outtimes[0].mtime):
+        logging.info("Output is up to date.")
+        return True
+
+    if outtimes[0].mtime == -1:
+        # There is at least one missing file
+        logging.info('Ready to process (no output file).')
+        return False
+
+    logging.info('Ready to process (old output file).')
+
+    logging.info('Deleting old files.')
+    for _, output in outtimes:
+        os.unlink(output)
+        try:
+            os.rmdir(os.path.dirname(output))
+        except OSError:
+            # We don't care if it fails a few times
+            pass
+
+    return False
+
 
 if __name__ == "__main__":
     # execute only if run as a script
