@@ -1,3 +1,4 @@
+bitstruct==8.19.0
 bitstring>=3.1.5
 h5py==3.10.0
 # Lock scipy pandas etc around January 2023

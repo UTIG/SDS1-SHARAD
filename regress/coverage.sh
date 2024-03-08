@@ -18,7 +18,8 @@
 S0=`basename $0`
 D0=`dirname $0`
 
-echo "Changing to $D0"
+echo "$S0: Start coverage: " `date`
+echo "$S0: Changing to $D0"
 pushd $D0
 
 RCFILE=`pwd`/.coveragerc
@@ -32,13 +33,13 @@ export DISPLAY=""
 export NUMEXPR_MAX_THREADS=8
 
 rm -rf ./covdata/
- 
 $COV run $FLAGS ../xlib/clutter/parse_channels.py > /dev/null
 
 ######################################
 # Run placeholders
 # TODO: run_specularity
 for NAME in ../SHARAD/pipeline.py ../SHARAD/data_visualization.py ../SHARAD/run_ranging.py \
+../SHARAD/run_rng_cmp.py ../SHARAD/run_rsr.py ../SHARAD/run_altimetry.py \
 ../xlib/clutter/unfoc_KMS2.py
 do
     echo "$S0: Running $NAME -h"
@@ -51,7 +52,8 @@ for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/b
 ../xlib/clutter/peakint.py \
 ../xlib/misc/coord.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
 ../xlib/rng/icsim.py \
-../xlib/rot/mars.py ../xlib/cmp/plotting.py ../xlib/cmp/rng_cmp.py
+../xlib/rot/mars.py ../xlib/cmp/plotting.py \
+../xlib/cmp/rng_cmp.py ../xlib/cmp/pds3lbl.py
 do
     $COV run $FLAGS -a $NAME
 done
@@ -62,6 +64,7 @@ done
 $COV run $FLAGS -a ../xlib/misc/hdf_test.py -o ./covdata/
 $COV run $FLAGS -a ../xlib/rdr/solar_longitude.py
 $COV run $FLAGS -a ../xlib/misc/prog_test.py
+$COV run $FLAGS -a ../xlib/cmp/test_pds3lbl.py
 
 echo $S0: CMD $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
 $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py > /dev/null
@@ -156,7 +159,7 @@ $COV run $FLAGS -a  ../SHARAD/data_visualization.py --product cmp && true
 $COV run $FLAGS -a  ../SHARAD/data_visualization.py --input '/disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr10xxx/edr1058901/5m/3 range lines/30km/e_1058901_001_ss19_700_a_s.h5' && true
 #---------------------------------------------
 
-
+echo "$S0: End coverage: " `date` 
 echo "$S0: coverage tests completed."
 $COV report -m
 
