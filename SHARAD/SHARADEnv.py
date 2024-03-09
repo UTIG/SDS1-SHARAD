@@ -28,6 +28,7 @@ sharadenv.alt_data()
 
 
 
+import csv
 import os
 import sys
 import glob
@@ -111,7 +112,7 @@ def make_orbit_info(filename):
 
 class SHARADEnv:
     """ Class for interacting with data files in the SHARAD dataset """
-    def __init__(self, data_path:str=None, orig_path:str=None):
+    def __init__(self, data_path:str=None, orig_path:str=None, b_index_files=True):
         """Get various parameters defining the dataset  """
 
         if data_path is None:
@@ -127,7 +128,8 @@ class SHARADEnv:
         self.data_path = data_path
         self.orig_path = orig_path
 
-        self.index_files()
+        if b_index_files:
+            self.index_files()
 
 
     def index_files(self):
@@ -881,6 +883,127 @@ def test_orbit_info(senv):
                 logging.debug("Orbit {:s} contains {:d} items:".format(orbit, norbits))
             for i, rec in enumerate(senv.orbitinfo[orbit]):
                 logging.debug("{:2d}: {:s}".format(i, str(rec)))
+
+
+class SHARADFiles:
+    """ class for calculating SDS1-SHARAD file paths from product IDs """
+    def __init__(self, data_path:str, orig_path:str):
+        """Get various parameters defining the dataset  """
+        # Typical values
+        #data_path = '/disk/kea/SDS/targ/xtra/SHARAD'
+        #orig_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
+
+        #self.code_path = os.path.abspath(os.path.dirname(__file__))
+        self.data_path = data_path
+        self.orig_path = orig_path
+
+    def read_edr_index(self):
+        """ Build index of product IDs to locations.
+        We can read any one of cumindex.tab """
+        self.product_id_index = {}
+        fields = 'volume_id release_id file_specification_name product_id'.split()
+
+        indexpat = os.path.join(self.orig_path, 'EDR/mrosh_000?/index/cumindex.tab')
+        indexfile = glob.glob(indexpat)[0]
+
+        logging.info("Read %s", indexfile)
+        with open(indexfile, 'rt') as fhcsv:
+            reader = csv.DictReader(fhcsv, fieldnames=fields, restkey='__rest__')
+            for row in reader:
+                del row['__rest__'] # keep only the first 4 columns
+                # Remove extra spaces from fields
+                for k in ('volume_id', 'file_specification_name', 'product_id'):
+                    row[k] = row[k].rstrip().lower()
+                row['relpath'] = os.path.dirname(row['file_specification_name'])
+                self.product_id_index[row['product_id']] = row
+        logging.debug("product_id_index has %d items", len(self.product_id_index))
+
+
+    def data_product_paths(self, product_id: str, types=('edr', 'cmp', 'alt', 'srf', 'rsr', 'rng', 'foc')):
+        """ Populate a dictionary with all data file locations """
+        products = {}
+        for prod in types:
+            f = getattr(self, prod + '_data_product_paths')
+            products.update(f(product_id))
+        return products
+
+
+    def edr_data_product_paths(self, product_id: str):
+        """ Return paths to the three EDR files
+        described in section 4.3.5 of the EDR SIS
+        https://pds-geosciences.wustl.edu/mro/mro-m-sharad-3-edr-v1/mrosh_0001/document/edrsis.pdf
+        """
+        # /disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0187401/e_0187401_00
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.orig_path, 'EDR', pinfo['volume_id'], pinfo['relpath'])
+
+        return {
+            'edr_lbl': os.path.join(self.orig_path, 'EDR', pinfo['volume_id'], pinfo['file_specification_name']),
+            'edr_sci': os.path.join(orbitdir, product_id + '_a.dat'),
+            'edr_aux': os.path.join(orbitdir, product_id + '_s.dat'),
+        }
+
+
+    def cmp_data_product_paths(self, product_id: str, typ:str='ion'):
+        """ Return paths to range compression outputs
+        (produced by run_rng_cmp.py)
+        TODO: better mnemonic than h5 
+        Example: /disk/kea/SDS/targ/xtra/SHARAD/cmp/mrosh_0004/data/rm262/edr4839701/ion/e_4839701_001_ss4_700_a_s_TECU.txt
+        """
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'cmp', pinfo['volume_id'], pinfo['relpath'], typ)
+
+        return {
+            'cmp_h5': os.path.join(orbitdir, product_id + '_s.h5'),
+            'cmp_tecu': os.path.join(orbitdir, product_id + '_s_TECU.txt'),
+        }
+
+    def alt_data_product_paths(self, product_id: str, typ:str='beta5'):
+        """ Calculate output paths for altimetry data products
+        Example: /disk/kea/SDS/targ/xtra/SHARAD/alt/mrosh_0001/data/edr08xxx/edr0898101/beta5/e_0898101_001_ss19_700_a_a.h5
+        """
+
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'alt', pinfo['volume_id'], pinfo['relpath'], typ)
+        return {'alt_h5': os.path.join(orbitdir, product_id + '_a.h5'),}
+
+    def srf_data_product_paths(self, product_id: str, typ:str='cmp'):
+        """ Example: 
+        /disk/kea/SDS/targ/xtra/SHARAD/srf/mrosh_0001/data/edr20xxx/edr2007501/cmp/e_2007501_001_ss19_700_a.txt"""
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'srf', pinfo['volume_id'], pinfo['relpath'], typ)
+
+        return {'srf_txt': os.path.join(orbitdir, product_id + '.txt'),}
+
+
+    def rsr_data_product_paths(self, product_id: str, typ:str='cmp'):
+        """ Example:
+        /disk/kea/SDS/targ/xtra/SHARAD/rsr/mrosh_0002/data/edr24xxx/edr2484501/cmp/e_2484501_001_ss04_700_a.txt"""
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'rsr', pinfo['volume_id'], pinfo['relpath'], typ)
+        return {'rsr_txt': os.path.join(orbitdir, product_id + '.txt'),}
+
+
+    def rng_data_product_paths(self, product_id: str, typ:str='icd'):
+        """ Ranging product produced by run_ranging.py. Example
+        /disk/kea/SDS/targ/xtra/SHARAD/rng/mrosh_0004/data/rm270/edr4973503/icd/e_4973503_001_ss19_700_a_a.cluttergram.npy"""
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'rng', pinfo['volume_id'], pinfo['relpath'], typ)
+        return {'rng_clu': os.path.join(orbitdir, product_id + '.txt'),}
+
+
+    def foc_data_product_paths(self, product_id: str, typ:str=None):
+        """ Focused radargrams produced by run_sar2.py Example:
+        /disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr04xxx/edr0490602/5m/5 range lines/6km/e_0490602_001_ss19_700_a_s.h5
+        TODO: include all types, and remove spaces
+        """
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'foc', pinfo['volume_id'], pinfo['relpath'])
+        products = {}
+        for ii, typ in enumerate(('5m/5 range lines/6km',)):
+            k = 'foc_p%d' % (ii,)
+            products[k] = os.path.join(orbitdir, typ, product_id + '_s.h5')
+        return products
 
 
 

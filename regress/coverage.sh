@@ -66,10 +66,9 @@ $COV run $FLAGS -a ../xlib/rdr/solar_longitude.py
 $COV run $FLAGS -a ../xlib/misc/prog_test.py
 $COV run $FLAGS -a ../xlib/cmp/test_pds3lbl.py
 
-echo $S0: CMD $COV run $FLAGS -a  ../SHARAD/SHARADEnv.py
-$COV run $FLAGS -a  ../SHARAD/SHARADEnv.py > /dev/null
+$COV run $FLAGS -a ../SHARAD/SHARADEnv.py > /dev/null
+$COV run $FLAGS -a ./test_sharadfiles.py
 
-echo $S0: CMD $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py
 $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py -o ./covdata/
 
 echo $S0: CMD $COV run $FLAGS -a ../xlib/sar/smooth.py
