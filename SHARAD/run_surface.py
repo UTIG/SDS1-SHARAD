@@ -26,28 +26,10 @@ import pandas as pd
 import subradar as sr
 
 import SHARADEnv
+from run_rng_cmp import add_standard_args, run_jobs
 
-
-class DataMissingException(Exception):
+class DataMissingException(FileNotFoundError):
     pass
-
-
-class Async:
-    """Class to support multi processing jobs. For calling example, see:
-    http://masnun.com/2014/01/01/async-execution-in-python-using-multiprocessing-pool.html
-    """
-    def __init__(self, func, cb_func, nbcores=1):
-        self.func = func
-        self.cb_func = cb_func
-        self.pool = multiprocessing.Pool(nbcores)
-
-    def call(self,*args, **kwargs):
-        return self.pool.apply_async(self.func, args, kwargs, self.cb_func)
-
-    def wait(self):
-        self.pool.close()
-        self.pool.join()
-
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
@@ -222,7 +204,7 @@ def relative_sahga_gain(senv, orbit_full):
     return gain
 
 
-def archive_surface(senv, orbit_full, srf_data, typ):
+def archive_surface(senv, orbit_full: str, srf_data, typ: str):
     """
     Archive in the hierarchy results obtained from srf_processor
 
@@ -291,8 +273,6 @@ def archive_surface(senv, orbit_full, srf_data, typ):
     out.to_csv(fil, index=None, sep=',')
     logging.info('CREATED: %s', fil)
 
-    return out
-
 
 def main():
     """Executed if run as script
@@ -307,18 +287,10 @@ def main():
 
     parser.add_argument('-o', '--output', default=None,
                         help="Debugging output data directory")
-    #parser.add_argument('--ofmt',   default='hdf5',choices=('hdf5','none'),
-    #        help="Output data format")
     parser.add_argument('orbits', metavar='orbit', nargs='*',
                         help='Orbit IDs to process (including leading zeroes).'
                         'If "all", processes all orbits')
     parser.add_argument('--orbitlist', help='Text file containing list of orbits to process')
-    parser.add_argument('-j', '--jobs', type=int, default=8,
-            help="Number of jobs (cores) to use for multi-core processing.")
-    parser.add_argument('-v', '--verbose', action="store_true",
-                        help="Display verbose output")
-    parser.add_argument('-n', '--dryrun', action="store_true",
-                        help="Dry run. Build task list but do not run")
     #parser.add_argument('--tracklist', default="elysium.txt",
     #    help="List of tracks to process")
     #parser.add_argument('--maxtracks', default=None, type=int,
@@ -339,8 +311,8 @@ def main():
                         help='Delete and reprocess files already processed, \
                         only if [orbit] is [all]')
 
-    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                            help="Root directory (default: environment variable SDS)")
+    add_standard_args(parser, script='srf')
+    # Delete items that aren't
 
     args = parser.parse_args()
 
@@ -395,7 +367,7 @@ def main():
     if args.dryrun:
         logging.info("Dry run only -- Orbits:\n" + '\n'.join(args.orbits))
         #logging.info(f"TOTAL: {len(args.orbits)} to process")
-        sys.exit(0)
+        return 0
 
     # Keyword arguments for processing
     kwargs = {'typ':args.type,
@@ -409,54 +381,31 @@ def main():
               'senv':senv
              }
 
-    # Create Async class for multiprocessing
-    if args.jobs > 0:
-        async_surface = Async(surface_processor, None, nbcores=args.jobs)
 
-    # Processing
-    for orbit in args.orbits:
-        #logging.debug('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
-        #              '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
-
-        if args.jobs < 2:
-            # Do NOT use the multiprocessing package
+    if args.jobs <= 1 or len(args.orbits) <= 1:
+        # Don't use multiprocessing
+        for orbit in args.orbits:
             srf = surface_processor(orbit, **kwargs)
+
             if args.output is not None:
                 # Debugging output
                 outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
                 logging.debug("Saving to %s", outfile)
                 os.makedirs(args.output, exist_ok=True)
                 np.save(outfile, srf)
-        else:
-            # Do use the multiprocessing package
-            async_surface.call(orbit, **kwargs)
+    else:
+        # Use multiprocessing
+        with multiprocessing.Pool(args.jobs) as pool:
+            results = []
+            for orbit in args.orbits:
+                res = pool.apply_async(surface_processor, (orbit,), kwargs)
+                results.append(res)
+
+            for n, result in enumerate(results, start=1):
+                result.get()
+                logging.debug("Result %d of %d done", n, len(results))
 
 
-    if args.jobs >= 2:
-        async_surface.wait()
-
-    #if args.jobs == -1:
-    #    for i, orbit in enumerate(args.orbits):
-    #        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime(
-    #            '%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
-    #        b = surface_processor(orbit, **kwargs)
-    #        #b = surface_processor(orbit, typ=args.type,
-    #        #                      ywinwidth=args.ywinwidth,
-    #        #                      archive=True, gain=0, gain_altitude=True,
-    #        #                      gain_sahga=True, senv=senv)
-
-    #        if args.output is not None:
-    #            # Debugging output
-    #            outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
-    #            logging.debug("Saving to " + outfile)
-    #            if not os.path.exists(args.output):
-    #                os.makedirs(args.output)
-    #            np.save(outfile, b)
-
-    #if args.jobs > 0:
-    #    async_surface = Async(surface_processor, None, nbcores=jobs)
-    #    for orbit in args.orbits:
-    #        async_surface.call(orbit, **kwargs)
 
 
 if __name__ == "__main__":

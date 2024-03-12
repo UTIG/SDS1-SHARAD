@@ -34,11 +34,12 @@ import pandas as pd
 
 import SHARADEnv
 
-sys.path.append('../xlib/')
+p1 = os.path.join(os.path.dirname(__file__), '../xlib')
+sys.path.insert(1, os.path.abspath(p1))
 import rsr
 import subradar as sr
 
-class DataMissingException(Exception):
+class DataMissingException(FileNotFoundError):
     pass
 
 
@@ -53,7 +54,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
 
     orbit: string
         the orbit number or the full name of the orbit file (w/o extension)
-        if te orbit is trunl=ked in several file
+        if the orbit is chunked in several files
     typ: string
         the type of radar data used to get the amplitude from
     gain: float
@@ -362,7 +363,7 @@ def main():
         print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
         #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
-                nbcores=args.jobs, verbose=args.verbose, winwidht=args.ywinwidth,
+                nbcores=args.jobs, verbose=args.verbose,
                 bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
                 senv=senv)
 
@@ -370,8 +371,7 @@ def main():
             # Debugging output
             outfile = os.path.join(args.output, "rsr_{:s}.npy".format(orbit))
             logging.debug("Saving to " + outfile)
-            if not os.path.exists(args.output):
-                os.makedirs(args.output)
+            os.makedirs(args.output, exist_ok=True)
             np.save(outfile, b)
 
 

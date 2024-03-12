@@ -27,22 +27,29 @@ import importlib.util
 import numpy as np
 #from scipy.optimize import curve_fit
 import pandas as pd
+from typing import Dict, List, Tuple, Callable
 
-# TODO: make this import more robust to allow this script
-# TODO: to be run from outside the SHARAD directory
-sys.path.insert(0, '../xlib')
+from SHARADEnv import SHARADFiles
+#from run_altimetry import read_tracklistfile, filename_to_productid
+
+CODEPATH = os.path.dirname(__file__)
+p1 = os.path.abspath(os.path.join(CODEPATH, "../xlib"))
+sys.path.insert(1, p1)
+
 #import misc.hdf
 import cmp.pds3lbl as pds3
 import cmp.plotting
 import cmp.rng_cmp
+import misc.fileproc as fileproc
+
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
 
-def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXXX", radargram=True,
-                  chrp_filt=True, verbose=False, saving=False, SDS=None):
+def cmp_processor(infile, outfiles: Dict[str, str], SDS: str, idx_start=None, idx_end=None, taskname="TaskXXX",
+                  radargram=True, chrp_filt=True, verbose=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -50,10 +57,13 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
     Input:
     -----------
       infile    : Path to track file to be processed.
-      outdir    : Path to directory to write output data
+      outfiles  : A dictionary with keys 'cmp_h5' and 'cmp_tecu' giving paths to files to create
+                  If outfiles is None, don't save any files
+      SDS       : SDS root path
       idx_start : Start index for processing.
       idx_end   : End index for processing.
       chrp_filt : Apply a filter to the reference chirp
+      radargram : Plot radargrams interactively
       verbose   : Gives feedback in the terminal.
 
     Output:
@@ -131,20 +141,21 @@ def cmp_processor(infile, outdir, idx_start=None, idx_end=None, taskname="TaskXX
         stamp3 = time.time() - time_start - stamp1
         logging.debug('%s Data compressed in %0.2f seconds', taskname, stamp3)
 
-        if saving:
-            outfile, outfile_tecu = output_filenames(infile, outdir)
-            logging.debug('%s: Saving to folder: %s', taskname,outdir)
+        if outfiles is not None:
+            # Assume these two files are being put into the same directory
+            outdir = os.path.dirname(outfiles['cmp_h5'])
+            logging.debug('%s: Saving to folder: %s', taskname, outdir)
             os.makedirs(outdir, exist_ok=True)
 
             # restructure of data save
             dfreal = pd.DataFrame(cmp_track[:, :, 0])
-            dfreal.to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
+            dfreal.to_hdf(outfiles['cmp_h5'], key='real', complib='blosc:lz4', complevel=6)
             del dfreal
             dfimag = pd.DataFrame(cmp_track[:, :, 1])
-            dfimag.to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
+            dfimag.to_hdf(outfiles['cmp_h5'], key='imag', complib='blosc:lz4', complevel=6)
             del dfimag
             #np.savez(outfile + "_int16.npz", real=cmp_track[:, :, 0], imag=cmp_track[:, :, 1])
-            np.savetxt(outfile_tecu, E_track)
+            np.savetxt(outfiles['cmp_tecu'], E_track)
 
         if radargram:
             # Plot a radargram
@@ -184,45 +195,36 @@ def calculate_chunks(tlp, chunklen_km):
 
 
 
-def output_filenames(infile: str, outdir: str):
-    data_file   = os.path.basename(infile)
-    outfilebase = data_file.replace('_a.dat', '_s.h5')
-    outfile     = os.path.join(outdir, outfilebase)
-    tecubase = data_file.replace('_a.dat','_s_TECU.txt')
-    outfile_tecu = os.path.join(outdir, tecubase)
-    return outfile, outfile_tecu
+def add_standard_args(parser, script=None):
+    """ Add standard script arguments to the args list """
 
-def all_outputs_updated(infile: str, outdir: str):
-    """ For now, just check that outputs exist.
-    Later, we can calculate whether the modified timestamps
-    are also correct """
-    for outfile in output_filenames(infile, outdir):
-        if not os.path.exists(outfile):
-            return False
-        logging.debug("%s exists", outfile)
-    return True
+    if script not in ['rsr', 'srf']:
+        # These scripts haven't been updated for these args
+        parser.add_argument('product_ids', nargs='*',
+                            help='SHARAD product IDs to process')
+        parser.add_argument('-o', '--output', default=None,
+                            help="Output base directory")
+        parser.add_argument('--overwrite',  action="store_true",
+                            help="Overwrite outputs even if they exist")
+        parser.add_argument('--tracklist', default=None,#"elysium.txt",
+                            help="List of tracks to process")
+        parser.add_argument('--maxtracks', type=int, default=0,
+                            help="Maximum number of tracks to process")
 
-
-def main():
-    parser = argparse.ArgumentParser(description='Run range compression')
-    parser.add_argument('-o', '--output', default=None,
-                        help="Output base directory")
-
-    parser.add_argument('--overwrite',  action="store_true",
-                        help="Overwrite outputs even if they exist")
     parser.add_argument('-j', '--jobs', type=int, default=4,
                         help="Number of jobs (cores) to use for processing")
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
     parser.add_argument('-n', '--dryrun', action="store_true",
                         help="Dry run. Build task list but do not run")
-    parser.add_argument('--tracklist', default="elysium.txt",
-                        help="List of tracks to process")
-    parser.add_argument('--maxtracks', type=int, default=0,
-                        help="Maximum number of tracks to process")
     parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
                         help="Root directory (default: environment variable SDS)")
 
+
+def main():
+    parser = argparse.ArgumentParser(description='Run range compression')
+
+    add_standard_args(parser)
     args = parser.parse_args()
 
     #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
@@ -231,68 +233,124 @@ def main():
                         format="run_rng_cmp: [%(levelname)-7s] %(message)s")
 
     if args.output is None:
-        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/cmp')
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
 
-    # Set number of cores
-    nb_cores = args.jobs
-
-    # Read lookup table associating gob's with tracks
-    #h5file = pd.HDFStore('mc11e_spice.h5')
-    #keys = h5file.keys()
-    with open(args.tracklist, 'r') as fin:
-        lookup = [line.strip() for line in fin if line.strip() != '']
-    logging.debug(lookup)
 
     # Build list of processes
-    logging.info("Building task list")
+    logging.debug("Building task list")
+    # File location calculator
+    sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
+    sfiles = SHARADFiles(data_path=args.output, orig_path=sharad_root, read_edr_index=True)
+
+    productlist = process_product_args(args.product_ids, args.tracklist, sfiles)
+    assert productlist, "No files to process"
+
+
     process_list = []
-    path_outroot = args.output
-    path_inroot = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
+    for tasknum, product_id in enumerate(productlist, start=1):
+        infiles = sfiles.product_paths('edr', product_id)
+        outfiles = sfiles.product_paths('cmp', product_id)
 
-    logging.debug("Base output directory: %s", path_outroot)
-
-    for i, infile in enumerate(lookup):
-        # check if file has already been processed
-        path_file = os.path.dirname(os.path.relpath(infile, path_inroot))
-        outdir    = os.path.join(path_outroot, path_file, 'ion')
-
-        if (not args.overwrite) and all_outputs_updated(infile, outdir):
-            logging.debug('File already processed. Skipping ' + infile)
+        if not should_process_products(product_id, infiles,  outfiles, args.overwrite):
             continue
-        logging.debug("Adding %s", infile)
-        process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
 
-    #h5file.close()
+        logging.debug("Adding %s", product_id)
+        process_list.append({
+            'infile': infiles['edr_aux'],
+            'outfiles': outfiles,
+            'SDS': args.SDS,
+            'idx_start': None,
+            'idx_end': None,
+            'taskname': "Task{:03d}".format(tasknum),
+            'chrp_filt': True,
+            'verbose': args.verbose,
+            'radargram': False,
+        })
+
+
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
-        sys.exit(0)
+        return 0
 
-    logging.info("Start processing %d tracks", len(process_list))
+    run_jobs(cmp_processor, process_list, args.jobs)
 
+
+
+def process_product_args(product_ids: List[str], tracklistfile: str, sfiles: SHARADFiles):
+    """ Assemble a list of desired product IDs from the
+    product ID argument and the file of tracks to process """
+    productlist = []
+    # Add tracks from command line
+    if product_ids:
+        productlist += product_ids
+
+    # Add tracks from file
+    if tracklistfile is not None:
+        productids = map(filename_to_productid, read_tracklistfile(tracklistfile))
+        productlist += list(productids)
+
+    f_unknown = lambda p: p not in sfiles.product_id_index
+    unknown_product_ids = list(filter(f_unknown, productlist))
+    if unknown_product_ids:
+        s = ' '.join(unknown_product_ids)
+        raise KeyError("Unknown product IDs %s" % s)
+
+    return productlist
+
+def should_process_products(product_id, infiles: Dict[str, str], outfiles: Dict[str, str], overwrite: bool):
+    filestatus = fileproc.file_processing_status(infiles.values(), outfiles.values())
+    if (not overwrite) and filestatus[1] == 'output_ok':
+        logging.info("Not adding %s to jobs. output is up to date", product_id)
+        return False
+    elif filestatus[0] == 'input_missing':
+        logging.info("Not adding %s to jobs. One or more inputs is missing", product_id)
+        return False
+    return True
+
+
+
+def run_jobs(f_processor: Callable, jobs: List[Dict[str, str]], nb_cores: int):
+    logging.info("Start processing %d tracks", len(jobs))
     start_time = time.time()
 
-    named_params = {'saving':True, 'chrp_filt':True, 'verbose':args.verbose, 'radargram':False, 'SDS': args.SDS}
-
-    if nb_cores <= 1:
+    if nb_cores <= 1 or len(jobs) <= 1:
         # Single processing (for profiling)
-        for t in process_list:
-            cmp_processor(*t, **named_params)
+        for t in jobs:
+            f_processor(**t)
     else:
         # Multiprocessing
         with multiprocessing.Pool(nb_cores) as pool:
-            results = [pool.apply_async(cmp_processor, t, \
-                       named_params) for t in process_list]
+            results = [pool.apply_async(f_processor, [], t) for t in jobs]
 
-            for i, result in enumerate(results):
-                dummy = result.get()
-                if dummy == 1:
-                    logging.error("%s: Problem running pulse compression",process_list[i][4])
-                else:
-                    logging.info("%s: Finished pulse compression", process_list[i][4])
+            for i, result in enumerate(results, start=1):
+                _ = result.get()
+                logging.info("Finished task %d of %d", i, len(jobs))
+                #if dummy == 1:
+                #    logging.error("%s: Problem running pulse compression",process_list[i][4])
+                #else:
+                #    logging.info("%s: Finished pulse compression", process_list[i][4])
 
     logging.info("Done in %0.2f seconds", time.time() - start_time)
+
+def read_tracklistfile(trackfile: str):
+    """ Read a track list and return data structures about desired products
+    TODO: unify with the read_tracklist functions in other code
+    """
+    with open(trackfile, 'rt') as flist:
+        for linenum, path in enumerate(flist, start=1):
+            path = path.strip()
+            if not path or path.startswith('#'):
+                continue
+            yield path
+
+def filename_to_productid(filename: str):
+    name = os.path.basename(filename)
+    assert name.startswith('e_'), "Unexpected filename %s" % filename
+    assert name.endswith('_a.dat'), "Unexpected filename %s" % filename
+    return name.replace('_a.dat', '')
+
 
 
 if __name__ == "__main__":

@@ -10,9 +10,8 @@ __history__ = {
         {'date': 'February 19, 2024',
          'author': 'Gregory Ng, UTIG',
          'info': 'Implement fine tracking multiprocessing'},
-    
 }
-           
+
 """
 
 On freeze, I think we can run run_altimetry with a -j flag of 8 and an
@@ -59,44 +58,36 @@ import os
 import multiprocessing
 import logging
 import argparse
+from typing import List
 
 import numpy as np
 import spiceypy as spice
 import pandas as pd
 import traceback
 
-sys.path.append('../xlib/altimetry')
+from run_rng_cmp import read_tracklistfile, filename_to_productid, run_jobs,\
+    process_product_args, should_process_products, \
+    add_standard_args
+
 sys.path.append('../xlib')
 #import misc.prog as prog
 import misc.hdf as hdf
 import matplotlib.pyplot as plt
 #import altimetry.beta5 as b5
-import beta5 as b5
-#import b5int as b5
+import altimetry.beta5 as b5
+
+from SHARADEnv import SHARADFiles
+import misc.fileproc as fileproc
 
 def main():
     desc = 'Run SHARAD altimetry processing'
     parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument('-o', '--output', default=None,
-                        help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5',
                         choices=('hdf5', 'csv', 'none'),
                         help="Output file format")
-    parser.add_argument('-j', '--jobs', type=int, default=4,
-                        help="Number of orbit jobs to process simultaneously")
     parser.add_argument('--finethreads', type=int, default=1,
                         help="Number of threads to use when processing fine tracking")
-    parser.add_argument('-v', '--verbose', action="store_true",
-                        help="Display verbose output")
-    parser.add_argument('-n', '--dryrun', action="store_true",
-                        help="Dry run. Build task list but do not run")
-    parser.add_argument('--tracklist', default="EDR_NorthPole_Path.txt",
-                        help="List of tracks to process")
-    parser.add_argument('--maxtracks', type=int, default=0,
-                        help="Maximum number of tracks to process")
-
-    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS)")
+    add_standard_args(parser)
 
     args = parser.parse_args()
 
@@ -106,105 +97,69 @@ def main():
                         format="run_altimetry: [%(levelname)-7s] %(message)s")
 
     if args.output is None:
-        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/alt')
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
 
-    # Set number of cores
-    nb_cores = args.jobs
-    kernel_path = os.path.join(args.SDS, 'orig/supl/kernels/mro/mro_v01.tm')
-    spice.furnsh(kernel_path)
+    logging.debug('build task list')
+    # File location calculator
+    sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
+    sfiles = SHARADFiles(data_path=args.output, orig_path=sharad_root, read_edr_index=True)
 
-    # Build list of processes
-    logging.info('build task list')
+    productlist  = process_product_args(args.product_ids, args.tracklist, sfiles)
+    assert productlist, "No files to process"
+
     process_list = []
-    path_root = os.path.join(args.SDS, 'targ/xtra/SHARAD/cmp/')
-    path_edr = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
+    for tracknum, product_id in enumerate(productlist):
+        infiles = sfiles.cmp_product_paths(product_id)
+        infiles.update(sfiles.edr_product_paths(product_id))
+        outfiles = sfiles.alt_product_paths(product_id)
 
-    ext = {'hdf5':'.h5', 'csv':'.csv', 'none':''}
+        if not should_process_products(product_id, infiles,  outfiles, args.overwrite):
+            continue
 
-    with open(args.tracklist, 'rt') as flist:
-        i = 0
-        for path in flist:
-            if not path or path.strip().startswith('#'):
-                continue
-            path = path.rstrip()
-            relpath = os.path.dirname(os.path.relpath(path, path_edr))
-            path_file = os.path.relpath(path, path_edr)
-            data_file = os.path.basename(path)
-            outfile = os.path.join(args.output, relpath, 'beta5',
-                                   data_file.replace('.dat', '.h5'))
-
-            if os.path.exists(outfile):
-                logging.info("Not adding %s to jobs.  %s already exists", path, outfile)
-                continue
-            outfile2 = outfile.replace('_a_a.h5', '_a_s.h5')
-            if os.path.exists(outfile2):
-                logging.info("Not adding %s to jobs.  %s already exists", path, outfile2)
-                continue
-
-            process_list.append({
-                'inpath': path,
-                'outfile': outfile,
-                'SDS': args.SDS,
-                'idx_start': 0,
-                'idx_end': None,
-                'finethreads': args.finethreads,
-                'save_format': args.ofmt})
-            logging.debug("[%d] %s", i+1, str(process_list[-1]))
-            i += 1
+        logging.debug("Adding %s", product_id)
+        process_list.append({
+            #'product_id': product_id,
+            'cmp_path': infiles['cmp_h5'],
+            'edr_sci': infiles['edr_sci'],
+            'outfile': outfiles['alt_h5'],
+            'SDS': args.SDS,
+            'idx_start': 0,
+            'idx_end': None,
+            'finethreads': args.finethreads,
+            'save_format': args.ofmt})
 
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         # Limit to first args.maxtracks tracks
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
-        sys.exit(0)
+        return 0
 
-    logging.info("Start processing %d tracks", len(process_list))
+    kernel_path = os.path.join(args.SDS, 'orig/supl/kernels/mro/mro_v01.tm')
+    spice.furnsh(kernel_path)
 
-    if nb_cores <= 1:
-        for i, t in enumerate(process_list):
-            result = alt_processor(**t)
-            print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
-    else:
-        with multiprocessing.Pool(nb_cores) as pool:
-            results = [pool.apply_async(alt_processor, [], t) for t in process_list]
-            for i, result in enumerate(results):
-                flag = result.get() # Wait for result
-                print("Finished task {:d} of {:d}".format(i+1, len(process_list)))
-    print('done')
+    run_jobs(alt_processor, process_list, args.jobs)
 
 
-def alt_processor(inpath:str, outfile: str, SDS: str, finethreads: int, idx_start=0, idx_end=None, save_format=''):
+def alt_processor(cmp_path: str, edr_sci: str, outfile: str, SDS: str, finethreads: int, idx_start=0, idx_end=None, save_format=''):
+    """
+    Parameters:
+    cmp_path - path to hdf5 output of range compression
+    edr_sci - path to EDR science data file
+    outfile - output altimetry file (usually HDF5)
+    SDS - SDS environment variable
+    finethreads - number of processes to use during fine tracking (0 or 1 to disable)
+    idx_start, idx_end: trace indexes to process
+    """
     try:
-        # create cmp path
-        path_root_alt = os.path.join(SDS, 'targ/xtra/SHARAD/alt/')
-        path_root_cmp = os.path.join(SDS, 'targ/xtra/SHARAD/cmp/')
-        path_root_edr = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
-        # Relative path to this file
-        fname = os.path.basename(inpath)
-        obn = fname[2:9] # orbit name
-        # Relative directory of this file
-        reldir = os.path.dirname(os.path.relpath(inpath, path_root_edr))
-        logging.debug("inpath: " + inpath)
-        logging.debug("reldir: " + reldir)
-        logging.debug("path_root_edr: " + path_root_edr)
-        cmp_path = os.path.join(path_root_cmp, reldir, 'ion',
-                                fname.replace('_a.dat', '_s.h5'))
-        #cmp_path = path_root_cmp+path_file+'ion/'+data_file.replace('_a.dat','_s.h5')
         label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
         aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
-        science_path = inpath.replace('_a.dat', '_s.dat')
-        if not os.path.exists(cmp_path):
-            cmp_path0 = cmp_path
-            cmp_path = cmp_path.replace('_s.h5', '_a.h5')
-            if not os.path.exists(cmp_path):
-                logging.warning(cmp_path0 + " does not exist")
-                logging.warning(cmp_path + " does not exist")
-                return 0
-
-        logging.info("Reading " + cmp_path)
-        result = b5.beta5_altimetry(cmp_path, science_path, label_path, aux_path,
+        # This should have already been checked on the outside
+        assert os.path.exists(edr_sci)
+        logging.info("Reading cmp " + cmp_path)
+        logging.info("Reading sci " + edr_sci)
+        result = b5.beta5_altimetry(cmp_path, edr_sci, label_path, aux_path,
                                     idx_start=idx_start, idx_end=idx_end,
                                     use_spice=False, ft_avg=10, max_slope=25,
                                     noise_scale=20, finethreads=finethreads)
@@ -215,12 +170,14 @@ def alt_processor(inpath:str, outfile: str, SDS: str, finethreads: int, idx_star
         if save_format in ('', 'none'):
             return 0
 
-        logging.info("Writing to " + outfile)
+        logging.info("Writing to %s", outfile)
         outputdir = os.path.dirname(outfile)
 
         os.makedirs(outputdir, exist_ok=True)
 
         if save_format == 'hdf5':
+            fname = os.path.basename(edr_sci)
+            obn = fname[2:9] # orbit name (transaction ID)
             orbit_data = {'orbit'+str(obn): result}
             #os.system("rm " + outfile)
             with hdf.hdf(outfile, mode='w') as h5:
@@ -228,10 +185,10 @@ def alt_processor(inpath:str, outfile: str, SDS: str, finethreads: int, idx_star
         elif save_format == 'csv':
             #fname1 = fname.replace('_a.dat', '.csv.gz')
             #outfile = os.path.join(path_root_alt, reldir, 'beta5',fname1)
-
+            outfile = outfile.replace('.dat', '.csv')
             df.to_csv(outfile)
         else:
-            logging.warning("Unknown output format '{:s}'".format(save_format))
+            logging.warning("Unknown output format '%s'", save_format)
             return 1
         return 0
     except Exception: # pragma: no cover

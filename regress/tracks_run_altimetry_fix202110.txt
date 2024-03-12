@@ -4,4 +4,10 @@
 #/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr17xxx/edr1748102/e_1748102_001_ss19_700_a_a.dat
 #/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr07xxx/edr0753102/e_0753102_001_ss19_700_a_a.dat
 #/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rmXXX/edr6691201/e_6691201_001_ss4_700_a_a.dat 0 -1
+# This one doesn't work with the current version of the MROSH index
+#freeze 1226% ls -l $SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/index/cumindex.tab
+#-rw-rw-r-- 1 xxx xxx 7455140 Jun 13  2018 /disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/index/cumindex.tab
+#freeze 1227% sha1sum -b $SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/index/cumindex.tab
+#c259b10ca60b045d13ba48674bca4189ebddc877 */disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/index/cumindex.tab
+(v
 /disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rmXXX/edr6691201/e_6691201_001_ss4_700_a_a.dat

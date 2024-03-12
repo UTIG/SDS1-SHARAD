@@ -109,8 +109,9 @@ $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o ./covdata/rng_cmp_data -j 1 --max
 echo $S0: run_altimetry
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt -n
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt
-$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 \
-    --tracklist ./tracks_run_altimetry_fix202110.txt
+# This doesn't work because we haven't updated our MROSH index since 2018 (see tracklist file)
+#$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 \
+#    --tracklist ./tracks_run_altimetry_fix202110.txt
 
 
 echo "$S0: run_surface"

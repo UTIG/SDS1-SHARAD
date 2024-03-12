@@ -41,8 +41,10 @@ import h5py as h5
 import rsr
 
 CODEPATH = os.path.dirname(__file__)
-sys.path.append(os.path.normpath(os.path.join(CODEPATH, "../xlib")))
+p1 = os.path.abspath(os.path.join(CODEPATH, "../xlib"))
+sys.path.insert(1, p1)
 from rdr import solar_longitude
+import misc.fileproc as fileproc
 
 
 # READ AUX FILE
@@ -100,6 +102,7 @@ def make_orbit_info(filename):
 
     return orbit, {
         # full basic orbit name (excluding .lbl; this is orbit_full)
+        # aka SHARAD product_id
         'name': orbit_name1,
         # full filename and path (previously 'file')
         'fullpath': filename,
@@ -130,9 +133,11 @@ class SHARADEnv:
 
         if b_index_files:
             self.index_files()
+        else:
+            self.sfiles = SHARADFiles(data_path, orig_path)
+            self.sfiles.read_edr_index()
 
-
-    def index_files(self):
+    def index_files(self, use_edr_index=False):
         """ Index files under the specified root directories """
         logging.debug("Indexing files in %s", self.get_edr_path())
 
@@ -147,8 +152,14 @@ class SHARADEnv:
         for sname in os.listdir(self.orig_path):
             self.out[sname + '_path'] = os.path.join(self.orig_path, sname)
 
-        globpat = os.path.join(self.get_edr_path(), '*/data/*/*/*.lbl')
-        label_files = glob.glob(globpat)
+        if not use_edr_index:
+            # Look for files on disk
+            # NOTE: this doesn't find *.LBL
+            globpat = os.path.join(self.get_edr_path(), '*/data/*/*/*.lbl')
+            label_files = glob.glob(globpat)
+        else:
+            # Look for files in the index
+            label_files = self.list_edr_labels()
         label_files.sort()
 
         logging.debug("Found %d label files", len(label_files))
@@ -197,6 +208,13 @@ class SHARADEnv:
         # This isn't ever used.
         #self.mrosh = [i.split('/')[0] for i in out['orbit_path']]
 
+    def list_edr_labels(self):
+        labels = []
+        basepath = os.path.join(self.sfiles.orig_path, 'EDR')
+        for pinfo in self.sfiles.product_id_index.values():
+            edr_lbl = os.path.join(basepath, pinfo['volume_id'], pinfo['file_specification_name'])
+            labels.append(edr_lbl)
+        return labels
 
     def get_edr_path(self):
         """ Return the absolute absolute path of EDR data """
@@ -257,6 +275,42 @@ class SHARADEnv:
         except KeyError:
             return {} if b_single else [{}]
 
+    # 
+    def product_processing_status(self, product: str, product_id: str, **kwargs):
+        """ Calculate whether the specified product is up to date
+        Inputs:
+        product is a processing step for the output.
+        Choices are cmp, alt, srf, rsr, rng, foc.
+        product_id is a SHARAD product id
+
+        Return value: 
+        'processable': input exists but output does not, or outputs are older than input
+        'processed': output exists. If input exists, outputs are newer than input
+        'input_missing': output does not exist, but neither does input
+        """
+        # TODO: make this a data structure
+        if product == 'cmp':
+            input_files = self.sfiles.edr_product_paths(product_id).values()
+        elif product in ('alt', 'srf'):
+            input_files = [self.sfiles.cmp_product_paths(product_id)['cmp_h5'],]
+        elif product == 'rsr':
+            input_files = self.sfiles.srf_product_paths(product_id).values()
+        elif product == 'foc':
+            input_files = self.sfiles.cmp_product_paths(product_id).values()
+        else:
+            raise ValueError('Unknown product %s' % product)
+
+        f_products = get_attr(self.sfiles, product + '_product_paths')
+        output_files = f_products(product_id).values()
+
+        # Implement pipeline checking in its own module
+        # TODO: put this in its own file
+        # get input times
+        # get output times
+        # compare them
+
+        filestatus = fileproc.file_processing_status(input_files, output_files, **kwargs)
+        return filestatus, input_files, output_files
 
     #def check(path, verbose=True):
     #    """Check if file/path exist
@@ -302,37 +356,8 @@ class SHARADEnv:
         if not files:
             return None # no file found
         # TODO: assert glob only has one result
-        if ext == 'h5':
-            try:
-                data = h5.File(files[0], 'r')[typ]
-                orbit_key = list(data.keys())[0]
-                data = data[orbit_key]
-            except (OSError, KeyError) as e:
-                logging.error("Can't read %s: %s", files[0], str(e))
-                raise e
-
-            out = {'et':data['block0_values'][:, 0]}
-            for i, val in enumerate(data['block0_items'][:]):
-                key = str(val).replace('b', '').replace('\'', '')
-                vec = data['block0_values'][:, i]
-                out[key] = vec
-        elif ext == 'npy':
-            out = np.load(files[0])
-
-        # Quality flag, assess if the orbit has picks that can be trusted
-        if quality_flag == True:
-            y = out['idx_fine']
-            # Detect negative y coordinates
-            flag = (y < 0)
-            # Coherent content for the y position
-            # (i.e., is the detected surface more or less continuous?)
-            #cc = rsr.run.processor(y, fit_model='rice').power()['pc-pn']
-            #if cc < 10:
-            #    flag = flag + True
-            flag = [int(i) for i in flag]
-            out['flag'] = flag
-
-        return out
+        # Call global function
+        return alt_data(files[0], typ=typ, quality_flag=quality_flag)
 
 
     # TODO GNG: Propose parallel function tec_filepaths?
@@ -436,6 +461,33 @@ class SHARADEnv:
 
         for typ in output.keys():
             output[typ] = np.unique(sorted(output[typ]))
+
+        return output
+
+    def processed2(self, products_requested=None):
+        """Output processed data products for each processing (e.g., cmp, alt)
+        Each individual data product (suborbit) must have all files.
+
+        This method, compared to processed, uses the SHARADFiles index and
+        only checks against the files requested, rather than all files in
+        the archive.
+        """
+        output = {}
+        for typ in self.out:
+            output[typ.split('_')[0]] = set()
+
+        if products_requested is None:
+            products_requested = self.orbitinfo.keys()
+
+        for orbit in orbits_requested:
+            for suborbit in self.orbitinfo[orbit]: # suborbit = productid
+                for datatype in output.keys():
+                    paths = self.sfiles.product_paths(collection=datatype, product_id=suborbit)
+                    if fileproc.all_files_exist(paths.values()):
+                        output[datatype].add(suborbit['name'])
+
+        for typ in output.keys(): # convert sets to lists
+            output[typ] = sorted(output[typ])
 
         return output
 
@@ -702,7 +754,7 @@ class SHARADEnv:
     def gather_datapoints(self, labels, conditions, product='srf',
                           filename='gather_datapoints.h5', verbose=True,
                           bad_orbits_filename='bad_orbits.txt'):
-        """Gather in a hd5 file the data points of orbits matching the
+        """Gather in a hdf5 file the data points of orbits matching the
         requested conditions.
 
         Inputs
@@ -780,6 +832,51 @@ class SHARADEnv:
                     '.h5').replace(' ', '_')
 
         self.gather_datapoints(labels, conditions, filename=filename, **kwargs)
+
+######################################################
+# Functions for reading slightly-complicated intermediate processing data products into
+# useful numpy/pandas data structures
+def alt_data(altfile: str, typ='beta5', quality_flag=False):
+    """Output data processed and archived by the altimetry processor
+    """
+    ext = os.path.splitext(altfile)[1].lower()
+    if ext == '.h5':
+        try:
+            with h5.File(altfile, 'r') as fh:
+                data = fh[typ]
+                orbit_key = list(data.keys())[0]
+                data = data[orbit_key]
+
+                out = {'et':data['block0_values'][:, 0]}
+                for i, val in enumerate(data['block0_items'][:]):
+                    key = str(val).replace('b', '').replace('\'', '')
+                    vec = data['block0_values'][:, i]
+                    out[key] = vec
+        except (OSError, KeyError) as e:
+            logging.error("Can't read %s: %s", files[0], str(e))
+            raise e
+
+
+    elif ext == '.npy':
+        out = np.load(altfile)
+    else: # pragma: no cover
+        raise ValueError("Unknown file extension for " + altfile)
+
+    # Quality flag, assess if the orbit has picks that can be trusted
+    if quality_flag:
+        y = out['idx_fine']
+        # Detect negative y coordinates
+        flag = (y < 0)
+        # Coherent content for the y position
+        # (i.e., is the detected surface more or less continuous?)
+        #cc = rsr.run.processor(y, fit_model='rice').power()['pc-pn']
+        #if cc < 10:
+        #    flag = flag + True
+        flag = [int(i) for i in flag]
+        out['flag'] = flag
+
+    return out
+
 
 
 def test_my(senv):
@@ -886,8 +983,9 @@ def test_orbit_info(senv):
 
 
 class SHARADFiles:
-    """ class for calculating SDS1-SHARAD file paths from product IDs """
-    def __init__(self, data_path:str, orig_path:str):
+    """ class for calculating SDS1-SHARAD file paths from product IDs
+    and vice versa """
+    def __init__(self, data_path:str, orig_path:str, read_edr_index=False):
         """Get various parameters defining the dataset  """
         # Typical values
         #data_path = '/disk/kea/SDS/targ/xtra/SHARAD'
@@ -896,6 +994,8 @@ class SHARADFiles:
         #self.code_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = data_path
         self.orig_path = orig_path
+        if read_edr_index:
+            self.read_edr_index()
 
     def read_edr_index(self):
         """ Build index of product IDs to locations.
@@ -904,7 +1004,10 @@ class SHARADFiles:
         fields = 'volume_id release_id file_specification_name product_id'.split()
 
         indexpat = os.path.join(self.orig_path, 'EDR/mrosh_000?/index/cumindex.tab')
-        indexfile = glob.glob(indexpat)[0]
+        try:
+            indexfile = glob.glob(indexpat)[0]
+        except IndexError:
+            raise FileNotFoundError("Could not find %s" % indexpat)
 
         logging.info("Read %s", indexfile)
         with open(indexfile, 'rt') as fhcsv:
@@ -923,12 +1026,18 @@ class SHARADFiles:
         """ Populate a dictionary with all data file locations """
         products = {}
         for prod in types:
-            f = getattr(self, prod + '_data_product_paths')
+            f = getattr(self, prod + '_product_paths')
             products.update(f(product_id))
         return products
 
+    def product_paths(self, collection: str, product_id: str):
+        """ Return the paths of files with given product ID and collection types
+        """
+        f = getattr(self, collection + '_product_paths')
+        return f(product_id)
 
-    def edr_data_product_paths(self, product_id: str):
+
+    def edr_product_paths(self, product_id: str):
         """ Return paths to the three EDR files
         described in section 4.3.5 of the EDR SIS
         https://pds-geosciences.wustl.edu/mro/mro-m-sharad-3-edr-v1/mrosh_0001/document/edrsis.pdf
@@ -939,12 +1048,12 @@ class SHARADFiles:
 
         return {
             'edr_lbl': os.path.join(self.orig_path, 'EDR', pinfo['volume_id'], pinfo['file_specification_name']),
-            'edr_sci': os.path.join(orbitdir, product_id + '_a.dat'),
-            'edr_aux': os.path.join(orbitdir, product_id + '_s.dat'),
+            'edr_aux': os.path.join(orbitdir, product_id + '_a.dat'),
+            'edr_sci': os.path.join(orbitdir, product_id + '_s.dat'),
         }
 
 
-    def cmp_data_product_paths(self, product_id: str, typ:str='ion'):
+    def cmp_product_paths(self, product_id: str, typ:str='ion'):
         """ Return paths to range compression outputs
         (produced by run_rng_cmp.py)
         TODO: better mnemonic than h5 
@@ -958,7 +1067,7 @@ class SHARADFiles:
             'cmp_tecu': os.path.join(orbitdir, product_id + '_s_TECU.txt'),
         }
 
-    def alt_data_product_paths(self, product_id: str, typ:str='beta5'):
+    def alt_product_paths(self, product_id: str, typ:str='beta5'):
         """ Calculate output paths for altimetry data products
         Example: /disk/kea/SDS/targ/xtra/SHARAD/alt/mrosh_0001/data/edr08xxx/edr0898101/beta5/e_0898101_001_ss19_700_a_a.h5
         """
@@ -967,7 +1076,7 @@ class SHARADFiles:
         orbitdir = os.path.join(self.data_path, 'alt', pinfo['volume_id'], pinfo['relpath'], typ)
         return {'alt_h5': os.path.join(orbitdir, product_id + '_a.h5'),}
 
-    def srf_data_product_paths(self, product_id: str, typ:str='cmp'):
+    def srf_product_paths(self, product_id: str, typ:str='cmp'):
         """ Example: 
         /disk/kea/SDS/targ/xtra/SHARAD/srf/mrosh_0001/data/edr20xxx/edr2007501/cmp/e_2007501_001_ss19_700_a.txt"""
         pinfo = self.product_id_index[product_id]
@@ -976,7 +1085,7 @@ class SHARADFiles:
         return {'srf_txt': os.path.join(orbitdir, product_id + '.txt'),}
 
 
-    def rsr_data_product_paths(self, product_id: str, typ:str='cmp'):
+    def rsr_product_paths(self, product_id: str, typ:str='cmp'):
         """ Example:
         /disk/kea/SDS/targ/xtra/SHARAD/rsr/mrosh_0002/data/edr24xxx/edr2484501/cmp/e_2484501_001_ss04_700_a.txt"""
         pinfo = self.product_id_index[product_id]
@@ -984,7 +1093,7 @@ class SHARADFiles:
         return {'rsr_txt': os.path.join(orbitdir, product_id + '.txt'),}
 
 
-    def rng_data_product_paths(self, product_id: str, typ:str='icd'):
+    def rng_product_paths(self, product_id: str, typ:str='icd'):
         """ Ranging product produced by run_ranging.py. Example
         /disk/kea/SDS/targ/xtra/SHARAD/rng/mrosh_0004/data/rm270/edr4973503/icd/e_4973503_001_ss19_700_a_a.cluttergram.npy"""
         pinfo = self.product_id_index[product_id]
@@ -992,7 +1101,7 @@ class SHARADFiles:
         return {'rng_clu': os.path.join(orbitdir, product_id + '.txt'),}
 
 
-    def foc_data_product_paths(self, product_id: str, typ:str=None):
+    def foc_product_paths(self, product_id: str, typ:str=None):
         """ Focused radargrams produced by run_sar2.py Example:
         /disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr04xxx/edr0490602/5m/5 range lines/6km/e_0490602_001_ss19_700_a_s.h5
         TODO: include all types, and remove spaces
@@ -1005,6 +1114,13 @@ class SHARADFiles:
             products[k] = os.path.join(orbitdir, typ, product_id + '_s.h5')
         return products
 
+    def orbitid_to_productids(self, orbit_id: str):
+        """ Return all product IDs associated with a given orbit (transaction) """
+        assert len(orbit_id) == 7
+        searchstr = 'e_' + orbit_id
+        for k in self.product_id_index.keys():
+            if k.startswith(searchstr):
+                yield k
 
 
 def main():
@@ -1024,7 +1140,7 @@ def main():
     test_my(senv)
     test_alt(senv)
 
-    logging.info("Done in {:0.1f} seconds".format(time.time() - t0))
+    logging.info("Done in %0.1f seconds", time.time() - t0)
 
 
 
