@@ -187,7 +187,7 @@ def calculate_chunks(tlp, chunklen_km):
             i0 = i
             tlp0 = tlp1
     if not chunks: # if chunks is empty
-        chunks = [0, len(tlp)]
+        chunks = [(0, len(tlp))]
     elif (tlp[-1]-tlp[i0]) >= (chunklen_km/2.):
         chunks.append([i0, len(tlp)]) # add a new chunk
     else: # append this chunk to the previous chunk
