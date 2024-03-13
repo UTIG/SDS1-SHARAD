@@ -15,6 +15,7 @@ __history__ = {
         {'date': 'October 16 2018',
          'info': 'Modified data saving method from .npy to .h5'}}
 
+import re
 import sys
 import os
 import time
@@ -207,7 +208,7 @@ def add_standard_args(parser, script=None):
         parser.add_argument('--overwrite',  action="store_true",
                             help="Overwrite outputs even if they exist")
         parser.add_argument('--tracklist', default=None,#"elysium.txt",
-                            help="List of tracks to process")
+                            help="List of track data files or product IDs to process")
         parser.add_argument('--maxtracks', type=int, default=0,
                             help="Maximum number of tracks to process")
 
@@ -346,6 +347,11 @@ def read_tracklistfile(trackfile: str):
             yield path
 
 def filename_to_productid(filename: str):
+    """ Converts a filename to a productid.  If the
+    string is already a product ID, then pass it through
+    without complaining """
+    if re.match(r'^e_\d{7}_\d{3}_\w+_\d+_\w$', filename):
+        return filename # It's a product ID
     name = os.path.basename(filename)
     assert name.startswith('e_'), "Unexpected filename %s" % filename
     assert name.endswith('_a.dat'), "Unexpected filename %s" % filename
