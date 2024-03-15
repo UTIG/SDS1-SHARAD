@@ -102,6 +102,7 @@ def find_issue28_products(sf):
             logging.warning("%s does not exist", file)
 
         allfiles = sf.data_product_paths(product_id)
+        f = sf.product_paths('rng', product_id)
 
 
 if __name__ == "__main__":

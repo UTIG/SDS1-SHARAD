@@ -173,9 +173,10 @@ def main():
                 # Check that it's in the right place
                 relpaths = [os.path.relpath(info['path'], local_path) for info in filelist[fname]]
                 assert len(relpaths) > 0, "relpaths=%r" % (relpaths,)
-                if os.path.join(row['volume_id'], f1) not in relpaths:
+                f2 = os.path.join(row['volume_id'], f1)
+                if f2 not in relpaths:
                     foundf = ', '.join(relpaths)
-                    logging.info("%s should be at %s. Found at %s", fname, f1, foundf)
+                    logging.info("%s should be at %s.\n  Found at %s", fname, f2, foundf)
                     nmisplaced += 1
             else:
                 logging.info("not found: %s", f1) 

@@ -21,7 +21,7 @@ def test_read(inputpath='/disk/kea/SDS/targ/xtra/SHARAD/cmp', maxfiles=100):
     logging.info("test_read()")
     pat = os.path.join(inputpath, '*/*/*/*/*/*.h5')
     h5files = glob.glob(pat)
-    print("Found {:d} hdf5 files".format(len(h5files)))
+    logging.info("Found %d hdf5 files", len(h5files))
     if len(h5files) > maxfiles:
         h5files = h5files[0:maxfiles]
 
@@ -36,8 +36,7 @@ def test_write(outputdir="."):
     outputfile = os.path.join(outputdir, "test_write1.h5")
     test_data = {'dict1': make_pandas_data()}
 
-    if not os.path.exists(outputdir):
-        os.makedirs(outputdir)
+    os.makedirs(outputdir, exist_ok=True)
 
     # demonstrate in a standard context open/close syntax
     hdf5 = hdf.hdf(outputfile, mode='w')

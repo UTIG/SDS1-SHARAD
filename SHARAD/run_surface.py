@@ -26,14 +26,15 @@ import pandas as pd
 import subradar as sr
 
 import SHARADEnv
-from run_rng_cmp import add_standard_args, run_jobs
+from SHARADEnv import DataMissingException
+from run_rng_cmp import add_standard_args, run_jobs, should_process_products
 
-class DataMissingException(FileNotFoundError):
-    pass
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
-                      senv=None, method='grima2012', alt_data=True):
+                      senv=None, method='grima2012', alt_data=True,
+                      output_filename:str=None,
+                      debug_dir=None):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
@@ -72,7 +73,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     """
 
-    if senv is None:
+    if senv is None: # pragma: no cover
         senv = SHARADEnv.SHARADEnv()
 
     #----------
@@ -82,15 +83,11 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     logging.debug('PROCESSING: Surface echo extraction for %s', orbit_full)
 
-    rdg = senv.cmp_data(orbit)
-    if rdg is None: # pragma: no cover
-        raise DataMissingException("No CMP data for orbit %s", orbit)
+    assert typ == 'cmp', "Not getting the right type of radargram!"
+    rdg = senv.cmp_data(orbit_full)
 
     if alt_data: # == True:
-        alt = senv.alt_data(orbit, typ='beta5', ext='h5', quality_flag=True)
-        if alt is None: # pragma: no cover
-            logging.info("No Altimetry Data for orbit %s", orbit)
-            return None
+        alt = senv.alt_data(orbit_full, typ='beta5', ext='h5', quality_flag=True)
 
         flag = alt['flag']
 
@@ -100,9 +97,6 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     else:
         alty = np.full(rdg.shape[0], np.ceil(ywinwidth/2))
 
-    #rdg = senv.cmp_data(orbit)
-    #if rdg is None: # pragma: no cover
-    #    raise DataMissingException("No CMP data for orbit %s", orbit)
 
     #------------------------
     # Get surface coordinates
@@ -138,14 +132,13 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     # Apply gains
 
     total_gain = gain
+    aux = senv.aux_data(orbit_full)
 
     if gain_altitude:
-        _gain = relative_altitude_gain(senv, orbit_full)
-        total_gain = total_gain + _gain
+        total_gain += relative_altitude_gain(aux)
 
     if gain_sahga:
-        _gain = relative_sahga_gain(senv, orbit_full)
-        total_gain = total_gain + _gain
+        total_gain += relative_sahga_gain(aux)
 
     surf_amp = surf_amp * 10**(total_gain/20.)
     #noise = noise + total_gain
@@ -159,18 +152,23 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
            #'noise':noise, 'pdb':20*np.log10(surf_amp)}
 
     if archive:
-        archive_surface(senv, orbit_full, out, typ)
+        archive_surface(output_filename, orbit_full, aux, out, typ)
+
+    if debug_dir is not None:
+        # Debugging output
+        outfile = os.path.join(debug_dir, "srf_{:s}.npy".format(orbit_full))
+        logging.debug("Saving to %s", outfile)
+        os.makedirs(debug_dir, exist_ok=True)
+        np.save(outfile, out)
+
 
     return out
 
 
-def relative_altitude_gain(senv, orbit_full, method='grima2012'):
+def relative_altitude_gain(aux, method='grima2012'):
     """Provide relative altitude gain for an orbit following
     Grima et al. 2012 or Campbell et al. (2021, eq.1)
     """
-    aux = senv.aux_data(orbit_full)
-    if aux is None: # pragma: no cover
-        raise DataMissingException("No Auxiliary Data for orbit %s", orbit_full)
 
     if method  == 'grima2012':
         alt_ref = 250 # Reference altitude in km
@@ -186,14 +184,10 @@ def relative_altitude_gain(senv, orbit_full, method='grima2012'):
     return gain
 
 
-def relative_sahga_gain(senv, orbit_full):
+def relative_sahga_gain(aux):
     """Provide relative SA and HGA gain for an orbit following
     Campbell et al. (2021, eq.4)
     """
-    aux = senv.aux_data(orbit_full)
-    if aux is None: # pragma: no cover
-        raise DataMissingException("No Auxiliary Data for orbit %s", orbit_full)
-
     samxin = aux['MRO_SAMX_INNER_GIMBAL_ANGLE']
     sapxin = aux['MRO_SAPX_INNER_GIMBAL_ANGLE']
     hgaout = aux['MRO_HGA_OUTER_GIMBAL_ANGLE']
@@ -204,12 +198,14 @@ def relative_sahga_gain(senv, orbit_full):
     return gain
 
 
-def archive_surface(senv, orbit_full: str, srf_data, typ: str):
+def archive_surface(output_filename, orbit_full: str, aux, srf_data, typ: str):
     """
     Archive in the hierarchy results obtained from srf_processor
 
     Input:
     -----
+
+    output_filename: str - path where to save data
 
     orbit_full: string
         the orbit number or the full name of the orbit file (w/o extension)
@@ -223,12 +219,7 @@ def archive_surface(senv, orbit_full: str, srf_data, typ: str):
 
     """
 
-    # Gather auxilliary information
-
-    aux = senv.aux_data(orbit_full)
-    if aux is None: # pragma: no cover
-        raise DataMissingException("No Auxiliary Data for orbit %s", orbit_full)
-
+    # Gather columns from auxilliary information
     columns = ['EPHEMERIS_TIME',
                'SUB_SC_PLANETOCENTRIC_LATITUDE',
                'SUB_SC_EAST_LONGITUDE',
@@ -260,41 +251,39 @@ def archive_surface(senv, orbit_full: str, srf_data, typ: str):
     # Archive
 
     #k = p['orbit_full'].index(orbit_full)
-    list_orbit_info = senv.get_orbit_info(orbit_full)
-    orbit_info = list_orbit_info[0]
+    #list_orbit_info = senv.get_orbit_info(orbit_full)
+    #orbit_info = list_orbit_info[0]
 
-    assert typ == 'cmp'
+    #assert typ == 'cmp', "This probably works fine, but hasn't been tested with any value other than 'cmp'"
 
-    archive_path = os.path.join(senv.out['srf_path'],
-                                orbit_info['relpath'], typ)
+    #archive_path = os.path.join(senv.out['srf_path'],
+    #                            orbit_info['relpath'], typ)
 
-    os.makedirs(archive_path, exist_ok=True)
-    fil = os.path.join(archive_path, orbit_full + '.txt')
-    out.to_csv(fil, index=None, sep=',')
-    logging.info('CREATED: %s', fil)
+    os.makedirs(os.path.dirname(output_filename), exist_ok=True)
+    #fil = os.path.join(archive_path, orbit_full + '.txt')
+    out.to_csv(output_filename, index=None, sep=',')
+    logging.info('CREATED: %s', output_filename)
 
 
 def main():
     """Executed if run as script
     """
-    parser = argparse.ArgumentParser(description='Processing routines \
-                                     for surface echo power extraction')
+    desc = 'Produce standard data products for surface echo power'
+    parser = argparse.ArgumentParser(description=desc)
 
     #--------------------
     # Job control options
 
-    #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
-
     parser.add_argument('-o', '--output', default=None,
-                        help="Debugging output data directory")
+                        help="Output targ directory")
     parser.add_argument('orbits', metavar='orbit', nargs='*',
                         help='Orbit IDs to process (including leading zeroes).'
                         'If "all", processes all orbits')
     parser.add_argument('--orbitlist', help='Text file containing list of orbits to process')
-    #parser.add_argument('--tracklist', default="elysium.txt",
-    #    help="List of tracks to process")
-    #parser.add_argument('--maxtracks', default=None, type=int,
-    #    help="Max number of tracks to process")
+
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Overwrite files even if they were already processed')
+    add_standard_args(parser, script='srf')
 
     #------------------
     # Algorithm options
@@ -307,104 +296,72 @@ def main():
     parser.add_argument('-t', '--type', type=str, default='cmp',
                         help='Type of radar data used to get the amplitude \
                         from')
-    parser.add_argument('-d', '--delete', action='store_true',
-                        help='Delete and reprocess files already processed, \
-                        only if [orbit] is [all]')
 
-    add_standard_args(parser, script='srf')
     # Delete items that aren't
-
     args = parser.parse_args()
+
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="run_srf: [%(levelname)-7s] %(message)s")
 
-    # debug output only if not multiprocessing
-    assert not(args.output and args.jobs > 1)
+    if args.output is None:
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
 
-    # Construct directory names
-    data_path = os.path.join(args.SDS, 'targ/xtra/SHARAD')
     orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
-
-    senv = SHARADEnv.SHARADEnv(data_path=data_path, orig_path=orig_path)
-
+    senv = SHARADEnv.SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
     #--------------------------
     # Requested Orbits handling
-
-    logging.debug("Checking orbit processing status")
-    processed = senv.processed()
-    set_available = set(processed['cmp']) # To convert to EDR orbit list
-    set_processable = set_available & set(processed['alt'])
-    if 'srf' in processed:
-        set_processable_unprocessed = set_processable - set(processed['srf'])
-    else:
-        set_processable_unprocessed = set_processable
-
-    logging.debug("Done checking orbit processing status")
-
     if args.orbits == ['all']:
-        set_requested = set_available
+        # Search for all available products and throw them on the command line
+        senv.index_files(index_intermediate_files=True)
+        productlist = list(senv.processed()['cmp'])
     else:
-        set_requested = set(args.orbits)
+        senv.index_files(index_intermediate_files=False)
+        productlist = args.orbits
 
     if args.orbitlist:
         # Load list of files from orbit list
-        set_requested.add(list(np.genfromtxt(args.orbitlist, dtype='str')))
+        productlist.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
 
-    if args.delete:
-        args.orbits = list(set_processable & set_requested)
-    else:
-        args.orbits = list(set_processable_unprocessed & set_requested)
-
-    args.orbits.sort()
-
-    #-----------
-    # Processing
-
-    logging.info("TOTAL: %d orbits to process", len(args.orbits))
-
-    if args.dryrun:
-        logging.info("Dry run only -- Orbits:\n" + '\n'.join(args.orbits))
-        #logging.info(f"TOTAL: {len(args.orbits)} to process")
-        return 0
 
     # Keyword arguments for processing
-    kwargs = {'typ':args.type,
-              'ywinwidth':args.ywinwidth,
-              'archive':True,
-              'gain':0,
-              'gain_altitude':'grima2021',
-              'gain_sahga':True,
-              'method':'grima2012',
-              'alt_data':True,
-              'senv':senv
-             }
+    kwargs = {
+        'typ':args.type,
+        'ywinwidth':args.ywinwidth,
+        'archive':True,
+        'gain':0,
+        'gain_altitude':'grima2021',
+        'gain_sahga':True,
+        'method':'grima2012',
+        'alt_data':True,
+        'senv': senv,
+    }
 
+    process_list = []
+    for ii, product_id in enumerate(productlist, start=1):
+        try:
+            infiles = senv.sfiles.product_paths(args.type, product_id) # nominally args.type=='cmp'
+            infiles.update(senv.sfiles.product_paths('alt', product_id))
+            outfiles = senv.sfiles.product_paths('srf', product_id, typ=args.type)
+        except KeyError:
+            logging.debug("Can't find product ID %s in index for %s, alt, srf", product_id, args.type)
+            continue
 
-    if args.jobs <= 1 or len(args.orbits) <= 1:
-        # Don't use multiprocessing
-        for orbit in args.orbits:
-            srf = surface_processor(orbit, **kwargs)
+        if not should_process_products(product_id, infiles, outfiles, args.overwrite, loglevel=logging.DEBUG):
+            continue
 
-            if args.output is not None:
-                # Debugging output
-                outfile = os.path.join(args.output, "srf_{:s}.npy".format(orbit))
-                logging.debug("Saving to %s", outfile)
-                os.makedirs(args.output, exist_ok=True)
-                np.save(outfile, srf)
-    else:
-        # Use multiprocessing
-        with multiprocessing.Pool(args.jobs) as pool:
-            results = []
-            for orbit in args.orbits:
-                res = pool.apply_async(surface_processor, (orbit,), kwargs)
-                results.append(res)
+        params = {'orbit': product_id, 'output_filename': outfiles['srf_txt']}
+        params.update(kwargs)
+        process_list.append(params)
 
-            for n, result in enumerate(results, start=1):
-                result.get()
-                logging.debug("Result %d of %d done", n, len(results))
+    logging.info("TOTAL: %d orbits to process", len(process_list))
 
+    if args.dryrun:
+        logging.debug("orbits: %s", ' '.join([p['orbit'] for p in process_list]))
+        return 0
+
+    run_jobs(surface_processor, process_list, args.jobs)
 
 
 

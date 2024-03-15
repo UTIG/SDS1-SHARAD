@@ -27,20 +27,20 @@ import argparse
 import multiprocessing
 import os
 import sys
+from pathlib import Path
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
 import SHARADEnv
+from SHARADEnv import DataMissingException
+from run_rng_cmp import add_standard_args, run_jobs, should_process_products
 
-p1 = os.path.join(os.path.dirname(__file__), '../xlib')
-sys.path.insert(1, os.path.abspath(p1))
 import rsr
 import subradar as sr
 
-class DataMissingException(FileNotFoundError):
-    pass
+
 
 
 def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
@@ -124,27 +124,25 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
     # Archive
     # TODO: make this a separate function (should it be a member of SHARADEnv?)
     # archive_rsr(senv, orbit, rsr_data)
-    if sav is True:
-        # TODO: change this to use b_single
-        # orbit_info = senv.get_orbit_info(orbit_full, True)
-        list_orbit_info = senv.get_orbit_info(orbit_full)
-        orbit_info = list_orbit_info[0]
-        if typ == 'cmp':
-            archive_path = os.path.join(senv.out['rsr_path'],
-                    orbit_info['relpath'], typ)
-        else: # pragma: no cover
-            assert False
-        if not os.path.exists(archive_path):
-            os.makedirs(archive_path)
-        fil = os.path.join(archive_path,  orbit_full + '.txt')
+    if sav: # == True:
+        fil = senv.sfiles.product_paths('rsr', orbit_full)['rsr_txt']
+        os.makedirs(os.path.dirname(fil))
         b.to_csv(fil, index=None, sep=',')
-        #print("CREATED: " + fil)
-        logging.debug("CREATED: " + fil )
+        logging.debug("CREATED: %s", fil)
+
+        # TODO: save debugging output if requested
+        if False:
+            # Debugging output
+            outfile = str(Path(fil).with_suffix('.npy'))
+            logging.debug("Saving debug to " + outfile)
+            np.save(outfile, b)
+
+
 
     return b
 
 
-def rsr_grid(filename, query_lon=None, query_lat=None, grid_shape='square',
+def rsr_grid(filename:str, query_lon=None, query_lat=None, grid_shape='square',
              r=np.rad2deg(5/3389.5), nbcores=8, senv=None):
     """
     Output the results from the Radar Statistical Reconnaissance Technique
@@ -198,7 +196,8 @@ def rsr_grid(filename, query_lon=None, query_lat=None, grid_shape='square',
     out['lat'] = [query_lat[int(i)] for i in out['ID'].values]
 
     # Store data
-    out.to_csv(filename.split('.')[0] + '.rsr.csv', sep=',', header=True, index=False)
+    
+    out.to_csv(os.path.splitext(filename)[0] + '.rsr.csv', sep=',', header=True, index=False)
 
     return out
 
@@ -259,7 +258,7 @@ def rsr_quadrangle(filename, query_lon=None, query_lat=None, grid_shape='square'
     # Store data
     out.to_csv(filename.split('.')[0] + '.rsr.csv', sep=',', header=True, index=False)
 
-    return out 
+    return out
 
 
 def main():
@@ -278,18 +277,11 @@ def main():
             help='Orbit IDs to process (including leading zeroes). If "all",\
             processes all orbits')
     parser.add_argument('--orbitlist', help='Text file containing list of orbits to process')
-    parser.add_argument('-j','--jobs', type=int, default=8,
-            help="Number of jobs (cores) to use for processing. -1 to disable\
-            multiprocessing")
-    parser.add_argument('-v','--verbose', action="store_true",
-            help="Display verbose output")
-    parser.add_argument('-n','--dryrun', action="store_true",
-            help="Dry run. Build task list but do not run")
-    #parser.add_argument('--tracklist', default="elysium.txt",
-    #    help="List of tracks to process")
-    #parser.add_argument('--maxtracks', default=None, type=int,
-    #    help="Max number of tracks to process")
 
+    parser.add_argument('--overwrite', action='store_true',
+            help='Overwrite output data products even if they already exist.')
+
+    add_standard_args(parser, script='rsr')
     #--------------------
     # Algorithm options
 
@@ -305,10 +297,6 @@ def main():
             help='Method to compute the bin width (inherited from numpy.histogram)')
     parser.add_argument('-f', '--fit_model', type=str, default='hk',
             help='Name of the function (in pdf module) to use for the fit')
-    parser.add_argument('-d', '--delete', action='store_true',
-            help='Delete and reprocess files already processed, only if [orbit] is [all]')
-    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS)")
 
 
     args = parser.parse_args()
@@ -317,68 +305,52 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="run_rsr: [%(levelname)-7s] %(message)s")
 
-
+    if args.output is None:
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
     # Construct directory names
-    data_path = os.path.join(args.SDS, 'targ/xtra/SHARAD')
     orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
 
-    senv = SHARADEnv.SHARADEnv(data_path=data_path, orig_path=orig_path)
-
+    senv = SHARADEnv.SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
+    ## add sfiles and pass through to figure out output file location
     #--------------------------
     # Requested Orbits handling
 
-    logging.debug("Checking orbit processing status")
-    available = senv.processed()['cmp'] # To convert to EDR orbit list
-    processed = senv.processed()
-    processable = processed['srf']
-    processable_unprocessed = list(set(processable) - set(processed['rsr']))
-    logging.debug("Done checking orbit processing status")
-
     if args.orbits == ['all']:
-        requested = available
+        # Search for all available products and throw them on the command line
+        senv.index_files(index_intermediate_files=True)
+        productlist = list(senv.processed()['cmp'])
     else:
-        requested = args.orbits
+        senv.index_files(index_intermediate_files=False)
+        productlist = args.orbits
 
     if args.orbitlist:
         # Load list of files from orbit list
-        requested.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
+        productlist.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
 
-    if args.delete:
-        args.orbits = list(set(processable) & set(requested))
-    else:
-        args.orbits = list(set(processable_unprocessed) & set(requested))
 
-    args.orbits.sort()
 
     #-----------
     # Processing
 
-    logging.info("TOTAL: %d orbits to process", len(args.orbits))
+    logging.info("TOTAL: %d orbits to process", len(productlist))
 
-    if args.dryrun: # pragma: no cover
-        logging.info("Process orbits: " + ' '.join(args.orbits))
-        sys.exit(0)
+    if args.dryrun:
+        logging.info("Process orbits: " + ' '.join(productlist))
+        return 0
 
-    for i, orbit in enumerate(args.orbits):
-        print('({}) {:>5}/{:>5}: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i+1, len(args.orbits), orbit, ))
-        #print(str(str(i)+'/'+len(orbit))+ ': ' + orbit)
+    for i, orbit in enumerate(productlist, start=1):
+        logging.info('(%s) %5d/%5d: %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i, len(args.orbits), orbit)
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose,
                 bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
                 senv=senv)
 
-        if args.output is not None:
-            # Debugging output
-            outfile = os.path.join(args.output, "rsr_{:s}.npy".format(orbit))
-            logging.debug("Saving to " + outfile)
-            os.makedirs(args.output, exist_ok=True)
-            np.save(outfile, b)
 
 
 
 if __name__ == "__main__":
     # execute only if run as a script
-    main()
+    sys.exit(main())
 
 
 

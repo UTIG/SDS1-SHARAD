@@ -29,6 +29,9 @@ COV=coverage3
 # Turn off display variable for regressions. (prevent graph windows from activating)
 export DISPLAY=""
 
+OUT1=./covdata/targ/xtra/SHARAD
+OUT2=./covdata/targ/xtra/SHARAD2
+
 # Suppress numexpr messages
 export NUMEXPR_MAX_THREADS=8
 
@@ -45,13 +48,23 @@ do
     echo "$S0: Running $NAME -h"
     $COV run $FLAGS -a $NAME -h > /dev/null
 done
-$COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
+
+# These are really slow, so allow them to be disabled during testing
+RUNSLOW=0
+if [ "$RUNSLOW" -eq "1" ]
+then
+    $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
+    for NAME in ../xlib/clutter/interferometry_funclib.py \
+    ../xlib/rng/icsim.py
+    do
+        $COV run $FLAGS -a $NAME
+    done
+fi
 
 for NAME in ../xlib/sar/sar.py ../xlib/altimetry/treshold.py ../xlib/altimetry/beta5.py \
-../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py ../xlib/clutter/interferometry_funclib.py \
+../xlib/clutter/radargram_reprojection_funclib.py ../xlib/clutter/interface_picker.py \
 ../xlib/clutter/peakint.py \
 ../xlib/misc/coord.py ../xlib/misc/hdf.py ../xlib/rot/trafos.py  \
-../xlib/rng/icsim.py \
 ../xlib/rot/mars.py ../xlib/cmp/plotting.py \
 ../xlib/cmp/rng_cmp.py ../xlib/cmp/pds3lbl.py
 do
@@ -77,66 +90,58 @@ $COV run $FLAGS -a ../xlib/sar/smooth.py
 #echo $S0: CMD $COV run $FLAGS -a ../MARFA/zfile.py
 #$COV run $FLAGS -a ../MARFA/zfile.py
 
+echo $S0: pipeline
+# Run pipeline on a fresh (uninitialized) output.
+$COV run $FLAGS -a ../SHARAD/pipeline.py -n -vv --tracklist ./tracks_coverage.txt
+# Don't do foc because it takes forever
+$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --maxrequests 1 --tracklist ./tracks_coverage.txt rsr
+$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
+# Run pipeline on a partially complete output
+rm -rf $OUT2/cmp
+$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
+
 
 RNGDATA=./covdata/rng_cmp/
-$COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1 --ofmt none
-$COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1
-$COV run $FLAGS -a ../xlib/cmp/rng_cmp.py --maxtracks 1 --ofmt hdf5
+$COV run $FLAGS -a ../xlib/cmp/rng_cmp.py -o $RNGDATA -n --tracklist ./tracks_coverage.txt --maxtracks 1
 
-#DRYRUN=-n
-DRYRUN=
-
-RUN_SAR2_FLAGS="-o ./covdata/run_sar2_data -j 1 --maxtracks 1  --tracklist ./tracks_coverage.txt --params run_sar2_cov.json"
-#$COV run $FLAGS -a ../SHARAD/run_sar2.py -o ./covdata/run_sar2_data -j 1 --maxtracks 1 --ofmt none --tracklist ./tracks_coverage.txt
-echo $S0: run_sar2 -n
-$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv2 -n
-echo $S0: run_sar2 ddv2
-$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv2
-# Run ddv2 with no interpolation
-$COV run $FLAGS -a ../SHARAD/run_sar2.py -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt  --ofmt hdf5 --focuser ddv2 --params run_sar2_cov2.json
-
-echo $S0: run_sar2 mf
-$COV run $FLAGS -a ../SHARAD/run_sar2.py -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt $RUN_SAR2_FLAGS --ofmt none --focuser mf --params run_sar2_mf_cov.json
-
-# This one still takes too long with default params
-#echo $S0: run_sar2 ddv1
-$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv1
 
 
 echo $S0: run_rng_cmp
-$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o ./covdata/rng_cmp_data -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt
+$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n e_1920301_001_ss04_700_a DOESNOTEXIST || true
+$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o $OUT1 -j 1 --maxtracks 2 --tracklist ./tracks_coverage.txt
+$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o $OUT1 -j 1 e_0187401_007_ss19_700_a
 
 echo $S0: run_altimetry
-$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt -n
-$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 --maxtracks 1 --tracklist ./tracks_run_altimetry_cov.txt
+$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o $OUT1 -j 1 --tracklist ./tracks_coverage.txt -n
+$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o $OUT1 -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt
 # This doesn't work because we haven't updated our MROSH index since 2018 (see tracklist file)
 #$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 \
 #    --tracklist ./tracks_run_altimetry_fix202110.txt
 
 
 echo "$S0: run_surface"
-# show all files that would be deleted
-$COV run $FLAGS -a ../SHARAD/run_surface.py -n --delete all
-# show all files
+# show all files that would be processed and overwritten
+$COV run $FLAGS -a ../SHARAD/run_surface.py -n --overwrite all
+# show all files that would be processed if not done
 $COV run $FLAGS -a ../SHARAD/run_surface.py -n all
-# TODO: run with filelist and explicit name listing
-# Run orbits. This currently fails. 
-$COV run $FLAGS -a ../SHARAD/run_surface.py -j 1 -o out_debug all && true
+$COV run $FLAGS -a ../SHARAD/run_surface.py -o $OUT1 -j 1 e_1920301_001_ss04_700_a
 
 echo "$S0: run_rsr"
-# show all files
-$COV run $FLAGS -a ../SHARAD/run_rsr.py -n all
-# show all files that would be deleted
-$COV run $FLAGS -a ../SHARAD/run_rsr.py -n --delete all
+# show what happens processing all files
+$COV run $FLAGS -a ../SHARAD/run_rsr.py -n all > /dev/null
+# show all files that would be overwritten
+$COV run $FLAGS -a ../SHARAD/run_rsr.py -n --overwrite all > /dev/null
 # Run an orbit
 
-nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --ofmt none --output ./covdata/rsr_data/ -s 2000 1920301
+nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --output $OUT1 -s 2000 1920301
 
 
 echo "$S0: run_ranging"
 $COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 4 --jobs 1 -n
-$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 4 --jobs 4
-$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 2 --jobs 1
+if [ "$RUNSLOW" -eq "1" ]
+then
+    $COV run $FLAGS -a ../SHARAD/run_ranging.py --noprogress --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 2 --jobs 1
+fi
 
 
 echo "$S0: interferometry"
@@ -150,6 +155,26 @@ $COV run $FLAGS -a ../MARFA/run_interferometry.py \
                  --refpickfile ../regress/pick_ref_GOG3_JKB2j_BWN01b_Stack15_KMS2.npz \
                  --plot --save out_ri2
 
+
+####################################
+RUN_SAR2_FLAGS="-o ./covdata/run_sar2_data -j 1 --maxtracks 1  --tracklist ./tracks_coverage.txt --params run_sar2_cov.json"
+#$COV run $FLAGS -a ../SHARAD/run_sar2.py -o ./covdata/run_sar2_data -j 1 --maxtracks 1 --ofmt none --tracklist ./tracks_coverage.txt
+echo $S0: run_sar2 -n
+$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv2 -n
+echo $S0: run_sar2 ddv2
+$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv2
+# Run ddv2 with no interpolation
+$COV run $FLAGS -a ../SHARAD/run_sar2.py -j 1 --maxtracks 2 --tracklist ./tracks_coverage.txt  --ofmt hdf5 --focuser ddv2 --params run_sar2_cov2.json
+
+echo $S0: run_sar2 mf
+$COV run $FLAGS -a ../SHARAD/run_sar2.py -j 1 --maxtracks 3 --tracklist ./tracks_coverage.txt $RUN_SAR2_FLAGS --ofmt none --focuser mf --params run_sar2_mf_cov.json
+
+# This one still takes too long with default params
+#echo $S0: run_sar2 ddv1
+$COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv1
+
+# End SAR
+##########################################################
 
 
 echo "$S0: data_visualization.py"

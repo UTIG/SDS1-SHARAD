@@ -136,7 +136,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
 
     # Extract topography and simulate scattering
-    logging.debug("incoherent_sim: setup elapsed time at {:0.3f} sec".format(time.time() - t0))
+    logging.debug("incoherent_sim: setup elapsed time at %0.3f sec", time.time() - t0)
 
 
     # Calculate cartesian coordinates for all coordinates on the map being used.
@@ -153,7 +153,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # Calculate cartesian and generate a full spherical.
     dem_cart = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
     del dem, dem_mask
-    logging.debug("incoherent_sim: Done precomputing cartesian coordinates at {:0.3f} sec".format(time.time() - t0))
+    logging.debug("incoherent_sim: Done precomputing cartesian coordinates at %0.3f sec", time.time() - t0)
 
     # Create array to store result. echosp will contain the Fourier transform
     # of each rangeline.
@@ -206,7 +206,8 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         if pos == 0:
             tot_power = np.sum(P)
             used_power = np.sum(P[iP])
-            logging.info("incoherent_sim: Using 20% of reflectors ({:d} total), got {:0.2f}% of power".format(len(P), used_power / tot_power * 100))
+            logging.info("incoherent_sim: Using 20%% of reflectors (%d total), got %0.2f%% of power",
+                         len(P), used_power / tot_power * 100.)
 
         delay = delay[iP]     # sort top x% delays in ascending order of power
         P = P[iP]             # sort top x% powers in ascending order of power
@@ -230,7 +231,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     if p:
         p.close_Prog()
 
-    logging.debug("incoherent_sim: reflection sim: {:0.3f} sec".format(time.time() - t0))
+    logging.debug("incoherent_sim: reflection sim: %0.3f sec", time.time() - t0)
 
     # Align to a common reference, convert power to voltage, apply a window
     # Align echoes to a common reference point in time

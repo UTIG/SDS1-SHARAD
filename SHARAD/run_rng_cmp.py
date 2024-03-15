@@ -31,7 +31,6 @@ import pandas as pd
 from typing import Dict, List, Tuple, Callable
 
 from SHARADEnv import SHARADFiles
-#from run_altimetry import read_tracklistfile, filename_to_productid
 
 CODEPATH = os.path.dirname(__file__)
 p1 = os.path.abspath(os.path.join(CODEPATH, "../xlib"))
@@ -40,7 +39,7 @@ sys.path.insert(1, p1)
 #import misc.hdf
 import cmp.pds3lbl as pds3
 import cmp.plotting
-import cmp.rng_cmp
+from cmp.rng_cmp import read_and_chunk_radar, compress_chunks, save_cmp_files
 import misc.fileproc as fileproc
 
 
@@ -49,8 +48,8 @@ warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
 
 
-def cmp_processor(infile, outfiles: Dict[str, str], SDS: str, idx_start=None, idx_end=None, taskname="TaskXXX",
-                  radargram=True, chrp_filt=True, verbose=False):
+def cmp_processor(infile, outfiles: Dict[str, str], sharad_root: str, idx_start=None, idx_end=None, taskname="TaskXXX",
+                  radargram=False, chrp_filt=True, verbose=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
@@ -60,7 +59,7 @@ def cmp_processor(infile, outfiles: Dict[str, str], SDS: str, idx_start=None, id
       infile    : Path to track file to be processed.
       outfiles  : A dictionary with keys 'cmp_h5' and 'cmp_tecu' giving paths to files to create
                   If outfiles is None, don't save any files
-      SDS       : SDS root path
+      sharad_root : SHARAD EDR data repository root path
       idx_start : Start index for processing.
       idx_end   : End index for processing.
       chrp_filt : Apply a filter to the reference chirp
@@ -73,90 +72,17 @@ def cmp_processor(infile, outfiles: Dict[str, str], SDS: str, idx_start=None, id
       cmp_pulses : Compressed pulses
 
     """
-    assert SDS is not None
     try:
-    #if chrp_filt:
-        time_start = time.time()
         # Get science data structure
-        label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
-        aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
-        # Load data
-        science_path = infile.replace('_a.dat', '_s.dat')
-        data = pds3.read_science(science_path, label_path, science=True)
-        aux  = pds3.read_science(infile      , aux_path,   science=False)
+        label_path = os.path.join(sharad_root, 'EDR/mrosh_0004/label/science_ancillary.fmt')
+        aux_path = os.path.join(sharad_root, 'EDR/mrosh_0004/label/auxiliary.fmt')
 
-        stamp1 = time.time()-time_start
-        logging.debug("%s: data loaded in %0.1f seconds", taskname, stamp1)
+        decompressed, decomp, chunks, aux, idx_start, idx_end = read_and_chunk_radar(infile, label_path, aux_path, idx_start, idx_end, taskname)
 
-        # Array of indices to be processed
-        if idx_start is None or idx_end is None:
-            idx_start, idx_end = 0, len(data)
-        idx = np.arange(idx_start, idx_end)
-
-        logging.debug('%s: Length of track: %d', taskname, len(idx))
-
-        # Chop raw data
-        nsamples = 3600
-        raw_data = np.empty((len(idx), nsamples), dtype=np.complex128)
-        for j in range(nsamples):
-            raw_data[idx-idx_start, j] = data['sample'+str(j)][idx].values
-
-        if data['COMPRESSION_SELECTION'][idx_start] == 0:
-            compression = 'static'
-        else:
-            compression = 'dynamic'
-        tps = data['TRACKING_PRE_SUMMING'][idx_start]
-        presum_table = (1, 2, 3, 4, 8, 16, 32, 64)
-        assert 0 <= tps <= 7
-        presum = presum_table[tps]
-        sdi = data['SDI_BIT_FIELD'][idx_start]
-        bps = 8
-
-        # Decompress the data
-        decompressed = cmp.rng_cmp.decompress_sci_data(raw_data, compression, presum, bps, sdi)
-        del raw_data
-        E_track = np.empty((idx_end-idx_start, 2))
-        # Get groundtrack distance and define 30 km chunks
-        tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
-        chunks = calculate_chunks(tlp, 30.)
-        logging.debug('%s: chunked into %d pieces', taskname, len(chunks))
-        cmp_track = np.empty(decompressed.shape + (2,), dtype=np.int16) # real and imaginary
-        # Compress the data chunkwise and reconstruct
-        for i, (start, end) in enumerate(chunks):
-            #check if ionospheric correction is needed
-            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
-            b_iono = len(iono_check) != 0
-            minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('%s: chunk %03d/%03d Minimum SZA: %0.3f  Ionospheric Correction: %r',
-                taskname, i, len(chunks), minsza, b_iono)
-
-            # GNG: These concats seem relatively expensive.
-            E, sigma, cmp_data = cmp.rng_cmp.us_rng_cmp(decompressed[start:end],\
-                                 chirp_filter=chrp_filt, iono=b_iono, debug=verbose)
-
-            cmp_track[start:end, :, 0] = np.round(cmp_data.real)
-            cmp_track[start:end, :, 1] = np.round(cmp_data.imag)
-            E_track[start:end, 0] = E
-            E_track[start:end, 1] = sigma
-
-        stamp3 = time.time() - time_start - stamp1
-        logging.debug('%s Data compressed in %0.2f seconds', taskname, stamp3)
+        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chrp_filt, verbose, idx_start, idx_end, taskname)
 
         if outfiles is not None:
-            # Assume these two files are being put into the same directory
-            outdir = os.path.dirname(outfiles['cmp_h5'])
-            logging.debug('%s: Saving to folder: %s', taskname, outdir)
-            os.makedirs(outdir, exist_ok=True)
-
-            # restructure of data save
-            dfreal = pd.DataFrame(cmp_track[:, :, 0])
-            dfreal.to_hdf(outfiles['cmp_h5'], key='real', complib='blosc:lz4', complevel=6)
-            del dfreal
-            dfimag = pd.DataFrame(cmp_track[:, :, 1])
-            dfimag.to_hdf(outfiles['cmp_h5'], key='imag', complib='blosc:lz4', complevel=6)
-            del dfimag
-            #np.savez(outfile + "_int16.npz", real=cmp_track[:, :, 0], imag=cmp_track[:, :, 1])
-            np.savetxt(outfiles['cmp_tecu'], E_track)
+            save_cmp_files(outfiles['cmp_h5'], outfiles['cmp_tecu'], cmp_track, E_track, taskname)
 
         if radargram:
             # Plot a radargram
@@ -177,22 +103,6 @@ def cmp_processor(infile, outfiles: Dict[str, str], SDS: str, idx_start=None, id
     logging.info('%s: Success processing file %s', taskname, infile)
     return 0
 
-def calculate_chunks(tlp, chunklen_km):
-    chunks = []
-    tlp0 = tlp[0]
-    i0 = 0
-    for i, tlp1 in enumerate(tlp):
-        if tlp1 > tlp0 + chunklen_km:
-            chunks.append([i0, i])
-            i0 = i
-            tlp0 = tlp1
-    if not chunks: # if chunks is empty
-        chunks = [(0, len(tlp))]
-    elif (tlp[-1]-tlp[i0]) >= (chunklen_km/2.):
-        chunks.append([i0, len(tlp)]) # add a new chunk
-    else: # append this chunk to the previous chunk
-        chunks[-1][1] = len(tlp)
-    return chunks #chunks = np.array(chunks)
 
 
 
@@ -259,7 +169,7 @@ def main():
         process_list.append({
             'infile': infiles['edr_aux'],
             'outfiles': outfiles,
-            'SDS': args.SDS,
+            'sharad_root': sharad_root,
             'idx_start': None,
             'idx_end': None,
             'taskname': "Task{:03d}".format(tasknum),
@@ -300,13 +210,13 @@ def process_product_args(product_ids: List[str], tracklistfile: str, sfiles: SHA
 
     return productlist
 
-def should_process_products(product_id, infiles: Dict[str, str], outfiles: Dict[str, str], overwrite: bool):
+def should_process_products(product_id, infiles: Dict[str, str], outfiles: Dict[str, str], overwrite: bool, loglevel=logging.INFO):
     filestatus = fileproc.file_processing_status(infiles.values(), outfiles.values())
     if (not overwrite) and filestatus[1] == 'output_ok':
-        logging.info("Not adding %s to jobs. output is up to date", product_id)
+        logging.log(loglevel, "Not adding %s to jobs. output is up to date", product_id)
         return False
     elif filestatus[0] == 'input_missing':
-        logging.info("Not adding %s to jobs. One or more inputs is missing", product_id)
+        logging.log(loglevel, "Not adding %s to jobs. One or more inputs is missing", product_id)
         return False
     return True
 
@@ -328,10 +238,6 @@ def run_jobs(f_processor: Callable, jobs: List[Dict[str, str]], nb_cores: int):
             for i, result in enumerate(results, start=1):
                 _ = result.get()
                 logging.info("Finished task %d of %d", i, len(jobs))
-                #if dummy == 1:
-                #    logging.error("%s: Problem running pulse compression",process_list[i][4])
-                #else:
-                #    logging.info("%s: Finished pulse compression", process_list[i][4])
 
     logging.info("Done in %0.2f seconds", time.time() - start_time)
 

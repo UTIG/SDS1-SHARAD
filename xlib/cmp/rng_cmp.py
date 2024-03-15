@@ -11,25 +11,52 @@ __history__ = {
                  'for the pulse compression of SHARAD data and'
                  'to correct for the ionospheric distortion'}}
 
+import os
+import sys
+import logging
+from typing import List
+import traceback
+
 import numpy as np
 #import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+import pandas as pd
+
+sys.path.insert(1, os.path.dirname(__file__))
+import pds3lbl as pds3
 
 
-def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
+
+def us_refchirp(tec_custom=None, maxTECU=1, resolution=50):
     """
-    This subroutine creates SHARAD reference chirps used for
-    pulse compression as a function of different TECU values.
-    TECU is TEC x 10^-16. TEC is correlated with the E value
+    This subroutine creates a menu of SHARAD reference chirps used for
+    pulse compression as a function of different total electron
+    content values. One total electron content unit (TECU)
+    is TEC x 10^-16. TEC is correlated with the E value
     by TEC = E/0.29. For reference see
-    Campbell et al. 2011 doi: 10.1109/LGRS.2011.2143692
-    Campbell and Watters 2016 doi: 10.1002/2015JE004917
-    If no Ionosphere is present TECU is set to 0.
+    [1] Campbell et al. 2011 doi: 10.1109/LGRS.2011.2143692
+    [2] Campbell and Watters 2016 doi: 10.1002/2015JE004917
+
+    By default, if tec is None, create a menu of reference chirps
+    using the max_tecu and resolution arguments to create chirps
+    corresponding to TEC values from 0 to maxTECU.
+
+    If no Ionosphere is present, TECU is set to 0.
+
+    TODO: this is kind of weirdly formatted since maxTECU
+    could be a float and resolution is an int.  Maybe we're missing
+    something?
 
     Input:
     -----------
+        tec_custom: float
+            With default value (None), create a menu of chirps
+            If specified, use this specific value of TEC to create one refchirp
+            Use a value of 0 for no ionospheric correction.
         maxTECU (optional): Maximum TECU value to be expected.
                             Default value is 1.
+        resolution: int
+            number of reference chirps to produce (if tec_custom is None)
 
     Output:
     -----------
@@ -42,47 +69,43 @@ def us_refchirp(iono=True, custom=None, maxTECU=1, resolution=50):
     a = (10E+6/85.05E-6) # Frequency rate 10 MHz/85 mus
     t = np.arange(0, 85.05E-6, 0.0375E-6) # Times in rng window
 
-    # Chirp can be expressed as an instantaneous angular frequency
+    # Chirp can be expressed as an instantaneous angular frequency ([2] eq 2)
     phi = 2*np.pi*(t*fl+a/2*t**2)
+    nsamples = 3600
 
-    if iono:
-        if custom is None:
-            # Initialize filter array
-            fs = np.empty((maxTECU*resolution, 3600), dtype=complex)
-            for i in range(0, maxTECU*resolution):
-                # Calculate empiric E value
-                E = i*1E+16/(0.29*resolution)
-                # Compute phase shift due to ionospheric distortion
-                phase = E*(fl+a*t)**(-1.93)
-                # Compute distorted chirp
-                C = -np.sin(phi-phase)+1j*np.cos(phi-phase)
-                # Pad to 3600 samples
-                ref_chirp = np.pad(C, (3600-len(C), 0),
-                                   'constant', constant_values=0)
-                # Chirp needs to be flipped due to SHARAD aliasing
-                ref_chirp = np.fft.fft(np.flipud(ref_chirp))
-                fs[i] = ref_chirp
-        else:
-            E = custom*1E+16/(0.29*resolution)
-            # Compute phase shift due to ionospheric distortion
-            phase = E*(fl+a*t)**(-1.93)
-            # Compute distorted chirp
-            C = -np.sin(phi-phase)+1j*np.cos(phi-phase)
-            # Pad to 3600 samples
-            ref_chirp = np.pad(C, (3600-len(C), 0),
-                               'constant', constant_values=0)
-            # Chirp needs to be flipped due to SHARAD aliasing
-            fs = np.fft.fft(np.flipud(ref_chirp))
+    if tec_custom is None:
+        # Initialize filter array
+        fs = np.empty((maxTECU*resolution, nsamples), dtype=complex)
+        for i in range(0, maxTECU*resolution):
+            # Calculate empiric E value
+            E = i*1E+16/(0.29*resolution)
+            fs[i] = iono_ref_chirp(E, fl, a, t, phi, nsamples)
     else:
-        # Without ionosphere - no phase
-        C = -np.sin(phi)+1j*np.cos(phi)
-        # Pad to 3600 samples
-        ref_chirp = np.pad(C, (3600 - len(C), 0),
-                           'constant', constant_values=0)
-        # Flip and fft
-        fs = np.fft.fft(np.flipud(ref_chirp))
+        E = tec_custom*1E+16/(0.29*resolution)
+        fs = iono_ref_chirp(E, fl, a, t, phi, nsamples)
 
     return fs
+
+def iono_ref_chirp(E: float, fl: float, a: np.ndarray, t: np.ndarray, phi: np.ndarray, nsamples: int):
+    """ Calculate ionospherically-distorted reference chirp
+    by TEC = E/0.29. For reference see
+    [1] Campbell et al. 2011 doi: 10.1109/LGRS.2011.2143692
+    [2] Campbell and Watters 2016 doi: 10.1002/2015JE004917
+    """
+    # Compute phase shift due to ionospheric distortion ([2] eq (7))
+    # Use a single float if no correction
+    phase = E*(fl+a*t)**(-1.93) if (E != 0.) else 0.
+
+    # Compute distorted chirp ([2] eq (3))
+    C = -np.sin(phi-phase)+1j*np.cos(phi-phase)
+    # Pad to requested number of samples
+    ref_chirp = np.pad(C, (nsamples-len(C), 0),
+                       'constant', constant_values=0)
+    # Chirp needs to be flipped due to SHARAD aliasing
+    ref_chirp = np.fft.fft(np.flipud(ref_chirp))
+    return ref_chirp
+
+
 
 
 def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
@@ -105,8 +128,8 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         dechirped: Pulse compressed with optimal E value
     """
     # Compute list of reference chirps
-    fs = us_refchirp(iono, resolution=resolution,
-                     maxTECU=maxTECU)
+    tec_custom = None if iono else 0.
+    fs = us_refchirp(tec_custom, resolution=resolution, maxTECU=maxTECU)
     if iono:
         #hammingf = Hamming(15E6, 25E6)
         csnr = np.empty((len(fs), len(data)))
@@ -115,7 +138,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         # apply frequency domain filter if desired
         # (combine it with the original fft data)
         if chirp_filter:
-            fftdata = fftdata * Hamming(15E6, 25E6)
+            fftdata *= Hamming(15E6, 25E6)
 
         for i, chirp in enumerate(fs):
             product = fftdata*np.conj(chirp)
@@ -143,27 +166,25 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
             pass #raise # Raise an error to get a more specific error
 
         if debug: # pragma: no cover
-            print('Gauss fit opt/cov:', opt, cov)
+            logging.debug('Gauss fit opt/cov: %r %r', opt, cov)
 
         x0 = min(49, max(0, opt[1]))
         E = x0/maxTECU/resolution
         sigma = opt[2]/maxTECU/resolution
 
         # Pulse compress whole track with optimal E
-        fs = us_refchirp(iono, resolution=resolution,
-                         custom=x0)
+        fs = us_refchirp(resolution=resolution, tec_custom=x0)
 
         product = fftdata*np.conj(fs)
         dechirped = np.fft.ifft(product)
 
     else:
-        E = 0
-        sigma = 0
-        # GNG: should this be * or np.multiply?
-        product = np.fft.fft(data)*np.conj(fs)
+        E, sigma = 0, 0
+        product = np.fft.fft(data) * np.conj(fs)
+        del fs
         # apply frequency domain filter if desired
         if chirp_filter:
-            product = np.multiply(product, Hamming(15E6, 25E6))
+            product *= Hamming(15E6, 25E6)
         dechirped = np.fft.ifft(product)
         if debug:
             pass #plt.show()
@@ -210,69 +231,212 @@ def Hamming(Fl, Fh):
                                    np.zeros(3600 - min_freq - hamming.size))))
     return hfilter
 
-def decompress_sci_data(data, compression, presum, bps, SDI):
+def decompress_sci_data(data, compression:str, presum: int, bps, sdi):
     """
-    Decompress the science data according to the
+    Decompress the science data in-place according to the
     SHARAD interface specification.
 
     Input:
     -----------
-        data: data to be decompressed
+        data: data to be decompressed in place
         compression: type of compression.
                      use 'static' or 'dynamic'
         presum: Onboard presumming parameter
         bps: Compression parameter
-        SDI: compression parameter
+        sdi: compression parameter
     Output:
     -----------
-        Decompressed data
+        (none)
     """
 
-    #TODO: only static decompression is currently implemented
-    #      implement dynamic decompression
+    decomp = decompression_scale_factors(compression, presum, bps, sdi)
+    data *= decomp
 
-    if compression == 'static' or compression == 'dynamic':
-        if compression == 'static': # Static scaling
-            L = np.ceil(np.log2(int(presum)))
-            R = bps
-            S = L - R + 8
-            N = presum
-            decomp = np.power(2, S) / N
-            decompressed_data = data * decomp
-        # dynamic currently disabled!
-        elif compression == True:#dynamic scaling
-            N = presum
-            if SDI <= 5:
-                S = SDI
-            elif 5 < SDI <= 16:
-                S = SDI - 6
-            elif SDI > 16:
-                S = SDI - 16
-            decompressed_data = data * (np.power(2, S) / N)
-        return decompressed_data
-    else: # pragma: no cover
-        # TODO: logging, should this be an exception?
-        print('Decompression Error: Compression Type {}'
-              ' not understood'.format(compression))
-        return None
+
+def decompression_scale_factors(compression:str, presum, bps, sdi):
+    """
+    Return the decompression scaling factors according to the
+    SHARAD interface specification.
+
+    Input:
+    -----------
+        data: data to be decompressed in place
+        compression: type of compression.
+                     use 'static' or 'dynamic'
+        presum: Onboard presumming parameter
+        bps: Compression parameter
+        sdi: compression parameter
+    Output:
+    -----------
+        coefficient (for static scaling) or numpy array
+    """
+    if compression == 'static': # Static scaling
+        L = np.ceil(np.log2(int(presum)))
+        R = bps
+        S = L - R + 8
+        N = presum
+        decomp = np.power(2, S) / N
+    elif compression == 'dynamic': # pragma: no cover
+        # dynamic scaling
+        raise NotImplementedError('Dynamic scaling is not yet implemented and tested')
+        N = presum
+        if sdi <= 5:
+            S = sdi
+        elif 5 < sdi <= 16:
+            S = sdi - 6
+        elif sdi > 16:
+            S = sdi - 16
+        #data *= (np.power(2, S) / N)
+        decomp = np.power(2, S) / N
+    else:
+        raise ValueError('Compression type %r not understood' % compression)
+    logging.debug("decomp %r", decomp)
+    return decomp
+
+
+def calculate_chunks(tlp: List[float], chunklen_km: float):
+    """ Calculate dimensions
+    tlp is along-track distance for the track
+    chunklen_km is nominal length of each chunk
+    """
+    chunks = []
+    tlp0 = tlp[0]
+    i0 = 0
+    for i, tlp1 in enumerate(tlp):
+        if tlp1 > tlp0 + chunklen_km:
+            chunks.append([i0, i])
+            i0 = i
+            tlp0 = tlp1
+    if not chunks: # if chunks is empty
+        chunks = [(0, len(tlp))]
+    elif (tlp[-1]-tlp[i0]) >= (chunklen_km/2.):
+        chunks.append([i0, len(tlp)]) # add a new chunk
+    else: # append this chunk to the previous chunk
+        chunks[-1][1] = len(tlp)
+    return chunks #chunks = np.array(chunks)
+
+def parse_decompress_parameters(sci_data, idx_start: int):
+    compression = 'static' if (sci_data['COMPRESSION_SELECTION'][idx_start] == 0) else 'dynamic'
+
+    # Tracking presumming table. Converts TPS field into presumming count
+    tps_table = (1, 2, 3, 4, 8, 16, 32, 64)
+    tps = sci_data['TRACKING_PRE_SUMMING'][idx_start]
+    assert tps >= 0 and tps <= 7
+    presum = tps_table[tps]
+    sdi = sci_data['SDI_BIT_FIELD'][idx_start]
+    bps = 8
+
+    return compression, presum, bps, sdi
+
+
+
+def read_and_chunk_radar(aux_data_path:str, sci_label_path:str, aux_label_path:str, idx_start:int, idx_end:int, taskname, chunklen_km=30.):
+    """ Read radargram and related files and return an array with science data
+    TODO: should we start with a SHARAD root and a relative path (that we can get
+    from the PDS table?
+
+    return value: tuple of two values
+    data: numpy array with complex radar data, decompressed
+    chunks: An array of indexes describing radar chunks
+    """
+
+    # Load data
+    science_path = aux_data_path.replace('_a.dat', '_s.dat')
+    data = pds3.read_science(science_path, sci_label_path, science=True)
+    aux  = pds3.read_science(aux_data_path, aux_label_path, science=False)
+
+    # Array of indices to be processed
+    if idx_start is None or idx_end is None:
+        idx_start, idx_end = 0, len(data)
+    idx = np.arange(idx_start, idx_end)
+    logging.debug('%s: Length of track: %d traces', taskname, len(idx))
+
+    raw_data = chop_raw_data(data, idx)
+
+    compression, presum, bps, sdi = parse_decompress_parameters(data, idx_start)
+    decomp = decompression_scale_factors(compression, presum, bps, sdi)
+
+    # Decompress the data
+    #decompress_sci_data(raw_data, compression, presum, bps, sdi)
+    # Get groundtrack distance and define 30 km chunks
+    tlp = list(data['TLP_INTERPOLATE'][idx_start:idx_end])
+    chunks = calculate_chunks(tlp, chunklen_km)
+    logging.debug('%s: chunked into %d pieces', taskname, len(chunks))
+
+    # TODO: slice sza out to reduce memory usge?
+    #sza = aux_data['SOLAR_ZENITH_ANGLE']
+    return raw_data, decomp, chunks, aux, idx_start, idx_end
+
+
+def compress_chunks(raw_data: np.ndarray, decomp, chunks, aux, chirp_filter: bool, verbose: bool, idx_start:int, idx_end:int, taskname):
+    """ Perform pulse compression on all the chunks """
+    # TODO: E_track can just be a list of tuples
+    E_track = np.empty((idx_end-idx_start, 2))
+
+    # TODO: memmap?
+    cmp_track = np.empty(raw_data.shape + (2,), dtype=np.int16) # real and imaginary
+
+    # Compress the data chunkwise and reconstruct
+    for i, (start, end) in enumerate(chunks):
+        decompress_chunk = np.empty((end-start, raw_data.shape[1]), dtype=complex)
+        decompress_chunk[...] = raw_data[start:end]
+        decompress_chunk *= decomp
+
+
+        #check if ionospheric correction is needed
+        iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
+        b_iono = len(iono_check) != 0
+        minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
+        logging.debug('%s: chunk %3d/%3d Minimum SZA: %0.3f  Ionospheric Correction: %r',
+            taskname, i, len(chunks), minsza, b_iono)
+
+        E, sigma, cmp_data = us_rng_cmp(decompress_chunk, chirp_filter=chirp_filter,
+                                        iono=b_iono, debug=verbose)
+
+        cmp_track[start:end, :, 0] = np.round(cmp_data.real)
+        cmp_track[start:end, :, 1] = np.round(cmp_data.imag)
+        E_track[start:end, 0] = E
+        E_track[start:end, 1] = sigma
+ 
+    return cmp_track, E_track
+
+
+def save_cmp_files(h5_filename:str, tecu_filename:str, cmp_track, E_track, taskname:str, save_np=False):
+    # Assume these two files are being put into the same directory
+    outdir = os.path.dirname(h5_filename)
+    logging.debug('%s: Saving to folder: %s', taskname, outdir)
+    os.makedirs(outdir, exist_ok=True)
+
+    # restructure of data save
+    dfreal = pd.DataFrame(cmp_track[:, :, 0])
+    dfreal.to_hdf(h5_filename, key='real', complib='blosc:lz4', complevel=6)
+    del dfreal
+    dfimag = pd.DataFrame(cmp_track[:, :, 1])
+    dfimag.to_hdf(h5_filename, key='imag', complib='blosc:lz4', complevel=6)
+    del dfimag
+    if save_np:
+        np.savez(os.path.splitext(h5_filename)[0] + "_int16.npz",
+                 real=cmp_track[:, :, 0], imag=cmp_track[:, :, 1])
+    os.makedirs(os.path.dirname(tecu_filename), exist_ok=True)
+    np.savetxt(tecu_filename, E_track)
 
 
 
 def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
-                       taskname="TaskXXX", chrp_filt=True, verbose=False,
-                       saving='hdf5'):
+                       taskname="TaskXXX", sharad_root=None, chirp_filter=True, verbose=False
+                       ):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual tracks and returns pulse compressed data.
 
     Input:
     -----------
-      infile    : Path to track file to be processed.
-      outdir    : Path to directory to write output data
-      idx_start : Start index for processing.
-      idx_end   : End index for processing.
-      chrp_filt : Apply a filter to the reference chirp
-      verbose   : Gives feedback in the terminal.
+      infile       : Path to track file to be processed.
+      outdir       : Path to directory to write output data
+      idx_start    : Start index for processing.
+      idx_end      : End index for processing.
+      chirp_filter : Apply a filter to the reference chirp
+      verbose      : Gives feedback in the terminal.
 
     Output:
     -----------
@@ -283,138 +447,35 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
 
     try:
         time_start = time.time()
+
         # Get science data structure
-        label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-        aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-        # Load data
-        science_path = infile.replace('_a.dat', '_s.dat')
-        data = pds3.read_science(science_path, label_path, science=True)
-        aux  = pds3.read_science(infile      , aux_path,   science=False)
+        label_path = os.path.join(sharad_root, 'mrosh_0004/label/science_ancillary.fmt')
+        aux_path = os.path.join(sharad_root, 'mrosh_0004/label/auxiliary.fmt')
 
-        stamp1 = time.time() - time_start
-        logging.debug("{:s}: data loaded in {:0.1f} seconds".format(taskname, stamp1))
+        decompressed, decomp, chunks, aux, idx_start, idx_end = read_and_chunk_radar(infile, label_path, aux_path, idx_start, idx_end, taskname)
 
-        # Array of indices to be processed
-        if idx_start is None or idx_end is None:
-            idx_start = 0
-            idx_end = len(data)
-        idx = np.arange(idx_start, idx_end)
+        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chirp_filter, verbose, idx_start, idx_end, taskname)
 
-        logging.debug('{:s}: Length of track: {:d}'.format(taskname, len(idx)))
-
-        # Chop raw data
-        raw_data = chop_raw_data(data, idx, idx_start)
-
-        compression = 'static' if (data['COMPRESSION_SELECTION'][idx_start] == 0) else 'dynamic'
-
-        # Tracking presumming table. Converts TPS field into presumming count
-        tps_table = (1, 2, 3, 4, 8, 16, 32, 64)
-        tps = data['TRACKING_PRE_SUMMING'][idx_start]
-        assert tps >= 0 and tps <= 7
-        presum = tps_table[tps]
-        SDI = data['SDI_BIT_FIELD'][idx_start]
-        bps = 8
-
-        # Decompress the data
-        decompressed = decompress_sci_data(raw_data, compression, presum, bps, SDI)
-        # TODO: E_track can just be a list of tuples
-        E_track = np.empty((idx_end-idx_start, 2))
-        # Get groundtrack distance and define 30 km chunks
-        tlp = np.array(data['TLP_INTERPOLATE'][idx_start:idx_end])
-        tlp0 = tlp[0]
-        chunks = []
-        i0 = 0
-        for i in range(len(tlp)):
-            if tlp[i] > tlp0 + 30:
-                chunks.append([i0, i])
-                i0 = i
-                tlp0 = tlp[i]
-
-        if len(chunks) == 0:
-            chunks.append([0, idx_end-idx_start])
-
-        if (tlp[-1] - tlp[i0]) >= 15:
-            chunks.append([i0, idx_end-idx_start])
-        else:
-            chunks[-1][1] = idx_end - idx_start
-
-        logging.debug('{:s}: Made {:d} chunks'.format(taskname, len(chunks)))
-        # Compress the data chunkwise and reconstruct
-
-
-        list_cmp_track = []
-        for i, chunk in enumerate(chunks):
-            start, end = chunks[i]
-
-            #check if ionospheric correction is needed
-            iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end] < 100)[0]
-            b_iono = len(iono_check) != 0
-            minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-            logging.debug('{:s}: chunk {:03d}/{:03d} Minimum SZA: {:6.2f} '
-                          ' Ionospheric Correction: {!r}'.format(
-                          taskname, i, len(chunks), minsza, b_iono))
-
-            E, sigma, cmp_data = us_rng_cmp(decompressed[start:end],
-                                            chirp_filter=chrp_filt,
-                                            iono=b_iono, debug=verbose)
-            list_cmp_track.append(cmp_data)
-            E_track[start:end, 0] = E
-            E_track[start:end, 1] = sigma
-
-        cmp_track = np.vstack(list_cmp_track)
-        list_cmp_track = None  # free memory
-
-
-        stamp3 = time.time() - time_start - stamp1
-        logging.debug('{:s} Data compressed in {:0.2f} seconds'.format(taskname, stamp3))
-
-        if saving and outdir != "":
+        if outdir != "":
             data_file   = os.path.basename(infile)
             outfilebase = data_file.replace('.dat', '.h5')
-            outfile     = os.path.join(outdir, outfilebase)
+            h5_filename = os.path.join(outdir, outfilebase)
+            outfilebase = data_file.replace('.dat', '_TECU.txt')
+            tecu_filename = os.path.join(outdir, outfilebase)
 
-            logging.debug('{:s}: Saving to {:s}'.format(taskname, outdir))
-            if not os.path.exists(outdir):
-                os.makedirs(outdir)
-
-            # restructure of data save
-            real = np.array(np.round(cmp_track.real), dtype=np.int16)
-            imag = np.array(np.round(cmp_track.imag), dtype=np.int16)
-            cmp_track = None # free memory
-            if saving == 'hdf5':
-                pd.DataFrame(real).to_hdf(outfile, key='real', complib='blosc:lz4', complevel=6)
-                pd.DataFrame(imag).to_hdf(outfile, key='imag', complib='blosc:lz4', complevel=6)
-                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
-            elif saving == 'npy':
-                # Round it just like in an hdf5 and save as side-by-side arrays
-                cmp_track = np.vstack([real, imag])
-                basename = data_file.replace('.dat', '.npy')
-                outfile = os.path.join(outdir, basename)
-                np.save(outfile, cmp_track)
-                logging.info("{:s}: Wrote {:s}".format(taskname, outfile))
-            elif saving == 'none':
-                pass
-            else: # pragma: no cover
-                logging.error("{:s}: Unrecognized output format '{:s}'".format(taskname, saving))
-
-            basename = data_file.replace('.dat', '_TECU.txt')
-            outfile_TECU = os.path.join(outdir, basename)
-            np.savetxt(outfile_TECU, E_track)
-            logging.info("{:s}: Wrote {:s}".format(taskname, outfile_TECU))
-
+            save_cmp_files(h5_filename, tecu_filename, cmp_track, E_track, taskname, save_np=True)
 
     except Exception as e: # pragma: no cover
-
-        logging.error('{:s}: Error processing file {:s}'.format(taskname, infile))
+        logging.error('%s: Error processing file %s', taskname, infile)
         for line in traceback.format_exc().split("\n"):
-            logging.error('{:s}: {:s}'.format(taskname, line))
+            logging.error('%s: %s', taskname, line)
         return 1
-    logging.info('{:s}: Success processing file {:s}'.format(taskname, infile))
+    logging.info('%s: Success processing file %s', taskname, infile)
     return 0
 
-def chop_raw_data(data, idx, idx_start):
-    raw_data = np.zeros((len(idx), 3600), dtype=complex)
-    for j in range(3600):
+def chop_raw_data(data, idx, nsamples=3600):
+    raw_data = np.empty((len(idx), nsamples), dtype=data['sample0'].dtype)
+    for j in range(nsamples):
         k = 'sample' + str(j)
         raw_data[:, j] = data[k][idx].values
     return raw_data
@@ -425,9 +486,9 @@ def main():
     parser = argparse.ArgumentParser(description='Range compression library')
     parser.add_argument('-o', '--output', default='./rng_cmp_data',
                         help="Output base directory")
-    parser.add_argument('--ofmt', default='npy',
-                        choices=('hdf5', 'npy', 'none'),
-                        help="Output file format")
+    #parser.add_argument('--ofmt', default='npy',
+    #                    choices=('hdf5', 'npy', 'none'),
+    #                    help="Output file format")
 
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
@@ -440,35 +501,34 @@ def main():
 
     args = parser.parse_args()
 
-    #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
         format="rng_cmp: [%(levelname)-7s] %(message)s")
 
+    SDS = os.getenv('SDS', '/disk/kea/SDS')
+    sharad_root = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR')
 
     # Read lookup table associating gob's with tracks
     if args.tracklist is None:
-        root = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
         lookup = (
-            root + '/mrosh_0001/data/edr03xxx/edr0336603/e_0336603_001_ss19_700_a_a.dat',
-            root + '/mrosh_0004/data/rm286/edr5272901/e_5272901_001_ss19_700_a_a.dat',
-            root + '/mrosh_0004/data/rm278/edr5116601/e_5116601_001_ss19_700_a_a.dat',
-            root + '/mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_a.dat',
+            os.path.join(sharad_root, 'mrosh_0001/data/edr19xxx/edr1920301/e_1920301_001_ss04_700_a_a.dat'),
+            #os.path.join(sharad_root, 'mrosh_0001/data/edr03xxx/edr0336603/e_0336603_001_ss19_700_a_a.dat'),
+            #os.path.join(sharad_root, 'mrosh_0004/data/rm286/edr5272901/e_5272901_001_ss19_700_a_a.dat'),
+            #os.path.join(sharad_root, 'mrosh_0004/data/rm278/edr5116601/e_5116601_001_ss19_700_a_a.dat'),
+            #os.path.join(sharad_root, 'mrosh_0004/data/rm184/edr3434001/e_3434001_001_ss19_700_a_a.dat'),
         )
     else:
         lookup = np.genfromtxt(args.tracklist, dtype='str')
 
     # Build list of processes
-    logging.info("Building task list for test")
+    logging.debug("Building task list for test")
     process_list = []
-    path_outroot = args.output
 
-    logging.debug("Base output directory: " + path_outroot)
+    logging.debug("Base output directory: " + args.output)
     for i, infile in enumerate(lookup):
-        path_file = infile.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
-        data_file = os.path.basename(path_file)
-        path_file = os.path.dirname(path_file)
-        outdir    = os.path.join(path_outroot, path_file, 'ion')
+        path_file = os.path.dirname(os.path.relpath(infile, sharad_root))
+        data_file = os.path.basename(infile)
+        outdir    = os.path.join(args.output, path_file, 'ion')
 
         logging.debug("Adding " + infile)
         process_list.append([infile, outdir, None, None, "Task{:03d}".format(i+1)])
@@ -476,33 +536,26 @@ def main():
     if args.maxtracks > 0 and len(process_list) > args.maxtracks:
         process_list = process_list[0:args.maxtracks]
 
-    if args.dryrun: # pragma: no cover
-        sys.exit(0)
+    if args.dryrun:
+        return 0
 
-    logging.info("Start processing {:d} tracks".format(len(process_list)))
+    logging.info("Start processing %d tracks", len(process_list))
 
     start_time = time.time()
-    named_params = {'saving':args.ofmt, 
-                    'chrp_filt':True, 'verbose':args.verbose}
+    named_params = {
+        'chirp_filter':True,
+        'verbose':args.verbose,
+        'sharad_root': sharad_root,
+        }
     # Single processing (for profiling)
     for t in process_list:
         test_cmp_processor(*t, **named_params)
-    logging.info("Done in {:0.2f} seconds".format(time.time() - start_time))
+    logging.info("Done in %0.2f seconds",time.time() - start_time)
 
 
 if __name__ == "__main__":
     # execute and import only if run as a script
     import argparse
-    import sys
-    import logging
-    import os
     import time
-    import traceback
-
-    import pandas as pd
-
-    import pds3lbl as pds3
-
-
     main()
 

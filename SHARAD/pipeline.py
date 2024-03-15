@@ -67,12 +67,14 @@ from typing import List, Dict, Any
 from pathlib import Path
 
 from SHARADEnv import SHARADFiles
+from run_rng_cmp import run_jobs
 
 p1 = Path(__file__).parent / '..' / 'xlib'
 sys.path.insert(1, str(p1.resolve()))
 from misc.fileproc import file_processing_status, FileInfo, delete_files
 
 
+TARGDIR_TYPICAL = None
 #import psutil
 
 # Assumes dictionary is ordered (python3.7)
@@ -157,8 +159,9 @@ PROCESSORS = {
 }
 
 
-def run_command(product_id: str, tasknum: int, cmd: str, output: str, delete_before: List[str], delete_after: List[str]):
+def run_command(product_id: str, tasknum: int, cmd: List[str], output: str, delete_before: List[str], delete_after: List[str]):
     logdir = os.path.dirname(output)
+    assert '/targ/' in logdir, "logdir=" + logdir
     logdir = logdir.replace('/targ/', '/note/')
     logfile = os.path.join(logdir, product_id)
     os.makedirs(logdir, exist_ok=True)
@@ -240,7 +243,7 @@ def main():
     parser.add_argument('tasks', nargs='*', help="Tasks to run",
                         default=['rsr', 'foc'])
     parser.add_argument('-o', '--output', default=None,
-                        help="Output base directory")
+                        help="Output (targ) base directory")
 
     parser.add_argument('-j', '--jobs', type=int, default=1,
                         help="Number of jobs (cores) to use for processing")
@@ -262,7 +265,7 @@ def main():
     parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
                         help="Root directory (default: environment variable SDS)")
 
-    parser.add_argument('-r', '--maxrequests', type=int, default=0,
+    parser.add_argument('-r', '--maxrequests', '--maxtracks', type=int, default=0,
                         help="Maximum number of processing requests to process")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on processing software (libraries)")
@@ -275,11 +278,14 @@ def main():
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="pipeline: [%(levelname)-7s] %(message)s")
 
-
+    global TARGDIR_TYPICAL
+    TARGDIR_TYPICAL = os.path.join(args.SDS, 'targ/xtra/SHARAD')
     if args.output is None:
-        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
+        args.output = TARGDIR_TYPICAL
     # strip trailing slash
     args.output = args.output.rstrip('/')
+    assert '/targ/' in args.output, \
+           "output directory must contain /targ/ (typically %r)" % TARGDIR_TYPICAL
 
     # Root ORIG directory
     sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
@@ -293,19 +299,19 @@ def main():
     logging.debug("Base output directory: %s", args.output)
 
     tasks = build_task_order(args.tasks, PROCESSORS)
-    cwd = os.path.dirname(__file__)
-    if cwd == '':
-        cwd = '.'
 
     logging.debug("Tasks: %r", tasks)
     for outprefix in tasks:
         prod = PROCESSORS[outprefix]
-        indir = ''
-        proc = ''
-        jobs = []
-        results = []
+        #indir = ''
+        #proc = ''
+        process_list = []
         #outdir = ''
         for lookup_line, item in enumerate(lookup, start=1):
+            # Limit number of jobs as requested on command line
+            if args.maxrequests > 0 and lookup_line > args.maxrequests:
+                break
+
             logging.debug("%s track %d: %s", prod['Processor'], lookup_line, item['product_id'])
             infiles, outfiles = calculate_input_output_files(item, prod, not args.ignorelibs, sharad_root, args.output)
             cmd, tempfile1, filestatus = build_command(item, prod, infiles, outfiles, not args.ignoretimes,
@@ -316,40 +322,23 @@ def main():
                 continue
 
             logging.info("%s track %d: %s %r", outprefix, lookup_line, item['product_id'], cmd)
-            jobs.append((run_command, [item['product_id'], lookup_line, cmd, outfiles[0], outfiles, [tempfile1]]))
-            # Limit number of jobs as requested on command line
-            if args.maxrequests > 0 and len(jobs) >= args.maxrequests:
-                break
+            process_list.append({
+                'product_id': item['product_id'],
+                'tasknum': lookup_line,
+                'cmd': cmd,
+                'output': outfiles[0],
+                'delete_before': outfiles,
+                'delete_after': [tempfile1],
+            })
+
         # end for lookup (end create job list)
 
         if args.dryrun:
-            logging.info("Dryrun")
+            logging.info("Dryrun done for task %s", outprefix)
             continue # don't run
 
-
-        # Now that job list has been created, execute it either single-threaded
-        # or using multiprocessing
-        if args.jobs <= 1 or len(jobs) <= 1:
-            for f_run, runargs in jobs:
-                f_run(*runargs)
-        else:
-            # TODO: sort jobs from longest to shortest to improve parallelism,
-            # or allow the processor to do this
-            with multiprocessing.Pool(args.jobs) as pool:
-                results = []
-                # TODO: map_async or starmap?
-                jobs2 = [j[1] for j in jobs]
-                for f_run, runargs in jobs:
-                    results.append(pool.apply_async(f_run, runargs))
-
-                # Wait for everything using this processor to finish
-                logging.info("Waiting for " + prod["Name"] + " to finish.");
-                for n, result in enumerate(results, start=1):
-                    #logging.debug("CPU percent: " + str(psutil.cpu_percent()))
-                    res = result.get()
-                    logging.debug("Result %d of %d done: %r", n, len(jobs), res)
-                    logging.debug("Command %d was %r", n, jobs[n-1][1])
-        logging.info("All done.");
+        run_jobs(run_command, process_list, args.jobs)
+        logging.info("All done with %s.", outprefix);
     return 0
 
 def calculate_input_output_files(item: Dict[str, str], prod: Dict[str, Any], include_libraries: bool,
@@ -421,10 +410,10 @@ def build_command(item: Dict[str, str], prod: Dict[str, Any],
     # TODO: move this over to the dict so we don't need an if statement here
     if prod['Processor'] in ['run_surface.py']:
         tempfile1 = None
-        cmd = [proc, '--delete', '-j', '1', item['product_id']]
+        cmd = [proc, '--overwrite', '-j', '1', item['product_id']]
     elif prod['Processor'] in ['run_rsr.py']: # no -j option for run_rsr, that's in args
         tempfile1 = None
-        cmd = [proc, '--delete', item['product_id']]
+        cmd = [proc, '--overwrite', item['product_id']]
     elif prod['Processor'] in ['run_rng_cmp.py', 'run_altimetry.py']:
         tempfile1 = None
         cmd = [proc, '--overwrite', '-j', '1', item['product_id']]
@@ -434,6 +423,11 @@ def build_command(item: Dict[str, str], prod: Dict[str, Any],
         if prod['Processor'] == "run_sar2.py":
             # Add targ path which it uses to find input files
             cmd += ['-i', data_path]
+
+    # Pass the targ directory to the lower level script
+    # if we requested something different
+    if data_path != TARGDIR_TYPICAL:
+        cmd = cmd[0:1] + ['-o', data_path] + cmd[1:]
 
     if 'args' in prod:
         cmd += prod['args']

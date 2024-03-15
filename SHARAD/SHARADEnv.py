@@ -111,6 +111,9 @@ def make_orbit_info(filename):
         'relpath': orbit_path,
     }
 
+class DataMissingException(FileNotFoundError):
+    pass
+
 # TODO: Improve globs to assert that there is only one file matching the pattern
 
 class SHARADEnv:
@@ -125,19 +128,19 @@ class SHARADEnv:
             orig_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
             logging.warning("Creating SHARADEnv with default orig_path parameters, which is deprecated")
 
-        self.out = {}
-        self.orbitinfo = {}
+        self.out = None
+        self.orbitinfo = None
         self.code_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = data_path
         self.orig_path = orig_path
+        self.sfiles = None
 
         if b_index_files:
             self.index_files()
         else:
-            self.sfiles = SHARADFiles(data_path, orig_path)
-            self.sfiles.read_edr_index()
+            self.sfiles = SHARADFiles(data_path, orig_path, read_edr_index=True)
 
-    def index_files(self, use_edr_index=False):
+    def index_files(self, use_edr_index=False, index_intermediate_files=False):
         """ Index files under the specified root directories """
         logging.debug("Indexing files in %s", self.get_edr_path())
 
@@ -183,7 +186,10 @@ class SHARADEnv:
                 self.orbitinfo[orbit] = []
 
             self.orbitinfo[orbit].append(orbitinfo)
+        if index_intermediate_files:
+            self.index_intermediate_files()
 
+    def index_intermediate_files(self):
         # List files of available for all data products
         for orbit, suborbits in self.orbitinfo.items():
             for suborbit in suborbits:
@@ -242,7 +248,7 @@ class SHARADEnv:
         """
 
         if '_' in orbit:
-            # This is a full  name
+            # This is a full name
             orbit_fullname = orbit
             orbit = orbit_fullname.split('_')[1]
         else:
@@ -331,10 +337,15 @@ class SHARADEnv:
         orbit_info = self.get_orbit_info(orbit, True)
 
         if 'relpath' not in orbit_info: # orbit not found
-            return None
-        fil = os.path.join(self.get_edr_path(), orbit_info['relpath'],
-                           orbit_info['name'] + '_a.dat')
-        #logging.debug("aux(): opening {:s}".format(fil))
+            raise DataMissingException('No aux data for orbit %s' % (orbit,))
+
+        if self.sfiles is not None:
+            assert orbit.startswith('e_'), "Only works with full orbit names"
+            fil = self.sfiles.edr_product_paths(orbit)['edr_aux']
+        else:
+            fil = os.path.join(self.get_edr_path(), orbit_info['relpath'],
+                               orbit_info['name'] + '_a.dat')
+            #logging.debug("aux(): opening {:s}".format(fil))
         out = np.fromfile(fil, dtype=AUX_DTYPE, count=count)
         return out
 
@@ -346,18 +357,17 @@ class SHARADEnv:
         orbit_info = self.get_orbit_info(orbit, True)
 
         if 'relpath' not in orbit_info: # orbit not found
-            return None
+            raise DataMissingException('No alt data found for %s' % orbit)
+        if self.sfiles is not None:
+            # Prefer to use the index
+            assert ext == 'h5', "Unsupported file extension"
+            fil = self.sfiles.alt_product_paths(orbit_info['name'], typ=typ)['alt_h5']
 
-        #orbit_full = orbit if orbit.find('_') is 1 else orbit_to_full(orbit,p)
-        #k = p['orbit_full'].index(orbit_full)
-        path1 = os.path.join(self.out['alt_path'], orbit_info['relpath'],
-                             typ, orbit_info['name'] + '*.' + ext)
-        files = glob.glob(path1)
-        if not files:
-            return None # no file found
-        # TODO: assert glob only has one result
+        else:
+            fil = os.path.join(self.out['alt_path'], orbit_info['relpath'],
+                                 typ, orbit_info['name'] + '_a.' + ext)
         # Call global function
-        return alt_data(files[0], typ=typ, quality_flag=quality_flag)
+        return alt_data(fil, typ=typ, quality_flag=quality_flag)
 
 
     # TODO GNG: Propose parallel function tec_filepaths?
@@ -380,10 +390,14 @@ class SHARADEnv:
         """Output data processed and archived by the CMP processor
         """
         orbit_info = self.get_orbit_info(orbit, True)
-
-        globpat = os.path.join(self.out['cmp_path'],
-                               orbit_info['relpath'], typ, orbit_info['name'] + '*.h5')
-        fil = sorted(glob.glob(globpat))[0]
+        if self.sfiles is not None:
+            # Prefer to use the newer index
+            assert orbit.startswith('e_'), "Only works with full orbit names"
+            fil = self.sfiles.cmp_product_paths(orbit)['cmp_h5']
+        else:
+            globpat = os.path.join(self.out['cmp_path'],
+                                   orbit_info['relpath'], typ, orbit_info['name'] + '*.h5')
+            fil = sorted(glob.glob(globpat))[0]
         redata = pd.read_hdf(fil, key='real').values
         imdata = pd.read_hdf(fil, key='imag').values
         return redata + 1j*imdata
@@ -396,7 +410,7 @@ class SHARADEnv:
         orbit_info = self.get_orbit_info(orbit, True)
 
         if 'relpath' not in orbit_info: # orbit not found
-            return None
+            raise DataMissingException('No srf data found for %s' % orbit)
 
         path1 = os.path.join(self.out['srf_path'], orbit_info['relpath'],
                              typ, orbit_info['name'] + '*.txt')
@@ -592,8 +606,9 @@ class SHARADEnv:
         """Output martian year for a given orbit
         (gives the MY at the beginning of the orbit)
         """
-        auxdata = self.aux_data(orbit, count=1)
-        if auxdata is None:
+        try:
+            auxdata = self.aux_data(orbit, count=1)
+        except DataMissingException:
             logging.debug("No data found for orbit '%s'", orbit)
             return None
 
@@ -840,22 +855,19 @@ def alt_data(altfile: str, typ='beta5', quality_flag=False):
     """Output data processed and archived by the altimetry processor
     """
     ext = os.path.splitext(altfile)[1].lower()
+    if not os.path.exists(altfile):
+        raise FileNotFoundError(altfile + " does not exist")
     if ext == '.h5':
-        try:
-            with h5.File(altfile, 'r') as fh:
-                data = fh[typ]
-                orbit_key = list(data.keys())[0]
-                data = data[orbit_key]
+        with h5.File(altfile, 'r') as fh:
+            data = fh[typ]
+            orbit_key = list(data.keys())[0]
+            data = data[orbit_key]
 
-                out = {'et':data['block0_values'][:, 0]}
-                for i, val in enumerate(data['block0_items'][:]):
-                    key = str(val).replace('b', '').replace('\'', '')
-                    vec = data['block0_values'][:, i]
-                    out[key] = vec
-        except (OSError, KeyError) as e:
-            logging.error("Can't read %s: %s", files[0], str(e))
-            raise e
-
+            out = {'et':data['block0_values'][:, 0]}
+            for i, val in enumerate(data['block0_items'][:]):
+                key = str(val).replace('b', '').replace('\'', '')
+                vec = data['block0_values'][:, i]
+                out[key] = vec
 
     elif ext == '.npy':
         out = np.load(altfile)
@@ -896,13 +908,13 @@ def test_my(senv):
     assert myear is None
 
     for orbitnames in (orbitnames1, orbitnames2):
-        logging.info("test_my: Number of orbits: {:d}".format(len(orbitnames)))
+        logging.info("test_my: Number of orbits: %d", len(orbitnames))
 
         for i, orbit in enumerate(orbitnames):
             try:
                 myear = senv.my(orbit)
             except ValueError: # pragma: no cover
-                logging.info("orbit {:s}: error running my".format(orbit))
+                logging.info("orbit %s: error running my", orbit)
                 myear = "ERROR"
                 raise # traceback.print_exc(file=sys.stdout)
             #logging.info("orbit {:s}: MY={!r}".format(orbit, myear))
@@ -914,42 +926,54 @@ def test_my(senv):
     return 0
 
 def test_alt(senv):
-
-    orbitnames1 = sorted(senv.orbitinfo.keys())
+    maxorbits = 1000
+    orbitnames1 = sorted(senv.orbitinfo.keys()) # short names
     orbitnames2 = []
-    for orbit in orbitnames1:
+    for orbit in orbitnames1: # full names
         for rec in senv.orbitinfo[orbit]:
             orbitnames2.append(rec['name'])
-    orbitnames1.sort()
+
+    if len(orbitnames1) >= maxorbits:
+        orbitnames1 = orbitnames1[0::(len(orbitnames1) // maxorbits)]
+    if len(orbitnames2) >= maxorbits:
+        orbitnames2 = orbitnames2[0::(len(orbitnames2) // maxorbits)]
 
     # what happens when you run my on something that doesn't exist
-    altdata = senv.alt_data('doesnt_exist')
-    altdata = senv.alt_data('doesntexist')
+    try:
+        altdata = senv.alt_data('doesnt_exist')
+    except DataMissingException:
+        pass
+    try:
+        altdata = senv.alt_data('doesntexist')
+    except DataMissingException:
+        pass
 
     for orbitnames in (orbitnames1, orbitnames2):
         logging.info("test_alt: Test getting altimetry data. "
-                     "Number of orbits: {:d}".format(len(orbitnames)))
+                     "Number of orbits: %d", len(orbitnames))
 
         nsucceeded, nfailed = 0, 0
 
         for i, orbit in enumerate(orbitnames):
             try:
                 altdata = senv.alt_data(orbit)
-            except (OSError,KeyError) as e:
+            except KeyError as e:
                 #KeyError: "Unable to open object (object 'beta5' doesn't exist)"
                 #OSError: Unable to open file (file signature not found)
-                logging.error("Can't open h5 for {:s}: {:s}".format(orbit, str(e)))
-                return None
+                logging.warning("Malformatted h5 file for orbit %s: %s", orbit, str(e))
+            except OSError as e:
+                logging.debug("Can't open h5 for %s: %s", orbit, str(e))
+                altdata = None
 
             if altdata is None:
                 nfailed += 1
             else:
                 nsucceeded += 1
             if i % 2000 == 0:
-                logging.info("test_alt: {:d}/{:d}".format(i, len(orbitnames)))
+                logging.info("test_alt: %d/%d", i, len(orbitnames))
 
         logging.info("test_alt: done. "
-                     "{:d} succeeded, {:d} failed".format(nsucceeded, nfailed))
+                     "%d succeeded, %d failed", nsucceeded, nfailed)
     return 0
 
 
@@ -977,9 +1001,9 @@ def test_orbit_info(senv):
         for orbit in orbitnames1:
             norbits = len(senv.orbitinfo[orbit])
             if norbits > 1:
-                logging.debug("Orbit {:s} contains {:d} items:".format(orbit, norbits))
+                logging.debug("Orbit %s contains %d items:", orbit, norbits)
             for i, rec in enumerate(senv.orbitinfo[orbit]):
-                logging.debug("{:2d}: {:s}".format(i, str(rec)))
+                logging.debug("%2d: %s", i, str(rec))
 
 
 class SHARADFiles:
@@ -1001,6 +1025,7 @@ class SHARADFiles:
         """ Build index of product IDs to locations.
         We can read any one of cumindex.tab """
         self.product_id_index = {}
+        self.orbit_index = defaultdict(list)
         fields = 'volume_id release_id file_specification_name product_id'.split()
 
         indexpat = os.path.join(self.orig_path, 'EDR/mrosh_000?/index/cumindex.tab')
@@ -1019,6 +1044,8 @@ class SHARADFiles:
                     row[k] = row[k].rstrip().lower()
                 row['relpath'] = os.path.dirname(row['file_specification_name'])
                 self.product_id_index[row['product_id']] = row
+                orbit = row['product_id'][2:9]
+                self.orbit_index[orbit].append(row['product_id'])
         logging.debug("product_id_index has %d items", len(self.product_id_index))
 
 
@@ -1030,11 +1057,11 @@ class SHARADFiles:
             products.update(f(product_id))
         return products
 
-    def product_paths(self, collection: str, product_id: str):
+    def product_paths(self, collection: str, product_id: str, **kwargs):
         """ Return the paths of files with given product ID and collection types
         """
         f = getattr(self, collection + '_product_paths')
-        return f(product_id)
+        return f(product_id, **kwargs)
 
 
     def edr_product_paths(self, product_id: str):
