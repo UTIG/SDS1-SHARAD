@@ -399,9 +399,13 @@ class SHARADEnv:
                                    orbit_info['relpath'], typ, orbit_info['name'] + '*.h5')
             fil = sorted(glob.glob(globpat))[0]
         redata = pd.read_hdf(fil, key='real').values
-        imdata = pd.read_hdf(fil, key='imag').values
-        return redata + 1j*imdata
-
+        # Can be complex64 with no loss of precision, because these are 16-bit values,
+        # which can be represented by a float32 that has a 24-bit significand
+        out = np.empty(redata.shape, dtype=np.complex64)
+        out.real = redata
+        del redata
+        out.imag = pd.read_hdf(fil, key='imag').values
+        return out
 
     def srf_data(self, orbit, typ='cmp'):
         """Output data processed and archived by the surface processor
@@ -925,6 +929,7 @@ def test_my(senv):
     logging.info("test_my: done")
     return 0
 
+# TODO: move to unit test
 def test_alt(senv):
     maxorbits = 1000
     orbitnames1 = sorted(senv.orbitinfo.keys()) # short names
@@ -978,6 +983,7 @@ def test_alt(senv):
 
 
 def test_orbit_info(senv):
+    # TODO: move to a unit test
     try:
         # Test what happens when you look for an orbit that doesn't exist
         oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
@@ -1031,7 +1037,7 @@ class SHARADFiles:
         indexpat = os.path.join(self.orig_path, 'EDR/mrosh_000?/index/cumindex.tab')
         try:
             indexfile = glob.glob(indexpat)[0]
-        except IndexError:
+        except IndexError: # pragma: no cover
             raise FileNotFoundError("Could not find %s" % indexpat)
 
         logging.info("Read %s", indexfile)
