@@ -67,7 +67,7 @@ from typing import List, Dict, Any
 from pathlib import Path
 
 from SHARADEnv import SHARADFiles
-from run_rng_cmp import run_jobs
+from run_rng_cmp import run_jobs, add_standard_args, process_product_args
 
 p1 = Path(__file__).parent / '..' / 'xlib'
 sys.path.insert(1, str(p1.resolve()))
@@ -84,8 +84,9 @@ PROCESSORS = {
     'cmp': {
         "Name": "Run Range Compression",
         "InPrefix": '',
-        "Inputs": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
-                    "{0[orig_root]}/{0[path_file]}/{0[data_file]}_s.dat"],
+        #"Inputs": ["{0[orig_root]}/{0[path_file]}/{0[data_file]}_a.dat",
+        #            "{0[orig_root]}/{0[path_file]}/{0[data_file]}_s.dat"],
+        "Inputs": ["edr"],
 
         "Processor": "run_rng_cmp.py",
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/cmp/plotting.py", "xlib/cmp/rng_cmp.py"],
@@ -93,48 +94,55 @@ PROCESSORS = {
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
                     "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt",
                     ],
+        "internal_parallelism": 1,
     },
     'alt': {
         "Name": "Run Altimetry",
         "InPrefix": "cmp",
         # Uses the outputs from run_rng_cmp.py
         # TODO: it also uses the science EDR, but should we include that here?
-        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
-                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
+        #"Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+        #            "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
+        "Inputs": ["cmp"],
         "Processor": "run_altimetry.py",
-        "args": ['--finethreads', '8'],
+        "args": ['--finethreads', '4'],
         "Libraries": ["xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
         "Outputs": ["{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
+        "internal_parallelism": 4, # --finethreads
     },
     # Note: it is super inefficient to run multiple copies of run_surface
     # because run_surface spends most of its time indexing the sharad environment
     'srf': {
         "Name": "Run Surface",
         "InPrefix": "alt",
-        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
-                   "{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
+        "Inputs": ["alt", "cmp"],
+        #"Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+        #           "{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
         "Processor": "run_surface.py",
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "Outputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
+        "internal_parallelism": 1,
     },
     'rsr': {
         "Name": "Run RSR",
         "InPrefix": "srf",
-        "Inputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
+        "Inputs": ["srf"], #["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "Processor": "run_rsr.py",
         # run_rsr can use multiple threads at the same time because
         # the parallelism is at a lower level
-        "args": ['-j', '8'],
+        "args": ['-j', '4'],
         # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "Outputs": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
+        "internal_parallelism": 4,
     },
     'foc': {
         "Name": "Run SAR",
         "InPrefix": "cmp",
-        "Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
-                    "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
+        "Inputs": ["cmp"],
+        #"Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
+        #            "{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s_TECU.txt"],
         "Processor": "run_sar2.py",
         "Libraries": ["xlib/sar/sar.py", "xlib/sar/smooth.py",
                       "xlib/cmp/pds3lbl.py", "xlib/altimetry/beta5.py"],
@@ -204,49 +212,13 @@ def manual(cmd, infile): # pragma: no cover
     if c == 'y':
         subprocess.run(cmd)
 
-def read_tracklist(filename: str, sharad_root: str):
-    """ Read the tracklist and parse for relevant information
-    such as product ID
-    The tracklist contains a list of "orig" input filenames.
-    """
-    list_items = []
-    with open(filename, 'rt') as fin:
-        for line in fin:
-            infile = line.strip()
-            if not infile or infile.startswith('#'):
-                continue
-
-            path_file = os.path.relpath(infile, sharad_root)
-            #path_file = infile.replace(sharad_root, '')
-            assert path_file.endswith('_a.dat'), path_file
-            data_file = os.path.basename(path_file).replace('_a.dat', '')
-            path_file = os.path.dirname(path_file)
-            #root_file, ext_file = os.path.splitext(data_file)
-            m = re.search('(e_\d{7}_\d{3}_ss\d{2}_\d{3}_a)', infile)
-            assert m # FIXME error checking is needed here
-            product_id = m.group(1)
-
-            item = { # variables for input/output file calculation
-                'infile': infile,
-                'path_file': path_file, # Relative path to file
-                # basename for data file (excluding path and suffix)
-                'data_file': data_file,
-                'product_id': product_id,
-            }
-            list_items.append(item)
-    return list_items
-
 
 def main():
 
     parser = argparse.ArgumentParser(description='SHARAD Pipeline')
-    parser.add_argument('tasks', nargs='*', help="Tasks to run",
-                        default=['rsr', 'foc'])
-    parser.add_argument('-o', '--output', default=None,
-                        help="Output (targ) base directory")
+    parser.add_argument('--tasks', default='rsr,foc', help="Comma-separated list of tasks to run")
 
-    parser.add_argument('-j', '--jobs', type=int, default=1,
-                        help="Number of jobs (cores) to use for processing")
+    add_standard_args(parser, script='pipeline')
 
     grp_verb = parser.add_mutually_exclusive_group()
     grp_verb.add_argument('-v', '--verbose', action="store_true",
@@ -257,16 +229,7 @@ def main():
 
     parser.add_argument('-m', '--manual', action="store_true",
                         help="Prompt before running processors")
-    parser.add_argument('-n', '--dryrun', action="store_true",
-                        help="Dry run. Build task list but do not run")
-    parser.add_argument('--tracklist', default="elysium.txt",
-                        help="List of tracks to process")
 
-    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS)")
-
-    parser.add_argument('-r', '--maxrequests', '--maxtracks', type=int, default=0,
-                        help="Maximum number of processing requests to process")
     parser.add_argument('--ignorelibs', action='store_true',
                         help="Do not check times on processing software (libraries)")
     parser.add_argument('--ignoretimes', action='store_true',
@@ -288,9 +251,10 @@ def main():
            "output directory must contain /targ/ (typically %r)" % TARGDIR_TYPICAL
 
     # Root ORIG directory
-    sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
-    lookup = read_tracklist(args.tracklist, sharad_root=sharad_root)
+    sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
+    sfiles = SHARADFiles(data_path=args.output, orig_path=sharad_root, read_edr_index=True)
 
+    productlist = process_product_args(args.product_ids, args.tracklist, sfiles)
 
     # Build list of processes
     logging.info("Building task list")
@@ -298,33 +262,31 @@ def main():
 
     logging.debug("Base output directory: %s", args.output)
 
+    args.tasks = args.tasks.split(',') # change to a list of strings
     tasks = build_task_order(args.tasks, PROCESSORS)
 
     logging.debug("Tasks: %r", tasks)
     for outprefix in tasks:
         prod = PROCESSORS[outprefix]
-        #indir = ''
-        #proc = ''
         process_list = []
-        #outdir = ''
-        for lookup_line, item in enumerate(lookup, start=1):
+        for productnum, product_id in enumerate(productlist, start=1):
             # Limit number of jobs as requested on command line
-            if args.maxrequests > 0 and lookup_line > args.maxrequests:
+            if args.maxtracks > 0 and productnum > args.maxtracks:
                 break
 
-            logging.debug("%s track %d: %s", prod['Processor'], lookup_line, item['product_id'])
-            infiles, outfiles = calculate_input_output_files(item, prod, not args.ignorelibs, sharad_root, args.output)
-            cmd, tempfile1, filestatus = build_command(item, prod, infiles, outfiles, not args.ignoretimes,
+            logging.debug("%s track %d: %s", prod['Processor'], productnum, product_id)
+            infiles, outfiles = calculate_input_output_files(product_id, prod, not args.ignorelibs, sharad_root, args.output, outprefix, sfiles)
+            cmd, tempfile1, filestatus = build_command(product_id, prod, infiles, outfiles, not args.ignoretimes,
                                                        args.vv, args.output)
 
             if cmd is None:
-                logging.info("%s track %d: skipping %s (%s)", outprefix, lookup_line, item['product_id'], ' '.join(filestatus))
+                logging.info("%s track %d: skipping %s (%s)", outprefix, productnum, product_id, ' '.join(filestatus))
                 continue
 
-            logging.info("%s track %d: %s %r", outprefix, lookup_line, item['product_id'], cmd)
+            logging.info("%s track %d: %s %r", outprefix, productnum, product_id, cmd)
             process_list.append({
-                'product_id': item['product_id'],
-                'tasknum': lookup_line,
+                'product_id': product_id,
+                'tasknum': productnum,
                 'cmd': cmd,
                 'output': outfiles[0],
                 'delete_before': outfiles,
@@ -337,12 +299,13 @@ def main():
             logging.info("Dryrun done for task %s", outprefix)
             continue # don't run
 
-        run_jobs(run_command, process_list, args.jobs)
+        njobs = args.jobs // prod.get('internal_parallelism', 1)
+        run_jobs(run_command, process_list, njobs)
         logging.info("All done with %s.", outprefix);
     return 0
 
-def calculate_input_output_files(item: Dict[str, str], prod: Dict[str, Any], include_libraries: bool,
-                                 sharad_root: str, data_path: str):
+def calculate_input_output_files(product_id: str, prod: Dict[str, Any], include_libraries: bool,
+                                 sharad_root: str, data_path: str, outprefix: str, sfiles: SHARADFiles):
     """ Figure out the required input and output files for this processing step
     Parameters:
     item
@@ -352,15 +315,12 @@ def calculate_input_output_files(item: Dict[str, str], prod: Dict[str, Any], inc
     returns two lists, infiles, and outfiles listing the input and output files
     for this processor
     """
-    infiles, outfiles = [], []
-    #infile = item['infile']
-    ivars = item.copy()
-    ivars['orig_root'] = sharad_root.rstrip('/')
-    ivars['targ_root'] = data_path
+    infiles = []
 
-    # Get the modification times for the input files
-    for fmtstr in prod['Inputs']:
-        infiles.append(fmtstr.format(ivars))
+    # Get the paths for the input files
+    for inprefix in prod['Inputs']:
+        assert len(inprefix) == 3, "Unexpected input prefix " + inprefix
+        infiles.extend(sfiles.product_paths(inprefix, product_id).values())
 
     if include_libraries: #not args.ignorelibs:
         # Include the processor file and known input modules
@@ -370,8 +330,7 @@ def calculate_input_output_files(item: Dict[str, str], prod: Dict[str, Any], inc
         for libname in prod['Libraries']:
             infiles.append(os.path.join(codedir, libname))
 
-    for fmtstr in prod['Outputs']:
-        outfiles.append(fmtstr.format(ivars))
+    outfiles = list(sfiles.product_paths(outprefix, product_id).values())
 
     for f in infiles:
         logging.debug("Input:  %s", f)
@@ -380,22 +339,21 @@ def calculate_input_output_files(item: Dict[str, str], prod: Dict[str, Any], inc
 
     return infiles, outfiles
 
-def build_command(item: Dict[str, str], prod: Dict[str, Any],
+def build_command(product_id: str, prod: Dict[str, Any],
                   infiles: List[str], outfiles: List[str],
                   check_mtimes: bool,
                   verbose_processor: bool,
                   data_path: str):
     """ Build command line arguments for the processor
-    item is an item dictionary created by read_tracklist
     prod is a dictionary from the processor information
-    returns 
+    returns:
     cmd - the command arguments as an List of strings
     tempfile1 - temporary file created (None if no file was created)
     """
 
     filestatus =  file_processing_status(infiles, outfiles, check_mtimes=check_mtimes)
     if filestatus == ('input_ok', 'output_ok'):
-        logging.debug("Outputs are up to date for %s", item['infile'])
+        logging.debug("Outputs are up to date for %s", product_id)
         return None, None, filestatus
     elif filestatus[0] == 'input_missing' and filestatus[1] != 'output_ok':
         logging.debug("Missing some input, can't process")
@@ -410,15 +368,15 @@ def build_command(item: Dict[str, str], prod: Dict[str, Any],
     # TODO: move this over to the dict so we don't need an if statement here
     if prod['Processor'] in ['run_surface.py']:
         tempfile1 = None
-        cmd = [proc, '--overwrite', '-j', '1', item['product_id']]
+        cmd = [proc, '--overwrite', '-j', '1', product_id]
     elif prod['Processor'] in ['run_rsr.py']: # no -j option for run_rsr, that's in args
         tempfile1 = None
-        cmd = [proc, '--overwrite', item['product_id']]
+        cmd = [proc, '--overwrite', product_id]
     elif prod['Processor'] in ['run_rng_cmp.py', 'run_altimetry.py']:
         tempfile1 = None
-        cmd = [proc, '--overwrite', '-j', '1', item['product_id']]
+        cmd = [proc, '--overwrite', '-j', '1', product_id]
     else:
-        tempfile1 = temptracklist(item['infile'])
+        tempfile1 = temptracklist(product_id)
         cmd = [proc, '--tracklist', tempfile1, '-j', '1']
         if prod['Processor'] == "run_sar2.py":
             # Add targ path which it uses to find input files

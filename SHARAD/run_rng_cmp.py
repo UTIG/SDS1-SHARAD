@@ -126,13 +126,17 @@ def add_standard_args(parser, script=None):
     parser.add_argument('--tracklist', '--orbitlist', default=None,#"elysium.txt",
                         help="List of track data files or product IDs to process")
 
-    parser.add_argument('--overwrite',  action="store_true",
-                        help="Overwrite outputs even if they exist")
-
     parser.add_argument('-j', '--jobs', type=int, default=4,
                         help="Number of jobs (cores) to use for processing")
-    parser.add_argument('-v', '--verbose', action="store_true",
-                        help="Display verbose output")
+
+    if script != 'pipeline':
+        # pipeline has its own mutually exclusive group for verbose
+        parser.add_argument('-v', '--verbose', action="store_true",
+                            help="Display verbose output")
+        # it also has ignoretimes (which we haven't changed over to 'overwrite' yet)
+        parser.add_argument('--overwrite',  action="store_true",
+                            help="Overwrite outputs even if they exist")
+
     parser.add_argument('-n', '--dryrun', action="store_true",
                         help="Dry run. Build task list but do not run")
     parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
@@ -235,16 +239,18 @@ def run_jobs(f_processor: Callable, jobs: List[Dict[str, str]], nb_cores: int):
 
     if nb_cores <= 1 or len(jobs) <= 1:
         # Single processing (for profiling)
-        for t in jobs:
+        for ii, t in enumerate(jobs, start=1):
             f_processor(**t)
+            logging.info("Finished task %d of %d", ii, len(jobs))
     else:
         # non-reentrant hack but hopefully that's ok
         global F_PROCESSOR
         F_PROCESSOR = f_processor
         with multiprocessing.Pool(nb_cores) as pool:
             gen_jobs = zip(range(len(jobs)), jobs)
-            for res in pool.imap_unordered(f_processor_mp, gen_jobs):
-                logging.info("Finished task %d of %d", res[0]+1, len(jobs))
+            for ii, res in enumerate(pool.imap_unordered(f_processor_mp, gen_jobs), start=1):
+                logging.info("Finished task %d (%d of %d remaining)",
+                             res[0]+1, len(jobs) - ii, len(jobs))
 
     logging.info("Done in %0.2f seconds", time.time() - start_time)
 
