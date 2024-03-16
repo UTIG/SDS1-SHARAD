@@ -109,18 +109,25 @@ def cmp_processor(infile, outfiles: Dict[str, str], sharad_root: str, idx_start=
 def add_standard_args(parser, script=None):
     """ Add standard script arguments to the args list """
 
-    if script not in ['rsr', 'srf']:
-        # These scripts haven't been updated for these args
+    if script in ['rsr', 'srf']:
+        parser.add_argument('orbits', metavar='orbit', nargs='*',
+                            help='SHARAD orbit/product IDs to process.'
+                            'If "all", processes all orbits')
+    else:
         parser.add_argument('product_ids', nargs='*',
-                            help='SHARAD product IDs to process')
-        parser.add_argument('-o', '--output', default=None,
-                            help="Output base directory")
-        parser.add_argument('--overwrite',  action="store_true",
-                            help="Overwrite outputs even if they exist")
-        parser.add_argument('--tracklist', default=None,#"elysium.txt",
-                            help="List of track data files or product IDs to process")
-        parser.add_argument('--maxtracks', type=int, default=0,
-                            help="Maximum number of tracks to process")
+                            help='SHARAD orbit/product IDs to process')
+
+    parser.add_argument('--maxtracks', type=int, default=0,
+                        help="Maximum number of tracks to process")
+
+    parser.add_argument('-o', '--output', default=None,
+                        help="Output base directory")
+
+    parser.add_argument('--tracklist', '--orbitlist', default=None,#"elysium.txt",
+                        help="List of track data files or product IDs to process")
+
+    parser.add_argument('--overwrite',  action="store_true",
+                        help="Overwrite outputs even if they exist")
 
     parser.add_argument('-j', '--jobs', type=int, default=4,
                         help="Number of jobs (cores) to use for processing")
@@ -231,15 +238,18 @@ def run_jobs(f_processor: Callable, jobs: List[Dict[str, str]], nb_cores: int):
         for t in jobs:
             f_processor(**t)
     else:
-        # Multiprocessing
+        # non-reentrant hack but hopefully that's ok
+        global F_PROCESSOR
+        F_PROCESSOR = f_processor
         with multiprocessing.Pool(nb_cores) as pool:
-            results = [pool.apply_async(f_processor, [], t) for t in jobs]
-
-            for i, result in enumerate(results, start=1):
-                _ = result.get()
-                logging.info("Finished task %d of %d", i, len(jobs))
+            gen_jobs = zip(range(len(jobs)), jobs)
+            for res in pool.imap_unordered(f_processor_mp, gen_jobs):
+                logging.info("Finished task %d of %d", res[0]+1, len(jobs))
 
     logging.info("Done in %0.2f seconds", time.time() - start_time)
+
+def f_processor_mp(t):
+    return (t[0], F_PROCESSOR(**t[1]))
 
 def read_tracklistfile(trackfile: str):
     """ Read a track list and return data structures about desired products

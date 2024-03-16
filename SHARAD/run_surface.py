@@ -274,15 +274,6 @@ def main():
     #--------------------
     # Job control options
 
-    parser.add_argument('-o', '--output', default=None,
-                        help="Output targ directory")
-    parser.add_argument('orbits', metavar='orbit', nargs='*',
-                        help='Orbit IDs to process (including leading zeroes).'
-                        'If "all", processes all orbits')
-    parser.add_argument('--orbitlist', help='Text file containing list of orbits to process')
-
-    parser.add_argument('--overwrite', action='store_true',
-                        help='Overwrite files even if they were already processed')
     add_standard_args(parser, script='srf')
 
     #------------------
@@ -320,9 +311,9 @@ def main():
         senv.index_files(index_intermediate_files=False)
         productlist = args.orbits
 
-    if args.orbitlist:
+    if args.tracklist:
         # Load list of files from orbit list
-        productlist.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
+        productlist.extend(list(np.genfromtxt(args.tracklist, dtype='str')))
 
 
     # Keyword arguments for processing

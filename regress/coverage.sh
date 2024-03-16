@@ -95,11 +95,15 @@ echo $S0: pipeline
 $COV run $FLAGS -a ../SHARAD/pipeline.py -n -vv --tracklist ./tracks_coverage.txt
 # Don't do foc because it takes forever
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --maxrequests 1 --tracklist ./tracks_coverage.txt rsr
+$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --overwrite --maxrequests 1 --tracklist ./tracks_coverage.txt cmp
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
+# Cause srf to be out of date
+sleep 1
+touch $OUT2/alt/mrosh_0001/data/edr19xxx/edr1920301/beta5/*.h5
+$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --tracklist ./tracks_coverage.txt
 # Run pipeline on a partially complete output
-rm -rf $OUT2/cmp
+rm -rf $OUT2/alt
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
-
 
 RNGDATA=./covdata/rng_cmp/
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py -o $RNGDATA -n --tracklist ./tracks_coverage.txt --maxtracks 1

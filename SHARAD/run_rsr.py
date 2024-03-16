@@ -196,7 +196,6 @@ def rsr_grid(filename:str, query_lon=None, query_lat=None, grid_shape='square',
     out['lat'] = [query_lat[int(i)] for i in out['ID'].values]
 
     # Store data
-    
     out.to_csv(os.path.splitext(filename)[0] + '.rsr.csv', sep=',', header=True, index=False)
 
     return out
@@ -266,21 +265,6 @@ def main():
 
     #--------------------
     # Job control options
-
-    #outpath = os.path.join(os.getenv('SDS'), 'targ/xtra/SHARAD')
-
-    parser.add_argument('-o','--output', default=None,
-            help="Debugging output data directory")
-    parser.add_argument(     '--ofmt',   default='hdf5',choices=('hdf5','none'),
-            help="Output data format")
-    parser.add_argument('orbits', metavar='orbit', nargs='+',
-            help='Orbit IDs to process (including leading zeroes). If "all",\
-            processes all orbits')
-    parser.add_argument('--orbitlist', help='Text file containing list of orbits to process')
-
-    parser.add_argument('--overwrite', action='store_true',
-            help='Overwrite output data products even if they already exist.')
-
     add_standard_args(parser, script='rsr')
     #--------------------
     # Algorithm options
@@ -323,9 +307,9 @@ def main():
         senv.index_files(index_intermediate_files=False)
         productlist = args.orbits
 
-    if args.orbitlist:
+    if args.tracklist:
         # Load list of files from orbit list
-        productlist.extend(list(np.genfromtxt(args.orbitlist, dtype='str')))
+        productlist.extend(list(np.genfromtxt(args.tracklist, dtype='str')))
 
 
 
@@ -342,7 +326,7 @@ def main():
         logging.info('(%s) %5d/%5d: %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i, len(args.orbits), orbit)
         b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose,
-                bins=args.bins, fit_model=args.fit_model, sav=(args.ofmt == 'hdf5'),
+                bins=args.bins, fit_model=args.fit_model, sav=True,
                 senv=senv)
 
 
