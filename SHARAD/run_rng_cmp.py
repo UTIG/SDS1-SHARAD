@@ -57,7 +57,7 @@ def cmp_processor(infile, outfiles: Dict[str, str], sharad_root: str, idx_start=
     Input:
     -----------
       infile    : Path to track file to be processed.
-      outfiles  : A dictionary with keys 'cmp_h5' and 'cmp_tecu' giving paths to files to create
+      outfiles  : A dictionary with keys 'cmp_rad' and 'cmp_tecu' giving paths to files to create
                   If outfiles is None, don't save any files
       sharad_root : SHARAD EDR data repository root path
       idx_start : Start index for processing.
@@ -79,10 +79,10 @@ def cmp_processor(infile, outfiles: Dict[str, str], sharad_root: str, idx_start=
 
         decompressed, decomp, chunks, aux, idx_start, idx_end = read_and_chunk_radar(infile, label_path, aux_path, idx_start, idx_end, taskname)
 
-        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chrp_filt, verbose, idx_start, idx_end, taskname)
+        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chrp_filt, verbose, idx_start, idx_end, taskname, output_filename=outfiles['cmp_rad'])
 
         if outfiles is not None:
-            save_cmp_files(outfiles['cmp_h5'], outfiles['cmp_tecu'], cmp_track, E_track, taskname)
+            save_cmp_files(outfiles['cmp_rad'], outfiles['cmp_tecu'], cmp_track, E_track, taskname)
 
         if radargram:
             # Plot a radargram

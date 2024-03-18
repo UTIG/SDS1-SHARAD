@@ -119,7 +119,7 @@ def main():
         logging.debug("Adding %s", product_id)
         process_list.append({
             #'product_id': product_id,
-            'cmp_path': infiles['cmp_h5'],
+            'cmp_path': infiles['cmp_rad'],
             'edr_sci': infiles['edr_sci'],
             'outfile': outfiles['alt_h5'],
             'SDS': args.SDS,

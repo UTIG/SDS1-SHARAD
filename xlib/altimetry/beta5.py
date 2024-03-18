@@ -31,6 +31,9 @@ import sys
 import os
 import itertools
 import multiprocessing
+import tempfile
+from pathlib import Path
+import json
 
 import numpy as np
 from scipy.constants import c
@@ -126,8 +129,8 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
                             label_aux, science=False, bc=False)
     logging.debug("Size of 'aux' data: %0.2f MB, dimensions %r", sys.getsizeof(aux)/MB, aux.shape)
 
-
-    tecu_filename = cmp_path.replace('.h5', '_TECU.txt')
+    p1 = Path(cmp_path)
+    tecu_filename = Path(cmp_path).with_stem(p1.stem + '_TECU').with_suffix('.txt')
     tecu = np.genfromtxt(tecu_filename)[idx_start:idx_end, 0]
 
     time1 = time.time()
@@ -206,6 +209,8 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     fresnel = np.sqrt(sc_alt[idxn0]*c/10E6+(c/(20E6))**2)
     sar_window = int(np.mean(2*fresnel/vel_t[idxn0]/pri[idxn0])/2)
     coh_window = int(np.mean((c/20E6/4/tan(max_slope*pi/180)/vel_t[idxn0]/pri[idxn0])))
+    logging.debug("sar_window=%d coh_window=%d ntraces=%d",
+                  sar_window, coh_window, iiend)
 
     # For figuring out how much padding we'll need
     max_window = max(coh_window, sar_window)
@@ -253,7 +258,10 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     else:
         coarse = np.empty((iiend,), dtype=int)
         for ii, _, x in coarse_gen:
-            coarse[ii] = x
+            if x is None:
+                coarse[ii] = 0
+            else:
+                coarse[ii] = x
 
         delta, snr = coarse, np.zeros((iiend,))
 
@@ -299,14 +307,27 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
 def gen_hdf_complex_traces(cmp_path, idx_start, idx_end):
     """ return an iterator that generates complex traces from HDF5 file
     """
-    # TODO: can we make iterator==True to reduce memory
+    # TODO: can we make iterator==True to reduce memory? (doesn't work as advertised)
     kwargs = {'path_or_buf': cmp_path, 'iterator': False}
 
-    re_iter = pd.read_hdf(key='real', **kwargs)
-    im_iter = pd.read_hdf(key='imag', **kwargs)
-
-    for re, im in zip(re_iter.values[idx_start:idx_end], im_iter.values[idx_start:idx_end]):
-        yield (re + 1j*im) #.astype(np.complex64)
+    if cmp_path.endswith('.i'):
+        json_path = Path(cmp_path).with_suffix('.json')
+        with json_path.open('rt') as fhjson:
+            jinfo = json.load(fhjson)
+        shape1 = tuple(jinfo['shape'])
+        assert len(shape1) == 3, "Expecting a 3D integer radargram (shape=%r)" % (shape1,)
+        buf = np.memmap(cmp_path, mode='r', dtype=np.int16, shape=shape1)
+        for trace in buf:
+            t = np.empty((shape1[1],), dtype=np.complex64)
+            t.real = trace[:, 0]
+            t.imag = trace[:, 1]
+            yield t
+            #yield trace[:, 0] + 1j*trace[:, 1]
+    elif cmp_path.endswith('.h5'):
+        re_iter = pd.read_hdf(key='real', **kwargs)
+        im_iter = pd.read_hdf(key='imag', **kwargs)
+        for re, im in zip(re_iter.values[idx_start:idx_end], im_iter.values[idx_start:idx_end]):
+            yield (re + 1j*im) #.astype(np.complex64)
 
 def trace_gen(radargram: np.ndarray):
     for trace in radargram:

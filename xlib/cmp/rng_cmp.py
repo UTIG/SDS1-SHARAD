@@ -16,6 +16,8 @@ import sys
 import logging
 from typing import List
 import traceback
+import json
+from pathlib import Path
 
 import numpy as np
 #import matplotlib.pyplot as plt
@@ -161,12 +163,12 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
             opt, cov = curve_fit(Gaussian, np.arange(len(hist)),
                                  hist,
                                  p0=[len(data)/2, resolution*maxTECU/2, 20])
-        except:
+        except Exception as e:
+            logging.debug("curve_fit exception: %r", e)
             opt, cov = [-1, 0, -1], [-1, -1, -1]
             pass #raise # Raise an error to get a more specific error
 
-        if debug: # pragma: no cover
-            logging.debug('Gauss fit opt/cov: %r %r', opt, cov)
+        logging.debug('Gauss fit opt/cov: %r %r', opt, cov)
 
         x0 = min(49, max(0, opt[1]))
         E = x0/maxTECU/resolution
@@ -209,7 +211,7 @@ def Gaussian(x, a, x0, sigma):
     """
     return a*np.exp(-(x - x0)**2/(2*sigma**2))
 
-def Hamming(Fl, Fh):
+def Hamming(Fl, Fh, nsamples=3600):
     """
     Create a frequency domain Hamming filter
 
@@ -223,12 +225,12 @@ def Hamming(Fl, Fh):
         Frequency domain Hamming filter
     """
 
-    min_freq = int(round((Fl) * 3600 / (1/0.0375E-6)))
-    max_freq = int(round((Fh) * 3600 / (1/0.0375E-6)))
+    min_freq = int(round((Fl) * nsamples / (1/0.0375E-6)))
+    max_freq = int(round((Fh) * nsamples / (1/0.0375E-6)))
     dfreq = max_freq - min_freq + 1
     hamming = np.sin(np.linspace(0, 1, num=dfreq) * np.pi)
     hfilter = np.flipud(np.hstack((np.zeros(min_freq), hamming,
-                                   np.zeros(3600 - min_freq - hamming.size))))
+                                   np.zeros(nsamples - min_freq - hamming.size))))
     return hfilter
 
 def decompress_sci_data(data, compression:str, presum: int, bps, sdi):
@@ -298,11 +300,17 @@ def calculate_chunks(tlp: List[float], chunklen_km: float):
     """ Calculate dimensions
     tlp is along-track distance for the track
     chunklen_km is nominal length of each chunk
+    Sometimes the track position may revert to 0,
+    does this mean missing data?  This is meant
+    to be caught by the backwards exception
     """
     chunks = []
     tlp0 = tlp[0]
     i0 = 0
     for i, tlp1 in enumerate(tlp):
+        if tlp1 < tlp0: # track went backwards from last posting
+            raise ValueError("Track went backwards at tlp[%d]=%0.2f (previous was tlp[%d]=%0.2f",
+                             i, tlp1, i0, tlp0)
         if tlp1 > tlp0 + chunklen_km:
             chunks.append([i0, i])
             i0 = i
@@ -362,19 +370,22 @@ def read_and_chunk_radar(aux_data_path:str, sci_label_path:str, aux_label_path:s
     tlp = list(data['TLP_INTERPOLATE'][idx_start:idx_end])
     chunks = calculate_chunks(tlp, chunklen_km)
     logging.debug('%s: chunked into %d pieces', taskname, len(chunks))
-
     # TODO: slice sza out to reduce memory usge?
     #sza = aux_data['SOLAR_ZENITH_ANGLE']
     return raw_data, decomp, chunks, aux, idx_start, idx_end
 
 
-def compress_chunks(raw_data: np.ndarray, decomp, chunks, aux, chirp_filter: bool, verbose: bool, idx_start:int, idx_end:int, taskname):
+def compress_chunks(raw_data: np.ndarray, decomp, chunks, aux, chirp_filter: bool, verbose: bool, idx_start:int, idx_end:int, taskname, output_filename: str):
     """ Perform pulse compression on all the chunks """
     # TODO: E_track can just be a list of tuples
     E_track = np.empty((idx_end-idx_start, 2))
 
-    # TODO: memmap?
-    cmp_track = np.empty(raw_data.shape + (2,), dtype=np.int16) # real and imaginary
+    if output_filename.endswith('.i'):
+        os.makedirs(os.path.dirname(output_filename), exist_ok=True)
+        cmp_track = np.memmap(output_filename, shape=(raw_data.shape + (2,)), mode='w+', dtype=np.int16) # real and imaginary
+    else:
+        # internal to be saved to HDF5
+        cmp_track = np.empty(raw_data.shape + (2,), dtype=np.int16) # real and imaginary
 
     # Compress the data chunkwise and reconstruct
     for i, (start, end) in enumerate(chunks):
@@ -397,6 +408,9 @@ def compress_chunks(raw_data: np.ndarray, decomp, chunks, aux, chirp_filter: boo
         cmp_track[start:end, :, 1] = np.round(cmp_data.imag)
         E_track[start:end, 0] = E
         E_track[start:end, 1] = sigma
+
+        if output_filename.endswith('.i'):
+            cmp_track.flush() #flush memmap
  
     return cmp_track, E_track
 
@@ -407,13 +421,28 @@ def save_cmp_files(h5_filename:str, tecu_filename:str, cmp_track, E_track, taskn
     logging.debug('%s: Saving to folder: %s', taskname, outdir)
     os.makedirs(outdir, exist_ok=True)
 
-    # restructure of data save
-    dfreal = pd.DataFrame(cmp_track[:, :, 0])
-    dfreal.to_hdf(h5_filename, key='real', complib='blosc:lz4', complevel=6)
-    del dfreal
-    dfimag = pd.DataFrame(cmp_track[:, :, 1])
-    dfimag.to_hdf(h5_filename, key='imag', complib='blosc:lz4', complevel=6)
-    del dfimag
+    if h5_filename.endswith('.h5'):
+        # restructure of data save
+        dfreal = pd.DataFrame(cmp_track[:, :, 0])
+        dfreal.to_hdf(h5_filename, key='real', complib='blosc:lz4', complevel=6)
+        del dfreal
+        dfimag = pd.DataFrame(cmp_track[:, :, 1])
+        dfimag.to_hdf(h5_filename, key='imag', complib='blosc:lz4', complevel=6)
+        del dfimag
+    elif h5_filename.endswith('.i'):
+        # Save as binary radargram file and sidecar JSON file
+        jinfo = {
+            'shape':  list(cmp_track.shape),
+            'dtype': str(cmp_track.dtype),
+            'filename': os.path.basename(h5_filename),
+            }
+        json_path = Path(h5_filename).with_suffix('.json')
+        with json_path.open('wt') as fh:
+            json.dump(jinfo, fh)
+        # already wrote with memmap
+        #with open(h5_filename, 'wb') as fout:
+        #    cmp_track.tofile(fout)
+
     if save_np:
         np.savez(os.path.splitext(h5_filename)[0] + "_int16.npz",
                  real=cmp_track[:, :, 0], imag=cmp_track[:, :, 1])

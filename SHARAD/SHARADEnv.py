@@ -34,6 +34,8 @@ import sys
 import glob
 import logging
 from collections import defaultdict
+from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
@@ -298,7 +300,7 @@ class SHARADEnv:
         if product == 'cmp':
             input_files = self.sfiles.edr_product_paths(product_id).values()
         elif product in ('alt', 'srf'):
-            input_files = [self.sfiles.cmp_product_paths(product_id)['cmp_h5'],]
+            input_files = [self.sfiles.cmp_product_paths(product_id)['cmp_rad'],]
         elif product == 'rsr':
             input_files = self.sfiles.srf_product_paths(product_id).values()
         elif product == 'foc':
@@ -393,18 +395,32 @@ class SHARADEnv:
         if self.sfiles is not None:
             # Prefer to use the newer index
             assert orbit.startswith('e_'), "Only works with full orbit names"
-            fil = self.sfiles.cmp_product_paths(orbit)['cmp_h5']
+            fil = self.sfiles.cmp_product_paths(orbit)['cmp_rad']
         else:
             globpat = os.path.join(self.out['cmp_path'],
                                    orbit_info['relpath'], typ, orbit_info['name'] + '*.h5')
             fil = sorted(glob.glob(globpat))[0]
-        redata = pd.read_hdf(fil, key='real').values
-        # Can be complex64 with no loss of precision, because these are 16-bit values,
-        # which can be represented by a float32 that has a 24-bit significand
-        out = np.empty(redata.shape, dtype=np.complex64)
-        out.real = redata
-        del redata
-        out.imag = pd.read_hdf(fil, key='imag').values
+
+        if fil.endswith('.h5'):
+            redata = pd.read_hdf(fil, key='real').values
+            # Can be complex64 with no loss of precision, because these are 16-bit values,
+            # which can be represented by a float32 that has a 24-bit significand
+            out = np.empty(redata.shape, dtype=np.complex64)
+            out.real = redata
+            del redata
+            out.imag = pd.read_hdf(fil, key='imag').values
+        elif fil.endswith('.i'):
+            json_path = Path(fil).with_suffix('.json')
+            with json_path.open('rt') as fhjson:
+                shape1 = tuple(json.load(fhjson)['shape'])
+            assert len(shape1) == 3, "Expecting a 3D integer radargram (shape=%r)" % (shape1,)
+            temp = np.memmap(fil, mode='r', dtype=np.int16, shape=shape1)
+            out = np.empty(shape1[0:2], dtype=np.complex64)
+            out.real = temp[:, :, 0]
+            out.imag = temp[:, :, 1]
+            return out
+        else:
+            raise RuntimeError("Don't know how to open %s" % (fil,))
         return out
 
     def srf_data(self, orbit, typ='cmp'):
@@ -1096,7 +1112,8 @@ class SHARADFiles:
         orbitdir = os.path.join(self.data_path, 'cmp', pinfo['volume_id'], pinfo['relpath'], typ)
 
         return {
-            'cmp_h5': os.path.join(orbitdir, product_id + '_s.h5'),
+            'cmp_rad': os.path.join(orbitdir, product_id + '_s.h5'),
+            #'cmp_rad': os.path.join(orbitdir, product_id + '_s.i'),
             'cmp_tecu': os.path.join(orbitdir, product_id + '_s_TECU.txt'),
         }
 
