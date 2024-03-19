@@ -132,15 +132,18 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
     # Compute list of reference chirps
     tec_custom = None if iono else 0.
     fs = us_refchirp(tec_custom, resolution=resolution, maxTECU=maxTECU)
+
     if iono:
-        #hammingf = Hamming(15E6, 25E6)
-        csnr = np.empty((len(fs), len(data)))
+        np.set_printoptions(formatter={'float': lambda x: "{0:0.3g}".format(x)})
         # Perform range compression per filter and record SNR
         fftdata = np.fft.fft(data)
         # apply frequency domain filter if desired
         # (combine it with the original fft data)
         if chirp_filter:
             fftdata *= Hamming(15E6, 25E6)
+
+        #hammingf = Hamming(15E6, 25E6)
+        csnr = np.empty((len(fs), len(data)))
 
         for i, chirp in enumerate(fs):
             product = fftdata*np.conj(chirp)
@@ -168,7 +171,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
             opt, cov = [-1, 0, -1], [-1, -1, -1]
             pass #raise # Raise an error to get a more specific error
 
-        logging.debug('Gauss fit opt/cov: %r %r', opt, cov)
+        logging.debug('Gauss fit opt/cov:\n%r\n%r', opt, cov)
 
         x0 = min(49, max(0, opt[1]))
         E = x0/maxTECU/resolution
@@ -178,7 +181,7 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         fs = us_refchirp(resolution=resolution, tec_custom=x0)
 
         product = fftdata*np.conj(fs)
-        dechirped = np.fft.ifft(product)
+        # fftdata has already had chirp_filter applied if needed
 
     else:
         E, sigma = 0, 0
@@ -187,9 +190,8 @@ def us_rng_cmp(data, chirp_filter=True, iono=True, maxTECU=1, resolution=50,
         # apply frequency domain filter if desired
         if chirp_filter:
             product *= Hamming(15E6, 25E6)
-        dechirped = np.fft.ifft(product)
-        if debug:
-            pass #plt.show()
+
+    dechirped = np.fft.ifft(product)
     return E, sigma, dechirped
 
 def Gaussian(x, a, x0, sigma):
@@ -395,10 +397,9 @@ def compress_chunks(raw_data: np.ndarray, decomp, chunks, aux, chirp_filter: boo
 
 
         #check if ionospheric correction is needed
-        iono_check = np.where(aux['SOLAR_ZENITH_ANGLE'][start:end]<100)[0]
-        b_iono = len(iono_check) != 0
         minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-        logging.debug('%s: chunk %3d/%3d Minimum SZA: %0.3f  Ionospheric Correction: %r',
+        b_iono = (minsza < 100.)
+        logging.debug('%s: chunk %3d/%3d Minimum SZA: %0.2f  Ionospheric Correction: %r',
             taskname, i, len(chunks), minsza, b_iono)
 
         E, sigma, cmp_data = us_rng_cmp(decompress_chunk, chirp_filter=chirp_filter,
@@ -483,16 +484,19 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
 
         decompressed, decomp, chunks, aux, idx_start, idx_end = read_and_chunk_radar(infile, label_path, aux_path, idx_start, idx_end, taskname)
 
-        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chirp_filter, verbose, idx_start, idx_end, taskname)
+        assert outdir != ''
+        data_file   = os.path.basename(infile)
+        outfilebase = data_file.replace('.dat', '.i') # Write to flat binary for comparison
+        rad_filename = os.path.join(outdir, outfilebase)
+
+
+        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chirp_filter, verbose, idx_start, idx_end, taskname, rad_filename)
 
         if outdir != "":
-            data_file   = os.path.basename(infile)
-            outfilebase = data_file.replace('.dat', '.h5')
-            h5_filename = os.path.join(outdir, outfilebase)
             outfilebase = data_file.replace('.dat', '_TECU.txt')
             tecu_filename = os.path.join(outdir, outfilebase)
 
-            save_cmp_files(h5_filename, tecu_filename, cmp_track, E_track, taskname, save_np=True)
+            save_cmp_files(rad_filename, tecu_filename, cmp_track, E_track, taskname, save_np=True)
 
     except Exception as e: # pragma: no cover
         logging.error('%s: Error processing file %s', taskname, infile)
