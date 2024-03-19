@@ -209,8 +209,6 @@ class SHARADDataReader:
 
 
     def __init__(self, label_path: str, science: bool):
-
-
         self.read_global_label(label_path, science)
 
     #def read_science(data_path, label_path, science=True, bc=True):
@@ -281,7 +279,7 @@ class SHARADDataReader:
         self.bitparsers = []
 
         for name, pvlobj, _ in bitcolumns:
-            assert name != 'samples', "Wasn't expecting this to be a bitcolumn"
+            assert name != 'sample_bytes', "Wasn't expecting this to be a bitcolumn"
             # A list of bitarray objects for data
             bitstruct_parser, npdtype = build_bitstruct(pvlobj)
             self.bitparsers.append((name, bitstruct_parser, npdtype))
@@ -333,17 +331,13 @@ class SHARADDataReader:
 
             # If it is science data, this has to be added here since it is not
             # contained in the science ancilliary label file
-            if pseudo_samples == 3600:
-                #dtype.append(('samples', str(pseudo_samples)+'V'))
-                for i in range(3600):
-                    dtype.append(('sample'+str(i), 'b'))
-            else:
-                dtype.append(('samples', str(pseudo_samples)+'B'))
+            dtype.append(('sample_bytes', str(pseudo_samples)+'b')) # signed bytes
 
             self.pseudo_samples = pseudo_samples
         else:
             self.pseudo_samples = None
         self.dtype_local = dtype
+
 
     def read_data(self, data_path: str, bc=True):
         """
@@ -371,10 +365,11 @@ class SHARADDataReader:
         arr = np.memmap(fil, dtype=np.dtype(dtype), mode='r')
         logging.debug("arr.shape=%r len(dtype)=%r", arr.shape, len(dtype))
         assert self.rows == len(arr), "%s doesn't have expected length" % (fil,)
-        if science and pseudo_samples < 3600:
-            # Cast samples as a void array so that the dataframe doesn't try to index it.
-            samples_dtype_i = ('samples', str(pseudo_samples) + 'B')
-            samples_dtype_o = ('samples', 'V' + str(pseudo_samples))
+        if science:
+            # Cast samples as a void array so that samples is 1D
+            # a 1D quantity
+            samples_dtype_i = ('sample_bytes', str(pseudo_samples) + 'b')
+            samples_dtype_o = ('sample_bytes', str(pseudo_samples) + 'V')
             dtype_pd = [samples_dtype_o if x == samples_dtype_i else x for x in dtype]
             arr_pd = np.memmap(fil, dtype=np.dtype(dtype_pd), mode='r')
             dfr = pd.DataFrame(arr_pd)
@@ -382,16 +377,11 @@ class SHARADDataReader:
             dfr = pd.DataFrame(arr)
         #dfr = pd.DataFrame(arr)
 
+        # TODO: give user the option to return these to their own buffer.
+        # Don't read by default
         radar_samples = None
         # Convert 6 and 4 bit samples
-        if science and pseudo_samples < 3600:
-            radar_samples = np.empty((len(arr), 3600), dtype='i1')
-            self.read_samples(arr, radar_samples, pseudo_samples)
-            #for i in range(3600):
-            #    dfr['sample'+str(i)] = pd.Series(conv[:, i], index=dfr.index)
-            # TODO: delete samples array from dfr?
-
-        if science and pseudo_samples == 3600: # TODO: same as above
+        if science:
             radar_samples = np.empty((len(arr), 3600), dtype='i1')
             self.read_samples(arr, radar_samples, pseudo_samples)
             pass # self.test_mmap_8bit_samples(arr, data_path)
@@ -412,7 +402,6 @@ class SHARADDataReader:
         # Return the dataframe (and the numpy array for those who want it)
         return dfr, arr, radar_samples
 
-    
     def read_samples(self, arr, conv, pseudo_samples: int):
         """ Read the samples out of the binary file and into a numpy array 
         TODO: yield lines to make this able to read to a numpy memmap
@@ -421,13 +410,12 @@ class SHARADDataReader:
         assert conv.shape == (len(arr), 3600), "Output array not expected shape"
         logging.debug("read_samples pseudo_samples=%d", pseudo_samples)
         #conv = np.empty((len(arr), 3600), dtype='i1')
-        #s = np.ndarray(shape=conv.shape, dtype='i1', buffer=arr['samples'])
+        assert arr['sample_bytes'].dtype == np.dtype('b'), "Unexpected dtype: %r" % s.dtype
+
+        s = arr['sample_bytes']
         if pseudo_samples == 3600: # 8-bit
-            for i in range(0, 3600):
-                conv[:, i] = arr['sample'+str(i)]
+            conv[...] = s
         elif pseudo_samples == 2700: # 6-bit
-            s = arr['samples'].astype('b')
-            assert s.dtype == np.dtype('b'), "Unexpected dtype: %r" % s.dtype
             # Bits 7:2 of s[0] become conv[0]
             conv[:, 0:3600:4] = s[:, 0:2700:3] >> 2
             # bytes 1:0 of s[0] (hi2) and 7:4 of s[1] become conv[1]
@@ -444,8 +432,6 @@ class SHARADDataReader:
             # Sign extend last 6 bits
             conv[:, 3:3600:4] = (s[:, 2:2700:3] << 2) >> 2
         elif pseudo_samples == 1800: # 4-bit
-            s = arr['samples'].astype('b')
-            assert s.dtype == np.dtype('b'), "Unexpected dtype: %r" % s.dtype
             # Sign extend everything
             conv[:, 0:3600:2] = s[:, 0:1800] >> 4
             conv[:, 1:3600:2] = (s[:, 0:1800] << 4) >> 4
