@@ -9,6 +9,7 @@ import gzip
 import pickle
 import logging
 import warnings
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 
@@ -88,9 +89,12 @@ class TestBasic(unittest.TestCase):
                 assert arr.shape[0] == 2048, "Unexpected chirp length: %r" % (arr.shape,)
 
 class TestPseudoBits(unittest.TestCase):
-    def test_pseudo_bits(self):
-        orig = os.path.join(SDS, "orig/supl/xtra-pds/SHARAD/EDR")
-        datafiles = {
+    def setUp(self):
+        self.datafiles = {
+            # INSTRUMENT_MODE_ID=SS04 (8-bit)
+            "SS04": [
+                "mrosh_0001/data/edr19xxx/edr1945703/e_1945703_001_ss04_700_a_s.dat",
+                "mrosh_0001/label/science_ancillary.fmt"],
             # INSTRUMENT_MODE_ID=SS11 (6-bit)
             "SS11": [
                 "mrosh_0001/data/edr10xxx/edr1063402/e_1063402_001_ss11_700_a_s.dat",
@@ -100,15 +104,32 @@ class TestPseudoBits(unittest.TestCase):
                 "mrosh_0001/data/edr01xxx/edr0169401/e_0169401_001_ss18_700_a_s.dat",
                 "mrosh_0001/label/science_ancillary.fmt"],
         }
+    def test_pseudo_bits(self):
+        self.run_pseudo_bits(None)
+
+    def run_pseudo_bits(self, outputdir=None):
+        orig = os.path.join(SDS, "orig/supl/xtra-pds/SHARAD/EDR")
         labelfile = os.path.join(orig, "mrsh_0004/label/science_ancillary.fmt")
-        for name, (datarel, labelrel) in datafiles.items():
+        for name, (datarel, labelrel) in self.datafiles.items():
             with self.subTest(name=name):
                 datafile = os.path.join(orig, datarel)
                 labelfile = os.path.join(orig, labelrel)
 
                 with warnings.catch_warnings():
                     warnings.simplefilter(action="ignore", category=pds3.pd.errors.PerformanceWarning)
-                    pdsdata = pds3.read_science(datafile, labelfile)
+                    #pdsdata = pds3.read_science(datafile, labelfile)
+                    pdsdata, radar_samples = pds3.read_science_np(datafile, labelfile)
+                    if outputdir is not None:
+                        # Write to an output file
+                        outfile = outputdir / Path(datarel).with_suffix('.bin').name
+                        outputdir.mkdir(parents=True, exist_ok=True)
+                        with outfile.open('wb') as fout:
+                            radar_samples.tofile(fout)
+
+    @unittest.skip("Only run this one manually")
+    def test_pseudo_bits_write(self):
+        """ read the files and write them """
+        self.run_pseudo_bits(Path(__file__).parent / 'out_pseudobits')
 
 
 if __name__ == "__main__":

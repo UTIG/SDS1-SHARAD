@@ -426,15 +426,29 @@ class SHARADDataReader:
             for i in range(0, 3600):
                 conv[:, i] = arr['sample'+str(i)]
         elif pseudo_samples == 2700: # 6-bit
-            s = arr['samples']
-            conv[:, 0:3600:4] = (                                (s[:, 0:2700:3] >> 2))
-            conv[:, 1:3600:4] = ((s[:, 0:2700:3] << 4) & 0x3f) | (s[:, 1:2700:3] >> 4)
-            conv[:, 2:3600:4] = ((s[:, 1:2700:3] << 2) & 0x3f) | (s[:, 2:2700:3] >> 6)
-            conv[:, 3:3600:4] = ((s[:, 2:2700:3] & 0x3f))
+            s = arr['samples'].astype('b')
+            assert s.dtype == np.dtype('b'), "Unexpected dtype: %r" % s.dtype
+            # Bits 7:2 of s[0] become conv[0]
+            conv[:, 0:3600:4] = s[:, 0:2700:3] >> 2
+            # bytes 1:0 of s[0] (hi2) and 7:4 of s[1] become conv[1]
+            # mask then sign extend
+            hi2 = ((s[:, 0:2700:3] & 0x3) << 6) >> 2
+            lo4 = ( s[:, 1:2700:3] >> 4) & 0x0f
+            conv[:, 1:3600:4] = hi2 | lo4
+            del hi2, lo4
+            # bytes 3:0 of s[1] get sign extended and bytes 7:5 of s[2]
+            hi4 = ((s[:, 1:2700:3] & 0x0f) << 4) >> 2
+            lo2 = (s[:, 2:2700:3] >> 6) & 0x03
+            conv[:, 2:3600:4] = hi4 | lo2
+            del hi4, lo2
+            # Sign extend last 6 bits
+            conv[:, 3:3600:4] = (s[:, 2:2700:3] << 2) >> 2
         elif pseudo_samples == 1800: # 4-bit
-            s = arr['samples']
+            s = arr['samples'].astype('b')
+            assert s.dtype == np.dtype('b'), "Unexpected dtype: %r" % s.dtype
+            # Sign extend everything
             conv[:, 0:3600:2] = s[:, 0:1800] >> 4
-            conv[:, 1:3600:2] = s[:, 0:1800] & 0xff
+            conv[:, 1:3600:2] = (s[:, 0:1800] << 4) >> 4
         else: # pragma: no cover
             raise ValueError("Unexpected value for pseudo_samples = %d" % pseudo_samples)
 
