@@ -1,3 +1,7 @@
 # Some short tracks
 /disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr19xxx/edr1920301/e_1920301_001_ss04_700_a_a.dat
-/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr15xxx/edr1598201/e_1598201_001_ss11_700_a_a.dat
+# /disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr15xxx/edr1598201/e_1598201_001_ss11_700_a_a.dat
+# ss05 for 2700 sample (6 bits per sample), also exercises ionosphere
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr02xxx/edr0224401/e_0224401_007_ss05_700_a_a.dat
+# ss18 for 1800 sample (4 bits per sample)
+/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0169401/e_0169401_001_ss18_700_a_a.dat
