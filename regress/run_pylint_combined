@@ -38,7 +38,7 @@ echo "$S0: Logging to $logfile1"
 #find "$1" -iname "*.py" -print0 | sort -z | \
 #   xargs -0 $PYLINT -j $JOBS > $logfile1
 
-find "$1" -iname "*.py" -print0 | sort -z | \
+find "$1" -iname "*.py" -print0 | grep -v -z "/site-packages/" | sort -z | \
    xargs -0 $PYLINT > $logfile1
 
 echo "$S0: Logged to $logfile1"
