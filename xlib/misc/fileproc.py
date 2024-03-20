@@ -14,10 +14,7 @@ __history__ = {
 
 
 import os
-#import sys
-#import glob
 import logging
-#from pathlib import Path
 from typing import List
 from collections import namedtuple
 

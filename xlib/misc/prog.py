@@ -96,34 +96,34 @@ class Prog():
         self.prog_symbol = symbol
 
     def print_Prog(self, loop, appendix=''):
-        if (self.keys is not None):
+        if self.keys is not None:
             loop = self.keys.index(loop)
         prog = 100.0 * (loop+1)/self.length
-        if (prog >= self.thrsh):
+        if prog >= self.thrsh:
             self.thrsh += self.step
             self.thrsh = min(self.thrsh, 100-1E-10)
             prog_t = (time.time()-self.t0)*(100.0/prog-1)/3600.0
-            if (self.eta):
+            if self.eta:
                 eta_str = time.strftime(
                                 "%a %d %b %Y %H:%M:%S",
                                 time.localtime(time.time()+3600*prog_t))
                 eta_str = ' | ETA ' + eta_str
             else:
                 eta_str = ''
-            if (self.etc):
+            if self.etc:
                 etc_str = " | -{:n}:{:02n}:{:02n}".format(
                                np.floor(prog_t),
                                np.floor(60*(prog_t - np.floor(prog_t))),
                                np.floor(60.0*(prog_t*60-np.floor(prog_t*60))))
             else:
                 etc_str = ''
-            if (self.kind == '%'):
+            if self.kind == '%':
                 sys.stdout.write("\r%5.1f%%%s%s %s"
                                  % (prog,
                                     etc_str,
                                     eta_str,
                                     appendix))
-            if (self.kind == '#'):
+            if self.kind == '#':
                 # prog_symbol = '▬'
                 # prog_symbol = '■'
                 # prog_symbol = self.kind
@@ -137,4 +137,5 @@ class Prog():
             sys.stdout.flush()
 
     def close_Prog(self):
+        """ Print a newline """
         print ('')

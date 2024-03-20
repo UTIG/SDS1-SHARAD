@@ -12,10 +12,9 @@ are defined by latitutde and longitude bounds with some level of overlap if so
 desired.
 """
 
-import numpy as np
 import csv
 import os
-import pandas as pd
+import numpy as np
 
 # set path to the RDR geom files (.csv)
 path_to_rdr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/RDR/mrosh_2001/data/geom/'
@@ -39,29 +38,30 @@ longitude_centers = np.arange(full_area[2] + dlon, full_area[3], dlon)
 sza_centers = np.arange(sza_range[0] + (dsza / 2), sza_range[1], dsza)
 
 # define the output
-number_TECU = np.zeros((len(sza_centers), len(longitude_centers), len(latitude_centers)), dtype=float)
-mean_TECU = np.zeros((len(sza_centers), len(longitude_centers), len(latitude_centers)), dtype=float)
-minimum_TECU = np.zeros((len(sza_centers), len(longitude_centers), len(latitude_centers)), dtype=float)
-maximum_TECU = np.zeros((len(sza_centers), len(longitude_centers), len(latitude_centers)), dtype=float)
-orbit_TECU = np.zeros((len(sza_centers), len(longitude_centers), len(latitude_centers)), dtype=float)
+dims = (len(sza_centers), len(longitude_centers), len(latitude_centers))
+number_TECU = np.zeros(dims, dtype=float)
+mean_TECU = np.zeros(dims, dtype=float)
+minimum_TECU = np.zeros(dims, dtype=float)
+maximum_TECU = np.zeros(dims, dtype=float)
+orbit_TECU = np.zeros(dims, dtype=float)
 
 # walk through the rdr files extracting TEC files within the latitude,
 # longitude and sza range being worked on
 
 #ii = 11
 #if ii == 11:
-for ii in range(len(sza_centers)):
-    minSZA = sza_centers[ii] - (dsza / 2)
+for ii, sza_center in enumerate(sza_centers):
+    minSZA = sza_center - (dsza / 2)
     maxSZA = minSZA + dsza
 #    jj = 19
 #    if jj == 19:
-    for jj in range(len(longitude_centers)):
-        minlon = longitude_centers[jj] - (longitude_width / 2)
+    for jj, longitude_center in enumerate(longitude_centers):
+        minlon = longitude_center - (longitude_width / 2)
         maxlon = minlon + longitude_width
 #        kk = 10
 #        if kk == 10:
-        for kk in range(len(latitude_centers)):
-            minlat = latitude_centers[kk] - (latitude_width / 2)
+        for kk, latitude_center in enumerate(latitude_centers):
+            minlat = latitude_center - (latitude_width / 2)
             maxlat = minlat + latitude_width
 
             print('SZA:', minSZA, maxSZA, '- LONG:', minlon, maxlon, '- LAT:', minlat, maxlat)

@@ -11,18 +11,16 @@ import sys
 import argparse
 #from datetime import datetime
 import logging
-import multiprocessing
 import numpy as np
 import pandas as pd
 import subradar as sr
 
 import SHARADEnv
-from SHARADEnv import DataMissingException
 from run_rng_cmp import add_standard_args, run_jobs, process_product_args, \
                         should_process_products
 
 
-def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
+def surface_processor(orbit, ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
                       senv=None, method='grima2012', alt_data=True,
                       output_filename:str=None,
@@ -37,8 +35,6 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
     orbit: string
         the orbit number or the full name of the orbit file (w/o extension)
         if the orbit is truncated in several file
-    typ: string
-        The type of radar data used to get the amplitude from
     gain: float
         Any gain to be added to the signal (power in dB)
         For SHARAD, it includes the instrumental gain and theabsolute
@@ -75,7 +71,6 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     logging.debug('PROCESSING: Surface echo extraction for %s', orbit_full)
 
-    assert typ == 'cmp', "Not getting the right type of radargram!"
     rdg = senv.cmp_data(orbit_full)
 
     if alt_data: # == True:
@@ -97,7 +92,7 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     if method == 'mouginot2010':
         # works better with dB power
-        rdg_for_detection = 20*np.log10(np.abs(rdg)) 
+        rdg_for_detection = 20*np.log10(np.abs(rdg))
         #np.nan_to_num(rdg_for_detection, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
     elif method == 'grima2012':
@@ -140,11 +135,11 @@ def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
 
     if not alt_data:
         flag = np.full(len(surf_y), 0)
-    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag, } 
+    out = {'y':surf_y, 'amp':surf_amp, 'flag':flag, }
            #'noise':noise, 'pdb':20*np.log10(surf_amp)}
 
     if archive:
-        archive_surface(output_filename, orbit_full, aux, out, typ)
+        archive_surface(output_filename, aux, out)
 
     if debug_dir is not None:
         # Debugging output
@@ -188,7 +183,7 @@ def relative_sahga_gain(aux):
     return -gain
 
 
-def archive_surface(output_filename, orbit_full: str, aux, srf_data, typ: str):
+def archive_surface(output_filename, aux, srf_data):
     """
     Archive in the hierarchy results obtained from srf_processor
 
@@ -197,15 +192,8 @@ def archive_surface(output_filename, orbit_full: str, aux, srf_data, typ: str):
 
     output_filename: str - path where to save data
 
-    orbit_full: string
-        the orbit number or the full name of the orbit file (w/o extension)
-        if the orbit is truncated in several file
-
     srf_data: list
         output from srf_processor
-
-    typ: string
-        The type of radar data used to get the amplitude from
 
     """
 
@@ -239,15 +227,6 @@ def archive_surface(output_filename, orbit_full: str, aux, srf_data, typ: str):
     out.columns = columns
 
     # Archive
-
-    #k = p['orbit_full'].index(orbit_full)
-    #list_orbit_info = senv.get_orbit_info(orbit_full)
-    #orbit_info = list_orbit_info[0]
-
-    #assert typ == 'cmp', "This probably works fine, but hasn't been tested with any value other than 'cmp'"
-
-    #archive_path = os.path.join(senv.out['srf_path'],
-    #                            orbit_info['relpath'], typ)
 
     os.makedirs(os.path.dirname(output_filename), exist_ok=True)
     #fil = os.path.join(archive_path, orbit_full + '.txt')
@@ -302,7 +281,6 @@ def main():
 
     # Keyword arguments for processing
     kwargs = {
-        'typ':args.type,
         'ywinwidth':args.ywinwidth,
         'archive':True,
         'gain':0,
@@ -331,6 +309,12 @@ def main():
         params.update(kwargs)
         process_list.append(params)
 
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
+        process_list = process_list[0:args.maxtracks]
+
+    #-----------
+    # Processing
+
     logging.info("Processing %d orbits of %d requested", len(process_list), ii)
 
     if args.dryrun:
@@ -338,7 +322,7 @@ def main():
         return
 
     run_jobs(surface_processor, process_list, args.jobs)
-
+    return 0
 
 
 if __name__ == "__main__":

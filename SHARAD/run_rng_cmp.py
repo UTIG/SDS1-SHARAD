@@ -197,7 +197,7 @@ def main():
         return 0
 
     run_jobs(cmp_processor, process_list, args.jobs)
-
+    return 0
 
 
 def process_product_args(product_ids: List[str], tracklistfile: str, sfiles: SHARADFiles):

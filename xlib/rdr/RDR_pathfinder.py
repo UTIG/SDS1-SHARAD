@@ -1,9 +1,9 @@
-__authors__ = ['Kirk Scanlan, kirk.scanlan@utexas.edu']\
+__authors__ = ['Kirk Scanlan, kirk.scanlan@utexas.edu']
 __version__ = '1.0'
 __history__ = {
     '1.0':
-        {'date': 'February 20 2019'
-         'author': 'Kirk Scanlan UTIG'
+        {'date': 'February 20 2019',
+         'author': 'Kirk Scanlan UTIG',
          'info': 'Tool to find paths to specific files on the hierarchy'}}
 
 # python routine for finding paths to specific EDR files. EDR files being
@@ -36,6 +36,3 @@ with open('Cyril_RDRReferenceArea_hier.txt', 'w') as output_file:
             else: 
                 print('Warning',fn, 'not found')
             fn = ''
-output_file.closed
-
-        

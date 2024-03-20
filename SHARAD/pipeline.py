@@ -3,7 +3,7 @@
 __authors__ = ['Scott Kempf, scottk@ig.utexas.edu']
 __version__ = '1.3'
 __history__ = {
-    '1.2':
+    '1.3':
         {'date': 'March 12 2024',
          'author': 'Gregory Ng, UTIG',
          'info': 'Reworking file calculations and script integration'},
@@ -52,17 +52,10 @@ To run interactively and prompt before executing each subprocess, run with -m
 
 import sys
 import os
-import time
 import logging
 import argparse
-import warnings
-import multiprocessing
-import traceback
-import importlib.util
-import re
 import subprocess
 import tempfile
-from collections import namedtuple
 from typing import List, Dict, Any
 from pathlib import Path
 
@@ -71,7 +64,7 @@ from run_rng_cmp import run_jobs, add_standard_args, process_product_args
 
 p1 = Path(__file__).parent / '..' / 'xlib'
 sys.path.insert(1, str(p1.resolve()))
-from misc.fileproc import file_processing_status, FileInfo, delete_files
+from misc.fileproc import file_processing_status, delete_files
 
 
 TARGDIR_TYPICAL = None
@@ -119,7 +112,8 @@ PROCESSORS = {
         #"Inputs": ["{0[targ_root]}/cmp/{0[path_file]}/ion/{0[data_file]}_s.h5",
         #           "{0[targ_root]}/alt/{0[path_file]}/beta5/{0[data_file]}_a.h5"],
         "Processor": "run_surface.py",
-        # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
+        # The libraries for rsr and subradar are no longer in the repository;
+        # they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "Outputs": ["{0[targ_root]}/srf/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "internal_parallelism": 1,
@@ -132,7 +126,8 @@ PROCESSORS = {
         # run_rsr can use multiple threads at the same time because
         # the parallelism is at a lower level
         "args": ['-j', '4'],
-        # The libraries for rsr and subradar are no longer in the repository; they are a pip package.
+        # The libraries for rsr and subradar are no longer in the repository;
+        # they are a pip package.
         "Libraries": ["SHARAD/SHARADEnv.py"],
         "Outputs": ["{0[targ_root]}/rsr/{0[path_file]}/cmp/{0[data_file]}.txt"],
         "internal_parallelism": 4,
@@ -167,7 +162,8 @@ PROCESSORS = {
 }
 
 
-def run_command(product_id: str, tasknum: int, cmd: List[str], output: str, delete_before: List[str], delete_after: List[str]):
+def run_command(product_id: str, tasknum: int, cmd: List[str],
+                output: str, delete_before: List[str], delete_after: List[str]):
     logdir = os.path.dirname(output)
     assert '/targ/' in logdir, "logdir=" + logdir
     logdir = logdir.replace('/targ/', '/note/')
@@ -191,7 +187,7 @@ def run_command(product_id: str, tasknum: int, cmd: List[str], output: str, dele
 def temptracklist(infile: str):
     """ Create a temporary file with one track in it,
     and return the path to it """
-    logging.debug("Writing temporary track list for input file: %s", infile);
+    logging.debug("Writing temporary track list for input file: %s", infile)
     with tempfile.NamedTemporaryFile(mode='w+', delete=False, prefix='pipeline_tracklist_') as fhtemp:
         print(infile, file=fhtemp)
         return fhtemp.name
@@ -200,8 +196,8 @@ def temptracklist(infile: str):
 def manual(cmd, infile): # pragma: no cover
     """ Interactively prompt whether to run a command """
     import getch
-    print('Trackline: ' + infile);
-    print('Command: ' + ' '.join(cmd));
+    print('Trackline: ' + infile)
+    print('Command: ' + ' '.join(cmd))
     c = ' '
     while c not in 'ynq':
         print('(Y)es, (N)o, (Q)uit?', end=' ', flush=True);
@@ -301,7 +297,7 @@ def main():
 
         njobs = args.jobs // prod.get('internal_parallelism', 1)
         run_jobs(run_command, process_list, njobs)
-        logging.info("All done with %s.", outprefix);
+        logging.info("All done with %s.", outprefix)
     return 0
 
 def calculate_input_output_files(product_id: str, prod: Dict[str, Any], include_libraries: bool,
@@ -352,10 +348,12 @@ def build_command(product_id: str, prod: Dict[str, Any],
     """
 
     filestatus =  file_processing_status(infiles, outfiles, check_mtimes=check_mtimes)
+
     if filestatus == ('input_ok', 'output_ok'):
         logging.debug("Outputs are up to date for %s", product_id)
         return None, None, filestatus
-    elif filestatus[0] == 'input_missing' and filestatus[1] != 'output_ok':
+
+    if filestatus[0] == 'input_missing' and filestatus[1] != 'output_ok':
         logging.debug("Missing some input, can't process")
         return None, None, filestatus
 

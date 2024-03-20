@@ -124,7 +124,7 @@ if chunk_sharad:
         # GNG: did you mean for there to be a space in here, because this causes problems.
         # GNG:_ perhaps
         hdf_path1 = Path(os.path.join(SHARAD_root, 'sza', area, str(dSZA) + ' dSZA', 
-            str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA, 'data.h5') )
+            str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA), 'data.h5') )
         if hdf_path1.exists():
             temp = np.array(pd.read_hdf(hdf_path1, 'sza'))
             chunks[0, ii] = np.ceil(len(temp) / chunk_sharad_size)
@@ -169,7 +169,7 @@ for ii in range(np.size(sza_bin, axis=1)):
                     # load the data correpsonding to the particular SZA bin
                     # under analysis
                     sza_bin_relpath = area + '/' + str(dSZA) + ' dSZA/' + str(sza_bin[0, ii]) + '-' + str(sza_bin[0, ii] + dSZA)
-                    mar_data = np.load(os.path.join(SDS, 'targ/xtra/MARSIS/sza', sza_bin_relpath, 'data.npz')
+                    mar_data = np.load(os.path.join(SDS, 'targ/xtra/MARSIS/sza', sza_bin_relpath, 'data.npz'))
                     sha_fn = os.path.join(SDS, 'targ/xtra/SHARAD/sza', sza_bin_relpath, 'data.h5')
 
                     # chunk the raw sharad data

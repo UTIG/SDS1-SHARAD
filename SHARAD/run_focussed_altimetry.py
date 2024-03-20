@@ -66,15 +66,15 @@ def sar_processor(rec):
 def main():
 
     corr_window = 1024
-    SDS = os.getenv('SDS', '/disk/kea/SDS')
+    sds = os.getenv('SDS', '/disk/kea/SDS')
 
-    aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
-    label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
-    science_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat')
-    cmp_track = np.load(os.path.join(SDS, 'targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy'))
+    aux_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
+    label_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+    science_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat')
+    cmp_track = np.load(os.path.join(sds, 'targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy'))
     data = pds3.read_science(science_path, label_path)
     aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path)
-    spice.furnsh(os.path.join(SDS, 'orig/supl/kernels/mro/mro_v01.tm'))
+    spice.furnsh(os.path.join(sds, 'orig/supl/kernels/mro/mro_v01.tm'))
 
     mini = 1000
     maxi = 1501
@@ -158,4 +158,3 @@ def main():
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-

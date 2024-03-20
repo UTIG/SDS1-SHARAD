@@ -57,7 +57,7 @@ with open(file) as fil:
 # extract specularity for each line
 ii = 0
 if ii == 0:
-    
+
     # set the path to the data
     rawfn = a[ii].replace('\n', '')
     temp = rawfn.split('/')
@@ -71,8 +71,9 @@ if ii == 0:
     long_fn = base + str(long['interp_dx']) + 'm/'
     long_fn = long_fn + str(long['column_interval']) + ' range lines/'
     long_fn = long_fn + str(long['aperture']) + 'km/'
-    long_fn = long_fn + temp[-1].replace('a.dat', 's.h5'); del temp
-     
+    long_fn = long_fn + temp[-1].replace('a.dat', 's.h5')
+    del temp
+
     # load the radar data and interpolated ephemeris times
     short_sar = np.array(pd.read_hdf(short_fn, 'sar'))
     short_et = np.array(pd.read_hdf(short_fn, 'interpolated_ephemeris'))
@@ -80,14 +81,14 @@ if ii == 0:
     long_sar = np.array(pd.read_hdf(long_fn, 'sar'))
     long_et = np.array(pd.read_hdf(long_fn, 'interpolated_ephemeris'))
     long_col = np.array(pd.read_hdf(long_fn, 'columns'))
-   
+
     # convert amplitudes to SNR
     short_sar = snr(short_sar)
     short_et = short_et[short_col[:, 1]]
     long_sar = snr(long_sar)
     long_et = long_et[long_col[:, 1]]
     del short_col, long_col
-    
+
     # trim long aperture to match short aperture
     ind = np.zeros(len(long_et), dtype=int)
     for ii in range(len(ind)):

@@ -851,7 +851,7 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     
     if not os.path.exists(cmp_path):
         logging.warning(cmp_path + " does not exist")
-        return 0
+        return
 
     aux_path = inpath
 

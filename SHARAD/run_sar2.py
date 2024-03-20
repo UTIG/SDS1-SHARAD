@@ -143,7 +143,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             logging.debug("%s: SAR column posting interval [m]: %f", taskname, procparam['ddv1_posting_distance [m]'])
             logging.debug("%s: SAR aperture length [s]: %f", taskname, procparam['ddv1_aperture_time [s]'])
             logging.debug('%s: SAR Doppler bandwidth [Hz]: %f', taskname, procparam['ddv1_bandwidth [Hz]'])
-            logging.debug('%s: SAR number of looks: %d', int(number_of_looks))
+            logging.debug('%s: SAR number of looks: %d', taskname, int(number_of_looks))
             del number_of_looks
         elif focuser == 'Matched Filter':
             number_of_looks = np.floor(procparam['mf_aperture_time [s]'] * 2 * procparam['mf_bandwidth [Hz]'])
@@ -307,9 +307,8 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                 logging.error("Can't save to format '{:s}'".format(saving))
                 return 1
 
-    except Exception as e:
-
-        logging.error('{:s}: Error processing {:s}'.format(taskname, path))
+    except Exception: # pylint: disable=W0703
+        logging.error('%s: Error processing %s', taskname, path)
         for line in traceback.format_exc().split("\n"):
             logging.error('%s: %s', taskname, line)
 

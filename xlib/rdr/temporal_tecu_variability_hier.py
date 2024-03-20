@@ -4,8 +4,8 @@ __history__ = {
     '1.0':
         {'date': 'February 20 2019',
          'author': 'Kirk Scanlan, UTIG',
-         'info': 'Extractor of SHARAD USGEOM RDR datasets from a defined
-                  list of orbits'}}
+         'info': 'Extractor of SHARAD USGEOM RDR datasets from a defined'
+                 'list of orbits'}}
 """
 Investigation into the local variability of SHARAD radiometric autofocus TECU
 estimates as a function of SZA and solar longitude.

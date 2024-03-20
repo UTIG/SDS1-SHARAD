@@ -34,7 +34,7 @@ SDS = os.getenv('SDS', '/disk/kea/SDS')
 science_label = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
 aux_label = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 group = 'sharad'
-with hdf('cor_mc11.h5', mode='r') as h5file:
+h5file = hdf('cor_mc11.h5', mode='r')
 data = h5file.to_dict(group)
 
 xover = np.load('xover/cor_mc11e_xover.npy')

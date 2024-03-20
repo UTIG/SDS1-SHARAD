@@ -411,8 +411,8 @@ def main():
             np.savez(post_coreg, cmp_a3=cmp_a3, cmp_b3=cmp_b3, shift_array=shift_array, qual=qual_array, qual2=qual_array2)
         if bplot:
             plt.figure()
-            plt.subplot(211); plt.plot(shift_array);
-            plt.subplot(212); plt.plot(qual_array);
+            plt.subplot(211); plt.plot(shift_array)
+            plt.subplot(212); plt.plot(qual_array)
             if args.save is not None:
                 outfile = os.path.join(args.save, 'coregistration1.png')
                 plt.savefig(outfile, dpi=300)
@@ -433,13 +433,13 @@ def main():
         mag_a, phs_a = fl.convert_to_magphs(cmp_a3)
         mag_b, phs_b = fl.convert_to_magphs(cmp_b3)
         plt.figure()
-        plt.subplot(411); plt.imshow(mag_a, aspect='auto', cmap='gray');
+        plt.subplot(411); plt.imshow(mag_a, aspect='auto', cmap='gray')
         plt.title('co-registered antenna A magnitude'); plt.colorbar(); plt.clim([0, 20])
-        plt.subplot(412); plt.imshow(np.rad2deg(phs_a), aspect='auto', cmap='seismic');
+        plt.subplot(412); plt.imshow(np.rad2deg(phs_a), aspect='auto', cmap='seismic')
         plt.title('co-registered antenna A phase'); plt.clim([-180, 180]); plt.colorbar()
-        plt.subplot(413); plt.imshow(mag_b, aspect='auto', cmap='gray');
+        plt.subplot(413); plt.imshow(mag_b, aspect='auto', cmap='gray')
         plt.title('co-registered antenna B magnitude'); plt.colorbar(); plt.clim([0, 20])
-        plt.subplot(414); plt.imshow(np.rad2deg(phs_b), aspect='auto', cmap='seismic');
+        plt.subplot(414); plt.imshow(np.rad2deg(phs_b), aspect='auto', cmap='seismic')
         plt.title('co-registered antenna B phase'); plt.clim([-180, 180]); plt.colorbar()
         del mag_a, phs_a, mag_b, phs_b
         if args.save is not None:
@@ -482,11 +482,13 @@ def main():
             plt.title('roll angle [deg]'); plt.xlim([0, 1])
             plt.subplot(212)
             plt.plot(np.linspace(0, 1, len(roll_ang)), np.rad2deg(roll_phase))
-            plt.title('roll correction interferometric phase angle [deg]'); plt.xlim([0, 1])
+            plt.title('roll correction interferometric phase angle [deg]')
+            plt.xlim([0, 1])
             plt.show()
 
         # TODO: make a function that rolls data if taking a shift.
-        #  make this take cmp_a and a shift, cmp_b and a shift, and compute a total shifted product cmp_b3
+        #  make this take cmp_a and a shift, cmp_b and a shift,
+        # and compute a total shifted product cmp_b3
 
 
         # Interferogram
@@ -611,7 +613,7 @@ def main():
         logging.info("Saved %s", out_filename)
 
 
-    # Extract feature-of-interest interferometric phase and correlation 
+    # Extract feature-of-interest interferometric phase and correlation
     # as well as the mean interferometric phase of the feature-of-interest
     # as if it were off-nadir clutter
     print('-- extract information')
@@ -668,7 +670,7 @@ def main():
         plt.xlim([-180, 180])
         plt.legend(loc=1)
         plt.show()
-      
+
     # Determine the uncertainty in the nadir empirical sample mean
     print('-- determine uncertainty in the nadir empirical sample mean')
     nadir_sigma_m = fl.empirical_sample_mean(N, Nf, iphi, gamma)
@@ -708,6 +710,6 @@ def main():
     #else:
     #    print('>> FOI cannot be distinguished from an off-nadir clutter feature')
     #print(' ')
-    
+
 if __name__ == "__main__":
     main()

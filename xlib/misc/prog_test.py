@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+""" Test the prog progress class """
 import prog
 
 def main():
@@ -19,5 +19,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

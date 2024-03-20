@@ -2,6 +2,7 @@
 
 import numpy as np
 import spiceypy as spice
+from scipy.constants import speed_of_light
 
 # Code mapping PRI codes to actual pulse repetition intervals
 PRI_TABLE = {
@@ -61,7 +62,7 @@ def sar_proc(idx, sc_pos, data, aux, corr_window, track):
                  * 0.0375E-6+pri-11.98E-6#-2E-6
             #Compute phase shift
             d = spice.vnorm(sc_pos[n][0:3]-r_i)
-            phase[j] = d*2000/c/0.0375E-6+tof-tx/0.0375E-6
+            phase[j] = d*2000/speed_of_light/0.0375E-6+tof-tx/0.0375E-6
             for delta in range(0, 2048):
                 sample = int(tof+delta-(tx/0.0375E-6-phase[j]))
                 if sample >= 0 and sample < 2048:
@@ -71,7 +72,7 @@ def sar_proc(idx, sc_pos, data, aux, corr_window, track):
                     record[j, delta] = np.sqrt(zero_doppler[0].real**2
                                                + zero_doppler[0].imag**2)
             j += 1
-        dist = (np.argmax(np.mean(record, axis=0))+tof)*0.0375E-6*c/2000
+        dist = (np.argmax(np.mean(record, axis=0))+tof)*0.0375E-6*speed_of_light/2000
         h = data[rec]['RADIUS_N']-3389-dist
         # TODO: this doesn't need to be an np.array, can just be a tuple. GNG
         out.append(np.array([rec, h]))

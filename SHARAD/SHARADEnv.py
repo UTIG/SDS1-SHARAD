@@ -40,7 +40,7 @@ import json
 import numpy as np
 import pandas as pd
 import h5py as h5
-import rsr
+#import rsr
 
 CODEPATH = os.path.dirname(__file__)
 p1 = os.path.abspath(os.path.join(CODEPATH, "../xlib"))
@@ -192,7 +192,7 @@ class SHARADEnv:
             self.index_intermediate_files()
 
     def index_intermediate_files(self):
-        # List files of available for all data products
+        """ List files of available for all data products """
         for orbit, suborbits in self.orbitinfo.items():
             for suborbit in suborbits:
                 for typ in self.out:
@@ -427,13 +427,14 @@ class SHARADEnv:
         For now, each suborbit having at least one file in a certain processing
         folder is considered 'processed' for this specific processing category
         """
+        # TODO: convert this to use sets
         output = {}
         for typ in self.out:
             output[typ.split('_')[0]] = []
 
-        for orbit, suborbits in self.orbitinfo.items():
+        for suborbits in self.orbitinfo.values():
             for suborbit in suborbits:
-                for datatype in output.keys():
+                for datatype in output:
                     try:
                         #if any(suborbit[datatype + 'path']):
                         if any(s.endswith('.txt') for s in 
@@ -934,8 +935,8 @@ class SHARADFiles:
         indexpat = os.path.join(self.orig_path, 'EDR/mrosh_000?/index/cumindex.tab')
         try:
             indexfile = glob.glob(indexpat)[0]
-        except IndexError: # pragma: no cover
-            raise FileNotFoundError("Could not find %s" % indexpat)
+        except IndexError as ierr: # pragma: no cover
+            raise FileNotFoundError("Could not find %s" % indexpat) from ierr
 
         logging.info("Read %s", indexfile)
         with open(indexfile, 'rt') as fhcsv:

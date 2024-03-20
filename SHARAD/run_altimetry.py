@@ -55,29 +55,23 @@ math says that you could do up to 63 jobs on the regular sized machine under
 
 import sys
 import os
-import multiprocessing
 import logging
 import argparse
-from typing import List
-
-import numpy as np
-import spiceypy as spice
-import pandas as pd
 import traceback
 
-from run_rng_cmp import read_tracklistfile, filename_to_productid, run_jobs,\
-    process_product_args, should_process_products, \
-    add_standard_args
+import spiceypy as spice
+
+from run_rng_cmp import run_jobs, process_product_args,\
+                        should_process_products, add_standard_args
 
 sys.path.append('../xlib')
 #import misc.prog as prog
 import misc.hdf as hdf
-import matplotlib.pyplot as plt
-#import altimetry.beta5 as b5
+import misc.fileproc as fileproc
+#import matplotlib.pyplot as plt
 import altimetry.beta5 as b5
 
 from SHARADEnv import SHARADFiles
-import misc.fileproc as fileproc
 
 def main():
     desc = 'Run SHARAD altimetry processing'
@@ -108,7 +102,7 @@ def main():
     assert productlist, "No files to process"
 
     process_list = []
-    for tracknum, product_id in enumerate(productlist):
+    for product_id in productlist:
         infiles = sfiles.cmp_product_paths(product_id)
         infiles.update(sfiles.edr_product_paths(product_id))
         outfiles = sfiles.alt_product_paths(product_id)
@@ -139,9 +133,11 @@ def main():
     spice.furnsh(kernel_path)
 
     run_jobs(alt_processor, process_list, args.jobs)
+    return 0
 
 
-def alt_processor(cmp_path: str, edr_sci: str, outfile: str, SDS: str, finethreads: int, idx_start=0, idx_end=None, save_format=''):
+def alt_processor(cmp_path: str, edr_sci: str, outfile: str, SDS: str,
+                  finethreads: int, idx_start=0, idx_end=None, save_format=''):
     """
     Parameters:
     cmp_path - path to hdf5 output of range compression
@@ -157,8 +153,8 @@ def alt_processor(cmp_path: str, edr_sci: str, outfile: str, SDS: str, finethrea
 
         # This should have already been checked on the outside
         assert os.path.exists(edr_sci)
-        logging.info("Reading cmp " + cmp_path)
-        logging.info("Reading sci " + edr_sci)
+        logging.info("Reading cmp %s", cmp_path)
+        logging.info("Reading sci %s", edr_sci)
         result = b5.beta5_altimetry(cmp_path, edr_sci, label_path, aux_path,
                                     idx_start=idx_start, idx_end=idx_end,
                                     use_spice=False, ft_avg=10, max_slope=25,

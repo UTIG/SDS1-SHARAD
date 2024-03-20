@@ -395,7 +395,8 @@ def read_and_chunk_radar(aux_data_path:str, sci_label_path:str, aux_label_path:s
     return sreader, decomp, chunks, aux, idx_start, idx_end
 
 
-def compress_chunks(sreader: np.ndarray, decomp, chunks, aux, chirp_filter: bool, verbose: bool, idx_start:int, idx_end:int, taskname, output_filename: str):
+def compress_chunks(sreader: np.ndarray, decomp, chunks, aux, chirp_filter: bool,
+                    verbose: bool, idx_start:int, idx_end:int, taskname, output_filename: str):
     """ Perform pulse compression on all the chunks """
     # TODO: E_track can just be a list of tuples
     E_track = np.empty((idx_end-idx_start, 2))
@@ -437,7 +438,7 @@ def compress_chunks(sreader: np.ndarray, decomp, chunks, aux, chirp_filter: bool
 
         if output_filename.endswith('.i'):
             cmp_track.flush() #flush memmap
- 
+
     return cmp_track, E_track
 
 
@@ -612,4 +613,3 @@ if __name__ == "__main__":
     import argparse
     import time
     main()
-

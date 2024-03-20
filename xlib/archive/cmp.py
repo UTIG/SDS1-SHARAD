@@ -51,7 +51,7 @@ def itus_iono_rng_comp(data, chirp, E, f0, B, baseband=False):
 
     # prepare the science data
     tm = ((3/80)*10**-6)*np.arange(0, 4096, dtype=np.float)
-    n = 4096-3600;
+    n = 4096-3600
     data = np.pad(data, ((0,0),(0,n)), 'constant', constant_values=0)
     if baseband:
         comb_exp = np.exp(2*math.pi*(((80/3)-20)*10**6)*tm*1j)

@@ -24,6 +24,7 @@ import requests
 
 
 class SHARADIndex:
+    """ EDR Index manager """
     def __init__(self):
         pass
 
@@ -57,7 +58,8 @@ class SHARADIndex:
     def enumerate_orphan_files(self, local_root: str):
         """ List all files that are not referred to by any label """
 
-    def download_label_(self, product_id: str, local_root: str, remote_root: str, overwrite:bool=False, session=None):
+    def download_label_(self, product_id: str, local_root: str,
+                        remote_root: str, overwrite:bool=False, session=None):
         """ Download the label for the given product ID into correct spot
         relative to the local root
         https://requests.readthedocs.io/en/latest/user/quickstart/#raw-response-content
@@ -95,6 +97,7 @@ class SHARADIndex:
 
 @dataclass
 class SHARADPDS3Mirror:
+    """ Manage files in the SHARAD PDS3 mirror """
     local_dir: str
     remote_url: str
 
@@ -111,7 +114,7 @@ class SHARADPDS3Mirror:
         to their respective spots """
 
     def query_files_headers(self):
-        """ Get HTTP headers to calculate expected sizes of 
+        """ Get HTTP headers to calculate expected sizes of
         all files in the system """
 
 
@@ -125,7 +128,7 @@ def read_edr_label(labelfile: str):
     TODO: move this to pds3lbl?
     """
     label = pvl.load(labelfile)
-    dir = os.path.dirname(labelfile)
+    dir1 = os.path.dirname(labelfile)
 
 def build_filelist(rootpath: str):
     """ Build an hashed index of all filenames so we can find
@@ -179,7 +182,7 @@ def main():
                     logging.info("%s should be at %s.\n  Found at %s", fname, f2, foundf)
                     nmisplaced += 1
             else:
-                logging.info("not found: %s", f1) 
+                logging.info("not found: %s", f1)
                 nmissing += 1
 
     logging.info("Missing files: %d of %d", nmissing, 3*len(sidx.product_id_index))

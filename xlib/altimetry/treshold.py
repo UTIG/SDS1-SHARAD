@@ -149,8 +149,8 @@ def alt_profile(label_path, aux_path, science_path,
 
 
 def test_alt_profile():
-    SDS = os.getenv('SDS', '/disk/kea/SDS')
-    inpath = os.path.join(SDS, "orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0168901/e_0168901_001_ss19_700_a_a.dat")
+    sds = os.getenv('SDS', '/disk/kea/SDS')
+    inpath = os.path.join(sds, "orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0168901/e_0168901_001_ss19_700_a_a.dat")
 
 
     # input to process_alt()
@@ -173,8 +173,8 @@ def test_alt_profile():
     #cmp_path = path_root_cmp+path_file+'ion/'+data_file.replace('_a.dat','_s.h5')
 
 
-    label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
-    aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
+    label_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+    aux_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
 
     science_path = inpath.replace('_a.dat', '_s.dat')
@@ -182,7 +182,7 @@ def test_alt_profile():
         cmp_path = cmp_path.replace('_s.h5', '_a.h5')
         if not os.path.exists(cmp_path):
             logging.warning(cmp_path + " does not exist")
-            return 0
+            return
 
     kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
     spice.furnsh(kernel_path)
@@ -198,7 +198,6 @@ def test_alt_profile():
         save_path = None
         # save_path = None if sar_window == 1 else 'treshold_test.npy'
         alt_profile(label_path, aux_path, science_path, cmp_path, sar_window, fix_pri=1, save_path=save_path)
-
 
 
 def running_mean(x, N):

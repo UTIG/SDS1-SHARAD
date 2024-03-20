@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
 import os
 import glob
 import unittest
-import gzip
-import pickle
-import logging
-import warnings
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -60,13 +55,13 @@ class TestBasic(unittest.TestCase):
         assert os.path.exists(labelfile), labelfile + " does not exist"
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science("ZZZMISSINGZZZ_a_s.dat", labelfile)
+            _ = pds3.read_science("ZZZMISSINGZZZ_a_s.dat", labelfile)
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science(datafile, "ZZZMISSINGZZZ_a.lbl")
+            _ = pds3.read_science(datafile, "ZZZMISSINGZZZ_a.lbl")
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science("YYYMISSINGYYY_a_a.dat", "ZZZMISSINGZZZ")
+            _ = pds3.read_science("YYYMISSINGYYY_a_a.dat", "ZZZMISSINGZZZ")
 
 
     def test_diffname_samedir(self):
@@ -105,10 +100,12 @@ class TestPseudoBits(unittest.TestCase):
                 "mrosh_0001/label/science_ancillary.fmt"],
         }
     def test_pseudo_bits(self):
+        """ Test and write decoded binary data to temporary directory """
         with TemporaryDirectory() as fd:
             self.run_pseudo_bits(Path(fd))
 
     def run_pseudo_bits(self, outputdir=None):
+        """ Execute optionally outputting to directory """
         orig = os.path.join(SDS, "orig/supl/xtra-pds/SHARAD/EDR")
         labelfile = os.path.join(orig, "mrsh_0004/label/science_ancillary.fmt")
         for name, (datarel, labelrel) in self.datafiles.items():

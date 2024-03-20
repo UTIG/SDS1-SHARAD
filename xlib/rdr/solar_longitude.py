@@ -210,9 +210,9 @@ def Ls_J2000(sec_j2000):
 
 # convert the elapsed sols to a solar longitude assuming a linear
 # relationship between sols and solar longitude within each Martian month
-G_SOLVAL = np.array([0.0, 61.2, 126.6, 193.3, 257.8, 317.5, 371.9, 
+G_SOLVAL = np.array([0.0, 61.2, 126.6, 193.3, 257.8, 317.5, 371.9,
                      421.6, 468.5, 514.6, 562.0, 612.9, 668.6])
-G_LSVAL  = np.array([0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0, 
+G_LSVAL  = np.array([0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0,
                      210.0, 240.0, 270.0, 300.0, 330.0, 360.0])
 #TODO: versions of Ls_new1 that allow you to calc multiple longitudes as vector
 def Ls_new1(year, month, day, hour, minute, second):

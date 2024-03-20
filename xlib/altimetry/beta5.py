@@ -472,7 +472,7 @@ def running_mean_gen(radargram, N: int):
 
     n2a, n2b = (N // 2), (N - ((N // 2)+1))
     gen1 = cumsum_gen(radargram)
-    z0 = None
+    z0, sumtrace = None, None
     for ii, sumtrace in enumerate(gen1):
         if ii == 0:
             z0 = np.zeros_like(sumtrace)
