@@ -26,15 +26,12 @@ import logging
 import sys
 from warnings import simplefilter
 import mmap
+import traceback
 
-import pandas as pd
 import numpy as np
 import bitstruct
 import pvl
 
-# Ignore PerformanceWarning in pandas 2.0.0 and higher
-# https://stackoverflow.com/questions/68292862/performancewarning-dataframe-is-highly-fragmented-this-is-usually-the-result-o
-simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 # Dictionary for PDS3 data types: Note that floats are currently limited
 # to 64 bit. Higher precisions will be returned as bitstrings. Dates are
@@ -43,7 +40,7 @@ simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 PDS3_DATA_TYPE_TO_DTYPE = {
     'DATE':                 'S',
     'MSB_BIT_STRING':       'V',
-    'BOOLEAN' :             '?',
+    'BOOLEAN' :             'i', #'?',
     'IEEE_REAL':            '>f',
     'SUN_REAL':             '>f',
     'MAC_REAL':             '>f',
@@ -83,7 +80,7 @@ PDS3_DATA_TYPE_TO_BS = {
 }
 
 
-def read_science(data_path, label_path, science=True, bc=True):
+def read_science(data_path, label_path, science=None):
 
     """
     Routine to read the pds3 label files and return the corresponding
@@ -95,45 +92,23 @@ def read_science(data_path, label_path, science=True, bc=True):
     label_path: path to pds3 label file
     science (optional): Set to True when it is science data and False
                         if aux data
-    bc: Should it read the bit columns as well. Default is True.
 
     Output:
     ----------------
-    Dictionary containing the data from the science file specified in the
-    label file.
+    Numpy structured table of data in science telemetry table
     """
-    lbl = SHARADDataReader(label_path, science=science)
-    return lbl.read_data(data_path, bc=bc)[0]
+    if science is not None:
+        logging.warning("science boolean argument deprecated")
+        traceback.print_stack(file=sys.stdout)
 
-
-def read_science_np(data_path, label_path, science=True, bc=True):
-
-    """
-    Routine to read the pds3 label files and return the corresponding
-    data structure. Structure is returned a numpy structured array
-
-    Input:
-    ----------------
-    data_path: path to pds3 science or aux data file
-    label_path: path to pds3 label file
-    science (optional): Set to True when it is science data and False
-                        if aux data
-    bc: Should it read the bit columns as well. Default is True.
-
-    Output:
-    ----------------
-    Dictionary containing the data from the science file specified in the
-    label file.
-    """
-    lbl = SHARADDataReader(label_path, science=science)
-    dfr, arr, radar_samples = lbl.read_data(data_path, bc=bc)
-    # arr currently missing the bitfields
-    return dfr, radar_samples
+    return SHARADDataReader(label_path, data_path=data_path).arr
 
 
 
 def build_bitstruct(pvlobj: pvl.PVLObject):
-    """ From the pvl specification, build a bitstruct
+    """ From the pvl specification, gather all the packed bit fields
+    and build structures necessary to parse them using bitstruct and
+    put them all into one numpy structured array.  build a bitstruct
     format string to be used with the bitstruct.unpack function """
 
     fmttokens, npdtype = [], []
@@ -145,6 +120,7 @@ def build_bitstruct(pvlobj: pvl.PVLObject):
         name = sub[1]['NAME']
         nb_bits   = sub[1]['BITS']
         start_bit = sub[1]['START_BIT'] - 1
+        bdtype = sub[1]['BIT_DATA_TYPE']
         assert end_bit_prev == start_bit, "Unaccounted bits: %d != %d" % (end_bit_prev, start_bit)
         end_bit_prev = start_bit + nb_bits
 
@@ -152,8 +128,9 @@ def build_bitstruct(pvlobj: pvl.PVLObject):
         if name.startswith('SPARE'):
             dtype_bitstruct = 'p' # skip as padding
         else:
-            dtype_bitstruct = PDS3_DATA_TYPE_TO_BS[sub[1]['BIT_DATA_TYPE']][0]
-            npdtype.append((name, np.int64))
+            dtype_bitstruct = PDS3_DATA_TYPE_TO_BS[bdtype][0]
+            nbytes = npdtype_length(nb_bits)
+            npdtype.append((name, PDS3_DATA_TYPE_TO_DTYPE[bdtype] + str(nbytes)))
 
         dtype_bitstruct += str(nb_bits) # append length
         fmttokens.append(dtype_bitstruct)
@@ -161,6 +138,13 @@ def build_bitstruct(pvlobj: pvl.PVLObject):
     cf = bitstruct.compile(''.join(fmttokens))
 
     return cf, npdtype
+
+def npdtype_length(nbits: int):
+    """ Get a valid number of bytes for numpy dtypes from the number of bits """
+    for dtypebits in (8, 16, 32, 64):
+        if nbits <= dtypebits:
+            return dtypebits // 8
+    raise ValueError("Unexpected number of bits %d" % nbits)
 
 
 def read_raw(path):
@@ -208,11 +192,12 @@ class SHARADDataReader:
     BITS4 = ('SS3', 'SS03', 'SS6', 'SS06', 'SS9', 'SS09', 'SS12', 'SS15', 'SS18', 'SS21')
 
 
-    def __init__(self, label_path: str, science: bool):
-        self.read_global_label(label_path, science)
+    def __init__(self, label_path: str, data_path=None):
+        self.read_global_label(label_path)
+        if data_path is not None:
+            self.read_data(data_path)
 
-    #def read_science(data_path, label_path, science=True, bc=True):
-    def read_global_label(self, label_path: str, science: bool):
+    def read_global_label(self, label_path: str):
         """
         Routine to read the global SHARAD pds3 label files and cache its structure
 
@@ -220,18 +205,10 @@ class SHARADDataReader:
         ----------------
         label_path: path to pds3 label file
         data_path: path to pds3 science or aux data file
-        science (optional): Set to True when it is science data and False
-                            if aux data
-        bc: Should it read the bit columns as well. Default is True.
 
-        Output:
-        ----------------
-        Dictionary containing the data from the science file specified in the
-        label file.
         """
 
-        logging.debug("read_global_label %s science=%r", label_path, science)
-
+        logging.debug("read_global_label %s", label_path)
         # Decode label file structure
         label = pvl.load(label_path)
 
@@ -275,32 +252,37 @@ class SHARADDataReader:
                     dtype.append((name, dty))
 
         self.dtype_global = dtype
-        self.science = science
         self.bitparsers = []
 
+        self.all_bit_dtypes = []
         for name, pvlobj, _ in bitcolumns:
             assert name != 'sample_bytes', "Wasn't expecting this to be a bitcolumn"
             # A list of bitarray objects for data
             bitstruct_parser, npdtype = build_bitstruct(pvlobj)
             self.bitparsers.append((name, bitstruct_parser, npdtype))
+            self.all_bit_dtypes.extend(npdtype)
+        self.all_bit_dtypes = np.dtype(self.all_bit_dtypes)
 
-    def read_product_label(self, data_path: str, bc=True):
-        """ Construct the dtype for the product starting with the
-        global label """
-        science = self.science
-        # copy of the member dtype
-        dtype = list(self.dtype_global)
-
-
+    @staticmethod
+    def label_path_from_data(data_path: str):
+        """ Calculate the path and search for label if given a path to
+        a data file
+        return the path and whether this is a science telemetry file or not
+        """
         # Open label file corresponding to science file
         # Unfortunately labels are not labeled consistently
         # It first tries the regular file and then looks for other ones
         # in the respective data folder
         # GNG QUESTION: should this thing "break" on a successful load?
-        if science:
+        if data_path.endswith('_a_s.dat'):
+            science = True
             science_label_filename = data_path.replace('_a_s.dat', '_a.lbl')
-        else:
+        elif data_path.endswith('_a_a.dat'):
+            science = False
             science_label_filename = data_path.replace('_a_a.dat', '_a.lbl')
+        else:
+            raise ValueError("Unrecognized path '%s'" % data_path)
+
         # Try alternate labelnames
         if not os.path.exists(science_label_filename):
             dir1 = os.path.dirname(data_path)
@@ -310,9 +292,17 @@ class SHARADDataReader:
             if not labellist:
                 raise FileNotFoundError("Can't find science label for %s" % data_path)
             science_label_filename = labellist[0]
+        return science_label_filename, science
 
-        logging.debug("Read science label from %s", science_label_filename)
-        science_label = pvl.load(science_label_filename)
+    def read_product_label(self, data_path: str):
+        """ Construct the dtype for the product starting with the
+        global label """
+        # copy of the member dtype
+        dtype = list(self.dtype_global)
+        label_filename, science = SHARADDataReader.label_path_from_data(data_path)
+        self.science = science
+        logging.debug("Read product label from %s", label_filename)
+        science_label = pvl.load(label_filename)
 
 
         # read number of range lines and science mode from label file
@@ -337,142 +327,104 @@ class SHARADDataReader:
         else:
             self.pseudo_samples = None
         self.dtype_local = dtype
+        return dtype
 
-
-    def read_data(self, data_path: str, bc=True):
+    def read_data(self, data_path: str):
         """
         Routine to read the data files and return the corresponding
         data structure. Structure is returned as dictionary
+        and saved into the member attribute self.arr
 
         Input:
         ----------------
         data_path: path to pds3 science or aux data file
-        bc: Should it read the bit columns as well. Default is True.
 
         Output:
         ----------------
-        Dictionary containing the data from the science file specified in the
-        label file.
+        Numpy structured array with raw data fields from science telemetry table
         """
 
-        self.read_product_label(data_path, bc)
-        dtype = self.dtype_local
-        science = self.science
-        pseudo_samples = self.pseudo_samples
+        dtype = self.read_product_label(data_path)
 
         # Read science data file
         fil = glob.glob(data_path)[0]
-        arr = np.memmap(fil, dtype=np.dtype(dtype), mode='r')
-        logging.debug("arr.shape=%r len(dtype)=%r", arr.shape, len(dtype))
-        assert self.rows == len(arr), "%s doesn't have expected length" % (fil,)
-        if science:
-            # Cast samples as a void array so that samples is 1D
-            # a 1D quantity
-            samples_dtype_i = ('sample_bytes', str(pseudo_samples) + 'b')
-            samples_dtype_o = ('sample_bytes', str(pseudo_samples) + 'V')
-            dtype_pd = [samples_dtype_o if x == samples_dtype_i else x for x in dtype]
-            arr_pd = np.memmap(fil, dtype=np.dtype(dtype_pd), mode='r')
-            dfr = pd.DataFrame(arr_pd)
-        else: # if not science or pseudo_samples == 3600
-            dfr = pd.DataFrame(arr)
-        #dfr = pd.DataFrame(arr)
+        self.arr = np.memmap(fil, dtype=np.dtype(dtype), mode='r')
+        logging.debug("arr.shape=%r len(dtype)=%r", self.arr.shape, len(dtype))
+        assert self.rows == len(self.arr), "%s doesn't have expected length" % (fil,)
+        return self.arr
 
-        # TODO: give user the option to return these to their own buffer.
-        # Don't read by default
-        radar_samples = None
-        # Convert 6 and 4 bit samples
-        if science:
-            radar_samples = np.empty((len(arr), 3600), dtype='i1')
-            self.read_samples(arr, radar_samples, pseudo_samples)
-            pass # self.test_mmap_8bit_samples(arr, data_path)
+    def get_radar_samples(self, arr_out=None, idxes=None):
+        """ 
+        Decode and return radar samples from the science telemetry table
 
-        if bc:
-            # Replace the packed bitfields with individual arrays
-            # Read bitcolumns. These have been previously saved in np.void format
-            #for bcl in bitcolumns:
-            for name, bitstruct_parser, npdtype in self.bitparsers:
-                # Build a numpy structured array
-                barr = np.empty((len(arr[name]),), dtype=npdtype)
-                for ii, bs1 in enumerate(arr[name]):
-                    barr[ii] = bitstruct_parser.unpack(bs1.tobytes())
+        Parameters:
+        arr_out: (optional)
+        If provided, write radar data to this ndarray
+        this should be a 2D array of size equal to the length of the slice requested
+        and 3600 samples and accept signed integers.
 
-                for name1, _ in npdtype:
-                    dfr[name1] = pd.Series(barr[name1], index=dfr.index)
+        idxes: slice object for traces to extract
+        default=None returns all traces
 
-        # Return the dataframe (and the numpy array for those who want it)
-        return dfr, arr, radar_samples
-
-    def read_samples(self, arr, conv, pseudo_samples: int):
-        """ Read the samples out of the binary file and into a numpy array 
-        TODO: yield lines to make this able to read to a numpy memmap
+        Return value:
+        -----------------------------
+        radar samples array
         """
+
         assert self.science, "Not a science label"
-        assert conv.shape == (len(arr), 3600), "Output array not expected shape"
-        logging.debug("read_samples pseudo_samples=%d", pseudo_samples)
-        #conv = np.empty((len(arr), 3600), dtype='i1')
+
+        if arr_out is None:
+            arr_out = np.empty((len(self.arr), 3600), dtype='i1')
+
+        arr = self.arr
+        assert len(arr_out.shape) == 2 and arr_out.shape[1] == 3600, "Output array not expected shape"
+        #arr_out = np.empty((len(arr), 3600), dtype='i1')
         assert arr['sample_bytes'].dtype == np.dtype('b'), "Unexpected dtype: %r" % s.dtype
+
+        if idxes is None:
+            idxes = slice(None)
+
+        pseudo_samples = self.pseudo_samples
 
         s = arr['sample_bytes']
         if pseudo_samples == 3600: # 8-bit
-            conv[...] = s
+            arr_out[...] = s[idxes]
         elif pseudo_samples == 2700: # 6-bit
-            # Bits 7:2 of s[0] become conv[0]
-            conv[:, 0:3600:4] = s[:, 0:2700:3] >> 2
-            # bytes 1:0 of s[0] (hi2) and 7:4 of s[1] become conv[1]
+            # Bits 7:2 of s[0] become arr_out[0]
+            arr_out[:, 0:3600:4] = s[idxes, 0:2700:3] >> 2
+            # bytes 1:0 of s[0] (hi2) and 7:4 of s[1] become arr_out[1]
             # mask then sign extend
-            hi2 = ((s[:, 0:2700:3] & 0x3) << 6) >> 2
-            lo4 = ( s[:, 1:2700:3] >> 4) & 0x0f
-            conv[:, 1:3600:4] = hi2 | lo4
+            hi2 = ((s[idxes, 0:2700:3] & 0x3) << 6) >> 2
+            lo4 = ( s[idxes, 1:2700:3] >> 4) & 0x0f
+            arr_out[:, 1:3600:4] = hi2 | lo4
             del hi2, lo4
             # bytes 3:0 of s[1] get sign extended and bytes 7:5 of s[2]
-            hi4 = ((s[:, 1:2700:3] & 0x0f) << 4) >> 2
-            lo2 = (s[:, 2:2700:3] >> 6) & 0x03
-            conv[:, 2:3600:4] = hi4 | lo2
+            hi4 = ((s[idxes, 1:2700:3] & 0x0f) << 4) >> 2
+            lo2 = (s[idxes, 2:2700:3] >> 6) & 0x03
+            arr_out[:, 2:3600:4] = hi4 | lo2
             del hi4, lo2
             # Sign extend last 6 bits
-            conv[:, 3:3600:4] = (s[:, 2:2700:3] << 2) >> 2
+            arr_out[:, 3:3600:4] = (s[idxes, 2:2700:3] << 2) >> 2
         elif pseudo_samples == 1800: # 4-bit
             # Sign extend everything
-            conv[:, 0:3600:2] = s[:, 0:1800] >> 4
-            conv[:, 1:3600:2] = (s[:, 0:1800] << 4) >> 4
+            arr_out[:, 0:3600:2] = s[idxes, 0:1800] >> 4
+            arr_out[:, 1:3600:2] = (s[idxes, 0:1800] << 4) >> 4
         else: # pragma: no cover
             raise ValueError("Unexpected value for pseudo_samples = %d" % pseudo_samples)
+        return arr_out
 
-        logging.debug("read_samples end")
-        return conv
 
-    def mmap_8bit_samples(self, nrows: int, dtype, data_path: str):
-        """ Build a numpy memmapped data structure for the 8-bit data """
-        nbytes = os.path.getsize(data_path)
-        ncols = nbytes // nrows
-        assert nbytes % nrows == 0
-        assert ncols >= 3600
-        assert ncols == dtype.itemsize
-        offset = ncols - 3600
-        logging.debug("datapath=%s", data_path)
-        logging.debug("nrows,ncols,offset,nbytes=%d,%d,%d,%d", nrows, ncols, offset, nbytes)
-        fh = open(data_path, "rb")
-        #mm1 = mmap.mmap(fh.fileno(), length=nbytes-offset, access=mmap.ACCESS_READ, offset=offset)
-        #memmap2 = np.ndarray((nrows-1, 3600), dtype='i1', buffer=mm1, offset=0, strides=(1, ncols), order='C')
-        memmap1 = np.memmap(data_path, dtype='i1', mode='r', shape=(nrows-1, ncols), offset=offset)
-        memmap2 = np.lib.stride_tricks.as_strided(memmap1, shape=(nrows, 3600), strides=(ncols, 1), writeable=False)
-        return memmap2
+    def get_bitcolumns(self):
+        """ Parse the packed bit columns into individually-accessible fields
+        in a numpy structured array.
+        These have been previously saved in np.void format
+        """
+        bitarr = np.empty((len(self.arr),),  dtype=self.all_bit_dtypes)
+        for name, bitstruct_parser, npdtype in self.bitparsers:
+            # Build a numpy structured array
+            for ii, bs1 in enumerate(self.arr[name]):
+                row = bitstruct_parser.unpack(bs1.tobytes())
+                for (bname, _), v in zip(npdtype, row):
+                    bitarr[bname][ii] = v
 
-    def test_mmap_8bit_samples(self, arr, data_path: str):
-        assert self.pseudo_samples == 3600
-        arr_out = np.empty((len(arr), 3600), dtype='i1')
-        self.read_samples(arr, arr_out, self.pseudo_samples)
-        mm2 = self.mmap_8bit_samples(len(arr), arr.dtype, data_path)
-
-        #np.testing.assert_array_equal(arr_out, mm2[:, -3600:])
-        for ii in range(arr.shape[0]):
-            try:
-                np.testing.assert_array_equal(arr_out[ii], mm2[ii], 'row %d' % ii)
-            except AssertionError:
-                for jj in range(3600):
-                    x, y = arr_out[ii, jj], mm2[ii, jj]
-                    logging.debug("[%4d] %3d %3d %d", jj, x, y, x-y)
-                raise
-        np.testing.assert_array_equal(arr_out, mm2)
-        logging.debug("testing passed with %s", data_path)
-
+        return bitarr

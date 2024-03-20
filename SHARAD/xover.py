@@ -29,16 +29,16 @@ for x in xover:
         #tec1 = np.loadtxt(tecu_file)*1E+15
         #track1 = np.load(new_path)
         apath = path1.replace('_s.dat', '_a.dat')
-        aux1 = pds3.read_science(apath, aux_path, science=False, bc=False)
+        aux1 = pds3.read_science(apath, aux_path)
         sza1 = aux1['SOLAR_ZENITH_ANGLE'][idx1]
         #delay1 = c*tec1*1.69E-6/(2*np.pi*(20E+6)**2)
         #print(sza1,tec1[0],tec1[0]*1.69E-6/(20E+6)**2)
 
         # track 2
         path2 = lookup[gob2]
-        #data2 = pds3.read_science(path, label_path, science=True, bc=False)
+        #data2 = pds3.read_science(path, label_path)
         apath = path2.replace('_s.dat', '_a.dat')
-        aux2 = pds3.read_science(apath, aux_path, science=False, bc=False)
+        aux2 = pds3.read_science(apath, aux_path)
         sza2 = aux2['SOLAR_ZENITH_ANGLE'][idx2]
         #path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
         #data_file = path_file.split('/')[-1]

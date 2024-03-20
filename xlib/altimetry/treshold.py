@@ -55,18 +55,17 @@ def alt_profile(label_path, aux_path, science_path,
 
     # Read pulse-compressed and complementing EDR data
     cmp_track = cmp_track[idx_start:idx_end]
-    data = pds3.read_science(science_path, label_path,
-                             science=True, bc=False)[idx_start:idx_end]
-    aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path,
-                            science=False, bc=False)[idx_start:idx_end]
+    data = pds3.read_science(science_path, label_path)[idx_start:idx_end]
+    auxdata = science_path.replace('_s.dat', '_a.dat')
+    aux = pds3.read_science(auxdata, aux_path)[idx_start:idx_end]
 
     # Get the RWOT parameters
-    range_window_start = data['RECEIVE_WINDOW_OPENING_TIME'].values
+    range_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
     r_tx0 = int(min(range_window_start))
     r_offset = int(max(range_window_start)) - r_tx0
 
     # S/C position
-    ets = np.array(aux['EPHEMERIS_TIME'].values)
+    ets = np.array(aux['EPHEMERIS_TIME'])
     sc = np.zeros(len(ets))
     scpos = np.zeros((len(ets), 6))
 
@@ -95,7 +94,7 @@ def alt_profile(label_path, aux_path, science_path,
     # Get shot frequency (assumed stable over full track)
 
     if fix_pri is None:
-        pri_code = data['PULSE_REPETITION_INTERVAL'].values[0]
+        pri_code = data['PULSE_REPETITION_INTERVAL'][0]
         #pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
     else:
         pri_code = fix_pri

@@ -72,8 +72,8 @@ def main():
     label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
     science_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat')
     cmp_track = np.load(os.path.join(SDS, 'targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy'))
-    data = pds3.read_science(science_path, label_path, science=True)
-    aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path, science=False)
+    data = pds3.read_science(science_path, label_path)
+    aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path)
     spice.furnsh(os.path.join(SDS, 'orig/supl/kernels/mro/mro_v01.tm'))
 
     mini = 1000

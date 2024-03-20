@@ -244,18 +244,18 @@ def rsr_quadrangle(filename, query_lon=None, query_lat=None, grid_shape='square'
                                                           shape=grid_shape)
 
     # Launch rsr
-    logging.info(f"Processing RSR for {len(query_lon)} locations on the grid" + 
-                  " (this could take a while)")
+    logging.info("Processing RSR for %d locations on the grid"
+                 " (this could take a while)", len(query_lon))
     out = rsr.run.incircles(data['surf_amp'], data['SUB_SC_EAST_LONGITUDE'], 
                             data['SUB_SC_PLANETOCENTRIC_LATITUDE'],
                             query_lon, query_lat, r, nbcores=nbcores)
 
     # Format data
-    out['lon'] = [query_lon[np.int32(i)] for i in out['ID'].values]
-    out['lat'] = [query_lat[np.int32(i)] for i in out['ID'].values]
+    out['lon'] = [query_lon[int(i)] for i in out['ID'].values]
+    out['lat'] = [query_lat[int(i)] for i in out['ID'].values]
 
     # Store data
-    out.to_csv(filename.split('.')[0] + '.rsr.csv', sep=',', header=True, index=False)
+    out.to_csv(os.path.splitext(filename)[0] + '.rsr.csv', sep=',', header=True, index=False)
 
     return out
 

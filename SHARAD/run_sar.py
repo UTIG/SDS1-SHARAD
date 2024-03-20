@@ -55,9 +55,9 @@ def sar_processor(path, SDS, idx_start=None, idx_end=None,
         idx_end = len(cmp_track)
 
     cmp_track = cmp_track[idx_start:idx_end]
-    data = pds3.read_science(science_path, label_path, science=True, bc=False)[idx_start:idx_end]
+    data = pds3.read_science(science_path, label_path)[idx_start:idx_end]
     afile = science_path.replace('_s.dat', '_a.dat')
-    aux = pds3.read_science(afile, aux_path, science=False, bc=False)[idx_start:idx_end]
+    aux = pds3.read_science(afile, aux_path)[idx_start:idx_end]
 
     pri_code = 1
     #pri_code = data['PULSE_REPETITION_INTERVAL'][0]

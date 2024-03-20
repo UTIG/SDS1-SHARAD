@@ -25,8 +25,8 @@ aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxilia
 
 science_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat'
 cmp_track = np.load('/disk/daedalus/sds/targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy')
-data = pds3.read_science(science_path, label_path, science=True)
-aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path, science=False)
+data = pds3.read_science(science_path, label_path)
+aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path)
 spice.furnsh('/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm')
 
 range_window_start = data['RECEIVE_WINDOW_OPENING_TIME']

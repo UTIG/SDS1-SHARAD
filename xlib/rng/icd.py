@@ -63,24 +63,22 @@ def gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
     # GNG: This data gets reread in run_ranging. Is it worth caching?
 
     # Data for RXWOTs
-    data = pds3.read_science(science_path, label_science, science=True,
-                              bc=False)
+    data = pds3.read_science(science_path, label_science)
     # Range window starts
-    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
+    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'][idx_start:idx_end]
 
 
     # Perform clutter simulation or load existing cluttergram
     if cluttergram_path is None:
         logging.debug("Performing clutter simulation")
-        aux = pds3.read_science(aux_path, label_aux, science=False,
-                                bc=False)
+        aux = pds3.read_science(aux_path, label_aux)
         pri_code = np.ones(Necho)
-        p_scx = aux['X_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
-        p_scy = aux['Y_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
-        p_scz = aux['Z_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
-        v_scx = aux['X_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
-        v_scy = aux['Y_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
-        v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'].values[idx_start:idx_end]
+        p_scx = aux['X_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+        p_scy = aux['Y_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+        p_scz = aux['Z_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+        v_scx = aux['X_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
+        v_scy = aux['Y_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
+        v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
         state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
         # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
         sim = icsim.incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end,
@@ -244,9 +242,9 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
     # GNG: This data gets reread in run_ranging. Is it worth caching?
 
     # Data for RXWOTs
-    data = pds3.read_science(science_path, label_science, science=True, bc=False)
+    data = pds3.read_science(science_path, label_science)
     # Range window starts
-    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
+    rxwot = data['RECEIVE_WINDOW_OPENING_TIME'][idx_start:idx_end]
     del data
 
 

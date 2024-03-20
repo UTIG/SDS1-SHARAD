@@ -25,7 +25,7 @@ class TestBasic(unittest.TestCase):
         labelfile = os.path.join(ORIG, "mrosh_0001/label/science_ancillary.fmt")
         assert os.path.exists(datafile), datafile + " does not exist"
         assert os.path.exists(labelfile), labelfile + " does not exist"
-        aux = pds3.read_science(datafile, labelfile, science=True)
+        data = pds3.read_science(datafile, labelfile)
 
 
     def test_read_aux(self):
@@ -34,7 +34,7 @@ class TestBasic(unittest.TestCase):
         labelfile = os.path.join(ORIG, "mrosh_0001/label/auxiliary.fmt")
         assert os.path.exists(datafile), datafile + " does not exist"
         assert os.path.exists(labelfile), labelfile + " does not exist"
-        aux = pds3.read_science(datafile, labelfile, science=False)
+        aux = pds3.read_science(datafile, labelfile)
 
 
     def test_missing_aux(self):
@@ -45,13 +45,13 @@ class TestBasic(unittest.TestCase):
         assert os.path.exists(labelfile), labelfile + " does not exist"
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science("ZZZMISSINGZZZ", labelfile, science=False)
+            aux = pds3.read_science("ZZZMISSINGZZZ_a_a.dat", labelfile)
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science(datafile, "ZZZMISSINGZZZ", science=False)
+            aux = pds3.read_science(datafile, "ZZZMISSINGZZZ")
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science("YYYMISSINGYYY", "ZZZMISSINGZZZ", science=True)
+            aux = pds3.read_science("YYYMISSINGYYY_a_s.dat", "ZZZMISSINGZZZ")
 
     def test_missing_science(self):
         datafile = os.path.join(ORIG, "mrosh_0001/data/edr05xxx/edr0518201/e_0518201_001_ss19_700_a_s.dat")
@@ -60,13 +60,13 @@ class TestBasic(unittest.TestCase):
         assert os.path.exists(labelfile), labelfile + " does not exist"
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science("ZZZMISSINGZZZ", labelfile, science=True)
+            aux = pds3.read_science("ZZZMISSINGZZZ_a_s.dat", labelfile)
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science(datafile, "ZZZMISSINGZZZ", science=True)
+            aux = pds3.read_science(datafile, "ZZZMISSINGZZZ_a.lbl")
 
         with self.assertRaises(FileNotFoundError):
-            aux = pds3.read_science("YYYMISSINGYYY", "ZZZMISSINGZZZ", science=True)
+            aux = pds3.read_science("YYYMISSINGYYY_a_a.dat", "ZZZMISSINGZZZ")
 
 
     def test_diffname_samedir(self):
@@ -76,7 +76,7 @@ class TestBasic(unittest.TestCase):
 
         datafile = os.path.join(ORIG, "mrosh_0001/data/edr05xxx/edr0518201/e_0518201_001_ss19_700_a_s.dat")
         labelfile = os.path.join(ORIG, "mrosh_0001/label/science_ancillary.fmt")
-        aux = pds3.read_science(datafile, labelfile, science=True)
+        aux = pds3.read_science(datafile, labelfile)
 
 
     def test_refchirp(self):
@@ -105,7 +105,8 @@ class TestPseudoBits(unittest.TestCase):
                 "mrosh_0001/label/science_ancillary.fmt"],
         }
     def test_pseudo_bits(self):
-        self.run_pseudo_bits(None)
+        with TemporaryDirectory() as fd:
+            self.run_pseudo_bits(Path(fd))
 
     def run_pseudo_bits(self, outputdir=None):
         orig = os.path.join(SDS, "orig/supl/xtra-pds/SHARAD/EDR")
@@ -115,21 +116,15 @@ class TestPseudoBits(unittest.TestCase):
                 datafile = os.path.join(orig, datarel)
                 labelfile = os.path.join(orig, labelrel)
 
-                with warnings.catch_warnings():
-                    warnings.simplefilter(action="ignore", category=pds3.pd.errors.PerformanceWarning)
-                    #pdsdata = pds3.read_science(datafile, labelfile)
-                    pdsdata, radar_samples = pds3.read_science_np(datafile, labelfile)
-                    if outputdir is not None:
-                        # Write to an output file
-                        outfile = outputdir / Path(datarel).with_suffix('.bin').name
-                        outputdir.mkdir(parents=True, exist_ok=True)
-                        with outfile.open('wb') as fout:
-                            radar_samples.tofile(fout)
+                sreader = pds3.SHARADDataReader(labelfile, datafile)
+                radar_samples = sreader.get_radar_samples()
 
-    @unittest.skip("Only run this one manually")
-    def test_pseudo_bits_write(self):
-        """ read the files and write them """
-        self.run_pseudo_bits(Path(__file__).parent / 'out_pseudobits')
+                if outputdir is not None:
+                    # Write to an output file
+                    outfile = outputdir / Path(datarel).with_suffix('.bin').name
+                    outputdir.mkdir(parents=True, exist_ok=True)
+                    with outfile.open('wb') as fout:
+                        radar_samples.tofile(fout)
 
 
 if __name__ == "__main__":

@@ -115,10 +115,10 @@ if ii == 0:
     
     # load unedited ephemeris, latitude, and longitude information
     aux_lbl = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-    aux = pds3.read_science(rawfn, aux_lbl, science=False, bc=False)
-    raw_et = aux['EPHEMERIS_TIME'].values
-    raw_lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values
-    raw_lon = aux['SUB_SC_EAST_LONGITUDE'].values 
+    aux = pds3.read_science(rawfn, aux_lbl)
+    raw_et = aux['EPHEMERIS_TIME']
+    raw_lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+    raw_lon = aux['SUB_SC_EAST_LONGITUDE']
 
     # interpolate raw latitude and longitude onto already interpolated ephemeris
     latitude = np.interp(et, raw_et, raw_lat)

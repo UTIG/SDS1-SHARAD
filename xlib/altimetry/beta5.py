@@ -122,11 +122,13 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     #============================
 
     # Read input data
-    dbc = fix_pri is None
-    data = pds3.read_science(science_path, label_science, science=True, bc=dbc)
+    #dbc = fix_pri is None
+    scireader = pds3.SHARADDataReader(label_science, science_path)
+    data = scireader.arr
+    bit_data = scireader.get_bitcolumns()
     logging.debug("Size of 'edr' data: %0.2f MB, dimensions %r", sys.getsizeof(data)/MB, data.shape)
-    aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'),
-                            label_aux, science=False, bc=False)
+    auxdatapath = science_path.replace('_s.dat', '_a.dat')
+    aux = pds3.read_science(auxdatapath, label_aux)
     logging.debug("Size of 'aux' data: %0.2f MB, dimensions %r", sys.getsizeof(aux)/MB, aux.shape)
 
     p1 = Path(cmp_path)
@@ -138,10 +140,10 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     time0 = time1
 
     # Get Range window start
-    range_window_start = data['RECEIVE_WINDOW_OPENING_TIME'].values[idx_start:idx_end]
+    range_window_start = data['RECEIVE_WINDOW_OPENING_TIME'][idx_start:idx_end]
 
     # Compute or read S/C position
-    ets = aux['EPHEMERIS_TIME'].values[idx_start:idx_end]
+    ets = aux['EPHEMERIS_TIME'][idx_start:idx_end]
     if use_spice:
         sc = np.empty(len(ets))
         lat = np.empty(len(ets))
@@ -153,12 +155,12 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
             lon[i] = llr[1]
             sc[i] = np.linalg.norm(scpos[0:3])
     else:
-        sc_x = aux['X_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
-        sc_y = aux['Y_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
-        sc_z = aux['Z_MARS_SC_POSITION_VECTOR'].values[idx_start:idx_end]
+        sc_x = aux['X_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+        sc_y = aux['Y_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+        sc_z = aux['Z_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
         sc = np.sqrt(sc_x**2+sc_y**2+sc_z**2)
-        lon = aux['SUB_SC_EAST_LONGITUDE'].values[idx_start:idx_end]
-        lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values[idx_start:idx_end]
+        lon = aux['SUB_SC_EAST_LONGITUDE'][idx_start:idx_end]
+        lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'][idx_start:idx_end]
 
     # Code mapping PRI codes to actual pulse repetition intervals
     pri_table = {
@@ -167,7 +169,7 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
         5: 2984E-6, 6: 2580E-6
     }
 
-    pri_code = data['PULSE_REPETITION_INTERVAL'].values[idx_start:idx_end]
+    pri_code = bit_data['PULSE_REPETITION_INTERVAL'][idx_start:idx_end]
 
     pri = np.array([pri_table.get(x, 1428E-6) for x in pri_code])
 
@@ -181,7 +183,7 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     idx_valid = np.where(range_window_start>1000)
     
     # Identify corrupted data
-    corrupted_flag = aux['CORRUPTED_DATA_FLAG'].values[idx_start:idx_end]
+    corrupted_flag = aux['CORRUPTED_DATA_FLAG'][idx_start:idx_end]
     corrupted_idx = np.where(corrupted_flag == 1)[0]
 
     # Calculate offsets for radargram
@@ -200,8 +202,8 @@ def beta5_altimetry(cmp_path: str, science_path: str, label_science: str, label_
     # up to 25deg. For SHARAD data this means that generally no incoherent stacking
     # is performed, i.e. coh_window = 1. However, with variable observing geometries
     # during Europa flybys, REASON data might allow for coherent stacking.
-    sc_alt = aux['SPACECRAFT_ALTITUDE'].values[idx_start:idx_end]*1000
-    vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'].values[idx_start:idx_end]*1000
+    sc_alt = aux['SPACECRAFT_ALTITUDE'][idx_start:idx_end]*1000
+    vel_t = aux['MARS_SC_TANGENTIAL_VELOCITY'][idx_start:idx_end]*1000
     iiend = aux.shape[0] if idx_end is None else idx_end
     del aux
     # catch zero-velocities

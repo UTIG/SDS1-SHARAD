@@ -311,8 +311,8 @@ def calculate_chunks(tlp: List[float], chunklen_km: float):
     i0 = 0
     for i, tlp1 in enumerate(tlp):
         if tlp1 < tlp0: # track went backwards from last posting
-            raise ValueError("Track went backwards at tlp[%d]=%0.2f (previous was tlp[%d]=%0.2f",
-                             i, tlp1, i0, tlp0)
+            msg = "Track went backwards at tlp[%d]=%0.2f (previous was tlp[%d]=%0.2f" % (i, tlp1, i0, tlp0)
+            raise ValueError (msg)
         if tlp1 > tlp0 + chunklen_km:
             chunks.append([i0, i])
             i0 = i
@@ -325,12 +325,25 @@ def calculate_chunks(tlp: List[float], chunklen_km: float):
         chunks[-1][1] = len(tlp)
     return chunks #chunks = np.array(chunks)
 
-def parse_decompress_parameters(sci_data, idx_start: int):
-    compression = 'static' if (sci_data['COMPRESSION_SELECTION'][idx_start] == 0) else 'dynamic'
+def calculate_default_chunks(len_array, chunksize=512):
+    chunks = []
+    for x0 in range(0, len_array, chunksize):
+        x1 = min(x0 + chunksize, len_array)
+        chunks.append((x0, x1))
+    assert chunks # assert not empty
+    lastchunk_size = len_array % chunksize
+    if lastchunk_size < 32 and len(chunks) >= 2: # prevent tiny last chunk
+        chunks.pop() # remove last element
+        chunks[-1] = (chunks[-1][0], len_array)
+    return chunks #chunks = np.array(chunks)
+
+
+def parse_decompress_parameters(sci_data, bit_data, idx_start: int):
+    compression = 'static' if (bit_data['COMPRESSION_SELECTION'][idx_start] == 0) else 'dynamic'
 
     # Tracking presumming table. Converts TPS field into presumming count
     tps_table = (1, 2, 3, 4, 8, 16, 32, 64)
-    tps = sci_data['TRACKING_PRE_SUMMING'][idx_start]
+    tps = bit_data['TRACKING_PRE_SUMMING'][idx_start]
     assert tps >= 0 and tps <= 7
     presum = tps_table[tps]
     sdi = sci_data['SDI_BIT_FIELD'][idx_start]
@@ -352,57 +365,69 @@ def read_and_chunk_radar(aux_data_path:str, sci_label_path:str, aux_label_path:s
 
     # Load data
     science_path = aux_data_path.replace('_a.dat', '_s.dat')
-    data = pds3.read_science(science_path, sci_label_path, science=True)
-    aux  = pds3.read_science(aux_data_path, aux_label_path, science=False)
+    sreader = pds3.SHARADDataReader(sci_label_path, science_path)
+    arr = sreader.arr
+
+    aux = pds3.read_science(aux_data_path, aux_label_path)
 
     # Array of indices to be processed
     if idx_start is None or idx_end is None:
-        idx_start, idx_end = 0, len(data)
+        idx_start, idx_end = 0, len(arr)
     idx = np.arange(idx_start, idx_end)
     logging.debug('%s: Length of track: %d traces', taskname, len(idx))
 
-    raw_data = chop_raw_data(data, idx)
+    bit_data = sreader.get_bitcolumns()
 
-    compression, presum, bps, sdi = parse_decompress_parameters(data, idx_start)
+    compression, presum, bps, sdi = parse_decompress_parameters(arr, bit_data, idx_start)
     decomp = decompression_scale_factors(compression, presum, bps, sdi)
 
     # Decompress the data
     #decompress_sci_data(raw_data, compression, presum, bps, sdi)
     # Get groundtrack distance and define 30 km chunks
-    tlp = list(data['TLP_INTERPOLATE'][idx_start:idx_end])
-    chunks = calculate_chunks(tlp, chunklen_km)
+    try:
+        tlp = list(arr['TLP_INTERPOLATE'][idx_start:idx_end])
+        chunks = calculate_chunks(tlp, chunklen_km)
+    except ValueError: 
+        # TLP geometry has problems. Allow to continue and get handled later
+        chunks = None
+
     logging.debug('%s: chunked into %d pieces', taskname, len(chunks))
-    # TODO: slice sza out to reduce memory usge?
-    #sza = aux_data['SOLAR_ZENITH_ANGLE']
-    return raw_data, decomp, chunks, aux, idx_start, idx_end
+    return sreader, decomp, chunks, aux, idx_start, idx_end
 
 
-def compress_chunks(raw_data: np.ndarray, decomp, chunks, aux, chirp_filter: bool, verbose: bool, idx_start:int, idx_end:int, taskname, output_filename: str):
+def compress_chunks(sreader: np.ndarray, decomp, chunks, aux, chirp_filter: bool, verbose: bool, idx_start:int, idx_end:int, taskname, output_filename: str):
     """ Perform pulse compression on all the chunks """
     # TODO: E_track can just be a list of tuples
     E_track = np.empty((idx_end-idx_start, 2))
 
+    force_no_iono = False
+    if chunks is None:
+        logging.info("TLP_INTERPOLATE positions have problems. Using default chunking and disabling ionospheric correction.")
+        chunks = calculate_default_chunks(len(aux))
+        force_no_iono = True
+
+
+    shape_out = (len(aux), 3600, 2)
     if output_filename.endswith('.i'):
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
-        cmp_track = np.memmap(output_filename, shape=(raw_data.shape + (2,)), mode='w+', dtype=np.int16) # real and imaginary
+        cmp_track = np.memmap(output_filename, shape=shape_out, mode='w+', dtype=np.int16) # real and imaginary
     else:
         # internal to be saved to HDF5
-        cmp_track = np.empty(raw_data.shape + (2,), dtype=np.int16) # real and imaginary
+        cmp_track = np.empty(shape_out, dtype=np.int16) # real and imaginary
 
     # Compress the data chunkwise and reconstruct
     for i, (start, end) in enumerate(chunks):
-        decompress_chunk = np.empty((end-start, raw_data.shape[1]), dtype=complex)
-        decompress_chunk[...] = raw_data[start:end]
-        decompress_chunk *= decomp
-
+        rad_chunk = np.empty((end-start, 3600), dtype=complex)
+        sreader.get_radar_samples(rad_chunk, slice(idx_start+start, idx_start+end))
+        rad_chunk *= decomp
 
         #check if ionospheric correction is needed
         minsza = min(aux['SOLAR_ZENITH_ANGLE'][start:end])
-        b_iono = (minsza < 100.)
+        b_iono = (minsza < 100.) and not force_no_iono
         logging.debug('%s: chunk %3d/%3d Minimum SZA: %0.2f  Ionospheric Correction: %r',
             taskname, i, len(chunks), minsza, b_iono)
 
-        E, sigma, cmp_data = us_rng_cmp(decompress_chunk, chirp_filter=chirp_filter,
+        E, sigma, cmp_data = us_rng_cmp(rad_chunk, chirp_filter=chirp_filter,
                                         iono=b_iono, debug=verbose)
 
         cmp_track[start:end, :, 0] = np.round(cmp_data.real)
@@ -482,7 +507,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
         label_path = os.path.join(sharad_root, 'mrosh_0004/label/science_ancillary.fmt')
         aux_path = os.path.join(sharad_root, 'mrosh_0004/label/auxiliary.fmt')
 
-        decompressed, decomp, chunks, aux, idx_start, idx_end = read_and_chunk_radar(infile, label_path, aux_path, idx_start, idx_end, taskname)
+        sreader, decomp, chunks, aux, idx_start, idx_end = read_and_chunk_radar(infile, label_path, aux_path, idx_start, idx_end, taskname)
 
         assert outdir != ''
         data_file   = os.path.basename(infile)
@@ -490,7 +515,7 @@ def test_cmp_processor(infile, outdir, idx_start=None, idx_end=None,
         rad_filename = os.path.join(outdir, outfilebase)
 
 
-        cmp_track, E_track = compress_chunks(decompressed, decomp, chunks, aux, chirp_filter, verbose, idx_start, idx_end, taskname, rad_filename)
+        cmp_track, E_track = compress_chunks(sreader, decomp, chunks, aux, chirp_filter, verbose, idx_start, idx_end, taskname, rad_filename)
 
         if outdir != "":
             outfilebase = data_file.replace('.dat', '_TECU.txt')
@@ -519,10 +544,6 @@ def main():
     parser = argparse.ArgumentParser(description='Range compression library')
     parser.add_argument('-o', '--output', default='./rng_cmp_data',
                         help="Output base directory")
-    #parser.add_argument('--ofmt', default='npy',
-    #                    choices=('hdf5', 'npy', 'none'),
-    #                    help="Output file format")
-
     parser.add_argument('-v', '--verbose', action="store_true",
                         help="Display verbose output")
     parser.add_argument('-n', '--dryrun', action="store_true",

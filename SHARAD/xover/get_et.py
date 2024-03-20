@@ -17,6 +17,8 @@ __history__ = {
 This is a short script to extract only the ephemeris time from
 each record within the SHARAD data set.
 These times are mainly used for the cross-over search.
+
+TODO: remove this demo code since it's been superseded.
 """
 
 import sys
@@ -159,7 +161,7 @@ def main():
     print("Found {:d} record files in {:s}".format(len(records), raw))
     for i, record in enumerate(records):
         #p.print_Prog(int(i))
-        rec = pds3.read_science(lbl_file, record, science=False)
+        rec = pds3.read_science(lbl_file, record)
         rec2 = read_science_np(lbl_file, record)[0]
         et = rec['EPHEMERIS_TIME']#np.zeros(len(rec))
         print(rec['SCET_BLOCK_WHOLE'])

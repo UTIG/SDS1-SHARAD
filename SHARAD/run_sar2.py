@@ -178,7 +178,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
         logging.debug("%s: Loading cmp data from %s", taskname, cmp_path)
 
         # load the range compressed and ionosphere corrected data
-
+        # TODO: use SHARADEnv which is more efficient
         real = np.array(pd.read_hdf(cmp_path, 'real'))
         imag = np.array(pd.read_hdf(cmp_path, 'imag'))
         cmp_track = real + 1j * imag
@@ -197,35 +197,34 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         # load the relevant EDR files
         logging.debug("%s: Loading science data from EDR file: %s", taskname, science_path)
-        data = pds3.read_science(science_path, label_path, science=True,
-                                 bc=True)[idx_start:idx_end]
+        data = pds3.read_science(science_path, label_path, science,
+                                 )[idx_start:idx_end]
 
         auxfile = science_path.replace('_s.dat', '_a.dat')
         logging.debug("%s: Loading auxiliary data from EDR file: %s", taskname, auxfile)
-        aux = pds3.read_science(auxfile, aux_path,
-                                science=False, bc=False)[idx_start:idx_end]
+        aux = pds3.read_science(auxfile, aux_path)[idx_start:idx_end]
 
         logging.debug("%s: EDR sci data length: %d", taskname, len(data))
         logging.debug("%s: EDR aux data length: %d", taskname, len(aux))
 
         # load relevant spacecraft position information from EDR files
-        pri_code = data['PULSE_REPETITION_INTERVAL'].values
-        rxwot = data['RECEIVE_WINDOW_OPENING_TIME'].values
+        pri_code = data['PULSE_REPETITION_INTERVAL']
+        rxwot = data['RECEIVE_WINDOW_OPENING_TIME']
         if focuser != 'Delay Doppler v2':
             for j, code in enumerate(pri_code):
                 pri = PRI_TABLE.get(code, 0.0)
                 rxwot[j] *= 0.0375E-6 + pri - 11.98E-6
-        et = aux['EPHEMERIS_TIME'].values
-        tlp = data['TLP_INTERPOLATE'].values
-        scrad = data['RADIUS_INTERPOLATE'].values
+        et = aux['EPHEMERIS_TIME']
+        tlp = data['TLP_INTERPOLATE']
+        scrad = data['RADIUS_INTERPOLATE']
         if focuser == 'Delay Doppler v1':
-            tpgpy = data['TOPOGRAPHY'].values
-            vel = np.hypot(data['TANGENTIAL_VELOCITY_INTERPOLATE'].values,
-                           data['RADIAL_VELOCITY_INTERPOLATE'].values)
+            tpgpy = data['TOPOGRAPHY']
+            vel = np.hypot(data['TANGENTIAL_VELOCITY_INTERPOLATE'],
+                           data['RADIAL_VELOCITY_INTERPOLATE'])
         elif focuser == 'Delay Doppler v2':
-            tpgpy = data['TOPOGRAPHY'].values
-            lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE'].values
-            lng = aux['SUB_SC_EAST_LONGITUDE'].values
+            tpgpy = data['TOPOGRAPHY']
+            lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']
+            lng = aux['SUB_SC_EAST_LONGITUDE']
             band = np.zeros((len(data)), dtype=float)
 
         # correct the rx window opening times for along-track changes in spacecraft

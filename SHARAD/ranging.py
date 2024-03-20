@@ -48,8 +48,8 @@ for x in xover:
     #===============================================
     track1 = data[x[0]]
     track2 = data[x[1]]
-    aux1 = pds3.read_science(find(x[0]+'.dat'), aux_label, science=False)
-    aux2 = pds3.read_science(find(x[1]+'.dat'), aux_label, science=False)
+    aux1 = pds3.read_science(find(x[0]+'.dat'), aux_label)
+    aux2 = pds3.read_science(find(x[1]+'.dat'), aux_label)
     idx1 = x[2]
     idx2 = x[3]
     param11 = aux1['SC_PITCH_ANGLE'][idx1]

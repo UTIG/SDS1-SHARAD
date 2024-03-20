@@ -139,7 +139,7 @@ def main():
     plotfunc = snr if args.plotsnr else np.abs
 
     if args.selftest:
-        sys.exit(test())
+        return test()
 
     if args.product == 'foc':
         if args.input is None:
@@ -167,11 +167,14 @@ def main():
         tecupath = datapath.replace('.h5', '_TECU.txt')
 
         # load relevant metadata
-        scimd = pds3.read_science(scipath, scifmtpath, science=True, bc=True)
-        auxmd = pds3.read_science(auxpath, auxfmtpath, science=False, bc=False)
-        rxwot = scimd['RECEIVE_WINDOW_OPENING_TIME'].values
-        pricode = scimd['PULSE_REPETITION_INTERVAL'].values
-        scrad = scimd['RADIUS_INTERPOLATE'].values
+        scireader = pds3.SHARADDataReader(scifmtpath, scipath)
+        scimd = scireader.arr
+        scibits = scireader.get_bitcolumns()
+
+        auxmd = pds3.read_science(auxpath, auxfmtpath)
+        rxwot = scimd['RECEIVE_WINDOW_OPENING_TIME']
+        pricode = scibits['PULSE_REPETITION_INTERVAL']
+        scrad = scimd['RADIUS_INTERPOLATE']
 
         # determine range to start of each receive window
         dt = 0.0375E-6
@@ -255,4 +258,4 @@ def get_foc_datapath(datapath, datafile):
     return proc_info, datapath
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
