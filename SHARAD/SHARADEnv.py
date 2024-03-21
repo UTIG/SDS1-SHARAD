@@ -266,8 +266,10 @@ class SHARADEnv:
                         list_ret.append(rec)
                 if b_single:
                     if len(list_ret) > 1:
-                        logging.warning("SHARADEnv found %d files for orbit %s",
-                                        len(list_ret), orbit)
+                        # This shouldn't happen if fullname is full,
+                        # but can if products show up in duplicate locations
+                        logging.warning("SHARADEnv found %d files for orbit %s/%s",
+                                        len(list_ret), orbit, orbit_fullname)
                     return list_ret[0]
                 else:
                     return list_ret
@@ -308,7 +310,7 @@ class SHARADEnv:
         else:
             raise ValueError('Unknown product %s' % product)
 
-        f_products = get_attr(self.sfiles, product + '_product_paths')
+        f_products = getattr(self.sfiles, product + '_product_paths')
         output_files = f_products(product_id).values()
 
         # Implement pipeline checking in its own module
@@ -316,7 +318,8 @@ class SHARADEnv:
         # get input times
         # get output times
         # compare them
-
+        input_files = list(input_files)
+        output_files = list(output_files)
         filestatus = fileproc.file_processing_status(input_files, output_files, **kwargs)
         return filestatus, input_files, output_files
 
@@ -494,7 +497,40 @@ class SHARADEnv:
                         pass
 
         for typ in output.keys():
-            output[typ] = np.unique(sorted(output[typ]))
+            output[typ] = list(np.unique(sorted(output[typ])))
+
+        return output
+
+    def processed1(self):
+        """Output processed data products for each processing (e.g., cmp, alt)
+        For now, each suborbit having at least one file in a certain processing
+        folder is considered 'processed' for this specific processing category
+        This is meant to be equivalent to processed, but faster
+        """
+        output = {}
+        for typ in self.out:
+            output[typ.split('_')[0]] = set()
+
+        for orbit, suborbits in self.orbitinfo.items():
+            for suborbit in suborbits:
+                for datatype, productset in output.items():
+                    k = datatype + 'path'
+                    if k not in suborbit:
+                        continue
+                    added = False
+                    for s in suborbit[k]:
+                        # If any of the outputs appear, register as present
+                        # (even though this isn't quite right)
+                        for ext in ('.txt', '.h5', '.dat'):
+                            if s.endswith(ext):
+                                productset.add(suborbit['name'])
+                                added = True
+                                break
+                        if added:
+                            break
+
+        for typ in output.keys():
+            output[typ] = sorted(output[typ])
 
         return output
 
@@ -513,10 +549,15 @@ class SHARADEnv:
         if products_requested is None:
             products_requested = self.orbitinfo.keys()
 
-        for orbit in orbits_requested:
-            for suborbit in self.orbitinfo[orbit]: # suborbit = productid
+        for orbit in products_requested:
+            for suborbit in self.orbitinfo[orbit]:
                 for datatype in output.keys():
-                    paths = self.sfiles.product_paths(collection=datatype, product_id=suborbit)
+                    try:
+                        assert isinstance(suborbit['name'], str), "suborbit=%r" % (suborbit)
+                        paths = self.sfiles.product_paths(collection=datatype, product_id=suborbit['name'])
+                    except AttributeError:
+                        # datatype isn't a valid collection
+                        continue
                     if fileproc.all_files_exist(paths.values()):
                         output[datatype].add(suborbit['name'])
 
@@ -911,121 +952,8 @@ def alt_data(altfile: str, typ='beta5', quality_flag=False):
 
 
 
-def test_my(senv):
-    """ test martian year function """
-    orbitnames1 = sorted(senv.orbitinfo.keys())
-    orbitnames2 = []
-    for orbit in orbitnames1:
-        for rec in senv.orbitinfo[orbit]:
-            orbitnames2.append(rec['name'])
-    orbitnames2.sort()
 
 
-    # what happens when you run my on something that doesn't exist
-    myear = senv.my('doesnt_exist')
-    assert myear is None
-    myear = senv.my('doesntexist')
-    assert myear is None
-
-    for orbitnames in (orbitnames1, orbitnames2):
-        logging.info("test_my: Number of orbits: %d", len(orbitnames))
-
-        for i, orbit in enumerate(orbitnames):
-            try:
-                myear = senv.my(orbit)
-            except ValueError: # pragma: no cover
-                logging.info("orbit %s: error running my", orbit)
-                myear = "ERROR"
-                raise # traceback.print_exc(file=sys.stdout)
-            #logging.info("orbit {:s}: MY={!r}".format(orbit, myear))
-
-            if i % 2000 == 0:
-                logging.info("test_my: {:d} of {:d}".format(i, len(orbitnames)))
-
-    logging.info("test_my: done")
-    return 0
-
-# TODO: move to unit test
-def test_alt(senv):
-    maxorbits = 1000
-    orbitnames1 = sorted(senv.orbitinfo.keys()) # short names
-    orbitnames2 = []
-    for orbit in orbitnames1: # full names
-        for rec in senv.orbitinfo[orbit]:
-            orbitnames2.append(rec['name'])
-
-    if len(orbitnames1) >= maxorbits:
-        orbitnames1 = orbitnames1[0::(len(orbitnames1) // maxorbits)]
-    if len(orbitnames2) >= maxorbits:
-        orbitnames2 = orbitnames2[0::(len(orbitnames2) // maxorbits)]
-
-    # what happens when you run my on something that doesn't exist
-    try:
-        altdata = senv.alt_data('doesnt_exist')
-    except DataMissingException:
-        pass
-    try:
-        altdata = senv.alt_data('doesntexist')
-    except DataMissingException:
-        pass
-
-    for orbitnames in (orbitnames1, orbitnames2):
-        logging.info("test_alt: Test getting altimetry data. "
-                     "Number of orbits: %d", len(orbitnames))
-
-        nsucceeded, nfailed = 0, 0
-
-        for i, orbit in enumerate(orbitnames):
-            try:
-                altdata = senv.alt_data(orbit)
-            except KeyError as e:
-                #KeyError: "Unable to open object (object 'beta5' doesn't exist)"
-                #OSError: Unable to open file (file signature not found)
-                logging.warning("Malformatted h5 file for orbit %s: %s", orbit, str(e))
-            except OSError as e:
-                logging.debug("Can't open h5 for %s: %s", orbit, str(e))
-                altdata = None
-
-            if altdata is None:
-                nfailed += 1
-            else:
-                nsucceeded += 1
-            if i % 2000 == 0:
-                logging.info("test_alt: %d/%d", i, len(orbitnames))
-
-        logging.info("test_alt: done. "
-                     "%d succeeded, %d failed", nsucceeded, nfailed)
-    return 0
-
-
-def test_orbit_info(senv):
-    # TODO: move to a unit test
-    try:
-        # Test what happens when you look for an orbit that doesn't exist
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist')
-        assert len(oinfo) == 1, "len(oinfo) = %d. oinfo=%r" % (len(oinfo), oinfo)
-        assert len(oinfo[0]) == 0 # should be a list with a dict
-        assert isinstance(oinfo[0],dict) # should be just a dict
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', False)
-        assert len(oinfo) == 1
-        assert len(oinfo[0]) == 0 # should be a list with a dict
-        assert isinstance(oinfo[0],dict) # should be just a dict
-        oinfo = senv.get_orbit_info('orbit_that_doesnt_exist', True)
-        assert isinstance(oinfo,dict) # should be just a dict
-        assert len(oinfo) == 0
-    except AssertionError as e:
-        raise e
-
-    # Show which orbits contain more than one value
-    if logging.getLogger().isEnabledFor(logging.DEBUG):
-        logging.debug("Orbits with multiple items: ")
-        orbitnames1 = sorted(senv.orbitinfo.keys())
-        for orbit in orbitnames1:
-            norbits = len(senv.orbitinfo[orbit])
-            if norbits > 1:
-                logging.debug("Orbit %s contains %d items:", orbit, norbits)
-            for i, rec in enumerate(senv.orbitinfo[orbit]):
-                logging.debug("%2d: %s", i, str(rec))
 
 
 class SHARADFiles:
@@ -1173,27 +1101,3 @@ class SHARADFiles:
                 yield k
 
 
-def main():
-    """ Test SHARADEnv """
-    import time
-    t0 = time.time()
-
-    logging.basicConfig(
-        level=logging.DEBUG, stream=sys.stdout,
-        format='[%(relativeCreated)5d %(name)-6s %(levelname)-7s] %(message)s')
-    logging.info("Starting main()")
-    # Exercise functions
-    senv = SHARADEnv()
-
-    test_orbit_info(senv)
-
-    test_my(senv)
-    test_alt(senv)
-
-    logging.info("Done in %0.1f seconds", time.time() - t0)
-
-
-
-if __name__ == "__main__":
-    # execute only if run as a script
-    main()
