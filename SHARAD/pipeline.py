@@ -283,7 +283,7 @@ def main():
                 logging.info("%s track %d: skipping %s (%s)", outprefix, productnum, product_id, ' '.join(filestatus))
                 continue
 
-            logging.info("%s track %d: %s %r", outprefix, productnum, product_id, cmd)
+            logging.info("%s track %d: %s %s", outprefix, productnum, product_id, ' '.join(cmd))
             process_list.append({
                 'product_id': product_id,
                 'tasknum': productnum,
