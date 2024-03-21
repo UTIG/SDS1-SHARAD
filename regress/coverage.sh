@@ -50,7 +50,7 @@ do
 done
 
 # These are really slow, so allow them to be disabled during testing
-RUNSLOW=0
+RUNSLOW=1
 if [ "$RUNSLOW" -eq "1" ]
 then
     $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
@@ -81,6 +81,7 @@ $COV run $FLAGS -a ../xlib/cmp/test_pds3lbl.py
 
 $COV run $FLAGS -a ../SHARAD/SHARADEnv.py > /dev/null
 $COV run $FLAGS -a ./test_sharadfiles.py
+$COV run $FLAGS -a ./test_sharadenv.py
 
 $COV run $FLAGS -a ../xlib/cmp/pds3lbl.py -o ./covdata/
 
@@ -99,7 +100,7 @@ $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --ignoretimes --maxtracks
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
 # Cause srf to be out of date
 sleep 1
-touch $OUT2/alt/mrosh_0001/data/edr19xxx/edr1920301/beta5/*.{h5,i}
+touch $OUT2/alt/mrosh_0001/data/edr02xxx/edr0224401/beta5/*.{h5,i}
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --tracklist ./tracks_coverage.txt
 # Run pipeline on a partially complete output
 rm -rf $OUT2/alt
