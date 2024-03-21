@@ -53,14 +53,12 @@ def main():
     for ii, product_id in enumerate(productlist, start=1):
         type_status = {}
         for type in types:
-            statustup, input_files, output_files = sfiles.product_processing_status(type, product_id)
-
-            if statustup[1] == 'output_ok':
-                type_status[type] = 'OK'
-            else:
-                type_status[type] = '--'
+            statustup, _, _ = sfiles.product_processing_status(type, product_id)
+            type_status[type] = 'OK' if statustup[1] == 'output_ok' else '--'
 
         status_index[product_id] = type_status
+        if args.maxtracks > 0 and ii >= args.maxtracks:
+            break
 
     if args.jsonout:
         Path(args.jsonout).parent.mkdir(parents=True, exist_ok=True)
@@ -79,14 +77,15 @@ def main():
 def write_text_table(status_index: Dict[str, Dict[str,str]], types: List[str], file):
     """ Write detailed report of product status to specified file handle """
     delim = ' '
-    headerline = '#{:<24s} '.format('product_id') + fixed_headers(types, delimiter=delim)
+    width=7
+    headerline = '#{:<24s}'.format(' product_id') + delim + fixed_headers(types, delimiter=delim)
     print(headerline, file=file)
 
     typecounts = {k: Counter() for k in types}
 
     for product_id, type_status in status_index.items():
-        slist = [type_status[type] for type in types]
-        line = '{:<24s}  '.format(product_id) + fixed_headers(slist, delimiter=delim)
+        slist = [type_status[type] + ' ' for type in types]
+        line = '{:<24s} '.format(product_id) + delim + fixed_headers(slist, width=width, delimiter=delim)
         print(line, file=file)
 
         # Tabulate completion by product type
@@ -95,15 +94,17 @@ def write_text_table(status_index: Dict[str, Dict[str,str]], types: List[str], f
 
     # At the bottom, print totals
     print(headerline, file=file)
+    print("# Summary Totals")
+    fmtstr = '{:%dd}' % (width,)
     for status_str in ('OK', '--'):
-        field1 = '#{:>23s} '.format(status_str)
-        slist = ['{:6d}'.format(typecounts[type][status_str]) for type in types]
+        field1 = '#{:>24s}'.format(status_str + ' ') + delim
+        slist = [fmtstr.format(typecounts[type][status_str]) for type in types]
         line = field1 + delim.join(slist)
         print(line, file=file)
 
 
 def fixed_headers(fields: List[str], width:int=4, fillchar=' ', delimiter=' '):
-    fields_out = [s.center(6, fillchar) for s in fields]
+    fields_out = [s.center(7, fillchar) for s in fields]
     return delimiter.join(fields_out)
 
 
