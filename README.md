@@ -62,6 +62,12 @@ overwritten with the `--overwrite` flag, or see what processing would
 occur with the `-n` or `--dryrun` flag.
 
 
+# Show processing status
+
+In the `SHARAD` directory, the script `show_product_status.py`
+follows a similar argument convention as the processing scripts,
+and can show processing completion status for all data products.
+
 # Getting SDS
 
 ```
