@@ -285,52 +285,6 @@ class SHARADEnv:
         except KeyError:
             return {} if b_single else [{}]
 
-    # 
-    def product_processing_status(self, product: str, product_id: str, **kwargs):
-        """ Calculate whether the specified product is up to date
-        Inputs:
-        product is a processing step for the output.
-        Choices are cmp, alt, srf, rsr, rng, foc.
-        product_id is a SHARAD product id
-
-        Return value: 
-        'processable': input exists but output does not, or outputs are older than input
-        'processed': output exists. If input exists, outputs are newer than input
-        'input_missing': output does not exist, but neither does input
-        """
-        # TODO: make this a data structure
-        if product == 'cmp':
-            input_files = self.sfiles.edr_product_paths(product_id).values()
-        elif product in ('alt', 'srf'):
-            input_files = [self.sfiles.cmp_product_paths(product_id)['cmp_rad'],]
-        elif product == 'rsr':
-            input_files = self.sfiles.srf_product_paths(product_id).values()
-        elif product == 'foc':
-            input_files = self.sfiles.cmp_product_paths(product_id).values()
-        else:
-            raise ValueError('Unknown product %s' % product)
-
-        f_products = getattr(self.sfiles, product + '_product_paths')
-        output_files = f_products(product_id).values()
-
-        # Implement pipeline checking in its own module
-        # TODO: put this in its own file
-        # get input times
-        # get output times
-        # compare them
-        input_files = list(input_files)
-        output_files = list(output_files)
-        filestatus = fileproc.file_processing_status(input_files, output_files, **kwargs)
-        return filestatus, input_files, output_files
-
-    #def check(path, verbose=True):
-    #    """Check if file/path exist
-    #        TODO: this isn't really that useful.
-    #    """
-    #    path_exists = os.path.exists(path)
-    #    if verbose and not path_exists:
-    #        print('MISSING: ' + path)
-    #    return path_exists
 
 
     def aux_data(self, orbit, count=-1):
@@ -403,7 +357,6 @@ class SHARADEnv:
             globpat = os.path.join(self.out['cmp_path'],
                                    orbit_info['relpath'], typ, orbit_info['name'] + '*.h5')
             fil = sorted(glob.glob(globpat))[0]
-
         if fil.endswith('.h5'):
             redata = pd.read_hdf(fil, key='real').values
             # Can be complex64 with no loss of precision, because these are 16-bit values,
@@ -1100,4 +1053,33 @@ class SHARADFiles:
             if k.startswith(searchstr):
                 yield k
 
+
+    def product_processing_status(self, product: str, product_id: str, **kwargs):
+        """ Calculate whether the specified product is up to date
+        Inputs:
+        product is a processing step for the output.
+        Choices are cmp, alt, srf, rsr, rng, foc.
+        product_id is a SHARAD product id
+
+        Return value:
+        Returns the input and output status and list of
+        files used.
+        """
+        prerequisites = {
+            'cmp': ('edr',),
+            'alt': ('cmp', 'edr'),
+            'srf': ('cmp', 'alt'),
+            'rsr': ('cmp', 'alt'),
+            'foc': ('edr', 'cmp'),
+        }
+        if product not in prerequisites:
+            raise KeyError('Unknown product %s' % product)
+
+        input_files = []
+        for type in prerequisites[product]:
+            input_files.extend(self.product_paths(type, product_id).values(), **kwargs)
+
+        output_files = list(self.product_paths(product, product_id, **kwargs).values())
+        filestatus = fileproc.file_processing_status(input_files, output_files, **kwargs)
+        return filestatus, input_files, output_files
 

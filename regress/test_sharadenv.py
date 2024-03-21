@@ -52,7 +52,7 @@ class TestBasic(unittest.TestCase):
     def test_ppstatus(self):
         product_id = 'e_0955302_001_ss19_700_a'
         for type in ('cmp', 'alt', 'srf', 'rsr', 'foc'):
-            filestatus, input_files, output_files = self.senv.product_processing_status(type, product_id)
+            filestatus, input_files, output_files = self.senv.sfiles.product_processing_status(type, product_id)
             assert isinstance(filestatus, tuple)
             assert isinstance(input_files, list)
             assert isinstance(output_files, list)
@@ -85,16 +85,12 @@ class TestMartianYear(unittest.TestCase):
         product_ids = sorted(get_product_ids_sfiles(self.senv, nmax))
 
         for i, orbit in enumerate(product_ids):
-            try:
-                myear = self.senv.my(orbit)
-            except ValueError: # pragma: no cover
-                logging.info("orbit %s: error running my", orbit)
-                myear = "ERROR"
-                raise # traceback.print_exc(file=sys.stdout)
-            #logging.info("orbit {:s}: MY={!r}".format(orbit, myear))
-
-            if i % 2000 == 0:
-                logging.info("test_my: %d of %d", i, len(product_ids))
+            # Known empty timestamp for this orbit's label
+            if orbit == 'e_0686801_001_ss05_700_a':
+                continue
+            myear = self.senv.my(orbit)
+            #if i % 2000 == 0:
+            #    logging.info("test_my: %d of %d", i, len(product_ids))
 
 
 class TestDataReaders(unittest.TestCase):
@@ -102,7 +98,6 @@ class TestDataReaders(unittest.TestCase):
     def setUpClass(cls):
         cls.senv = SHARADEnv(orig_path=ORIG_PATH, data_path=TARG_PATH, b_index_files=False)
         cls.senv.index_files(index_intermediate_files=False)
-
 
     def test1(self):
         """ Iterate through types of data readers for one product """
@@ -116,6 +111,7 @@ class TestDataReaders(unittest.TestCase):
                     _ = fget(product_id)
                 except FileNotFoundError as excp:
                     logging.warning("Product for %s/%s not found: %r", type,  product_id, excp)
+
 
 class TestAltimetry(unittest.TestCase):
     @classmethod
