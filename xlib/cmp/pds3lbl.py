@@ -391,12 +391,12 @@ class SHARADDataReader:
             arr_out[:, 0:3600:4] = s[idxes, 0:2700:3] >> 2
             # bits 1:0 of s[0] (hi2) and 7:4 of s[1] become arr_out[1]
             # mask then sign extend
-            hi2 = ((s[idxes, 0:2700:3] & 0x3) << 6) >> 2
-            lo4 = ( s[idxes, 1:2700:3] >> 4) & 0x0f
+            hi2 = (s[idxes, 0:2700:3] << 6) >> 2
+            lo4 = (s[idxes, 1:2700:3] >> 4) & 0x0f
             arr_out[:, 1:3600:4] = hi2 | lo4
             del hi2, lo4
             # bits 3:0 of s[1] get sign extended and bits 7:6 of s[2]
-            hi4 = ((s[idxes, 1:2700:3] & 0x0f) << 4) >> 2
+            hi4 = (s[idxes, 1:2700:3] << 4) >> 2
             lo2 = (s[idxes, 2:2700:3] >> 6) & 0x03
             arr_out[:, 2:3600:4] = hi4 | lo2
             del hi4, lo2
