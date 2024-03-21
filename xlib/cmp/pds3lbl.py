@@ -321,7 +321,7 @@ class SHARADDataReader:
 
             # If it is science data, this has to be added here since it is not
             # contained in the science ancilliary label file
-            dtype.append(('sample_bytes', str(pseudo_samples)+'b')) # signed bytes
+            dtype.append(('sample_bytes', str(self.pseudo_samples)+'b')) # signed bytes
 
         else:
             self.pseudo_samples = None
