@@ -27,7 +27,8 @@ import subradar as sr
 
 import SHARADEnv
 from SHARADEnv import DataMissingException
-from run_rng_cmp import add_standard_args, run_jobs, should_process_products
+from run_rng_cmp import add_standard_args, run_jobs, process_product_args, \
+                        should_process_products
 
 
 def surface_processor(orbit, typ='cmp', ywinwidth=100, archive=False,
@@ -309,11 +310,9 @@ def main():
         productlist = list(senv.processed()['cmp'])
     else:
         senv.index_files(index_intermediate_files=False)
-        productlist = args.orbits
+        productlist = process_product_args(args.orbits, args.tracklist, senv.sfiles)
 
-    if args.tracklist:
-        # Load list of files from orbit list
-        productlist.extend(list(np.genfromtxt(args.tracklist, dtype='str')))
+    assert productlist, "No files to process"
 
 
     # Keyword arguments for processing
@@ -350,7 +349,7 @@ def main():
 
     if args.dryrun:
         logging.debug("orbits: %s", ' '.join([p['orbit'] for p in process_list]))
-        return 0
+        return
 
     run_jobs(surface_processor, process_list, args.jobs)
 

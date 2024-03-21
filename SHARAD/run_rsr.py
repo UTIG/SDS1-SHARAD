@@ -35,7 +35,7 @@ import pandas as pd
 
 import SHARADEnv
 from SHARADEnv import DataMissingException
-from run_rng_cmp import add_standard_args, run_jobs, should_process_products
+from run_rng_cmp import add_standard_args, should_process_products, process_product_args
 
 import rsr
 import subradar as sr
@@ -305,37 +305,37 @@ def main():
         productlist = list(senv.processed()['cmp'])
     else:
         senv.index_files(index_intermediate_files=False)
-        productlist = args.orbits
+        productlist = process_product_args(args.orbits, args.tracklist, senv.sfiles)
+    assert productlist, "No files to process"
 
-    if args.tracklist:
-        # Load list of files from orbit list
-        productlist.extend(list(np.genfromtxt(args.tracklist, dtype='str')))
+    process_list = []
+    for product_id in productlist:
+        infiles = senv.sfiles.product_paths('srf', product_id)
+        outfiles = senv.sfiles.product_paths('rsr', product_id)
 
+        if not should_process_products(product_id, infiles,  outfiles, args.overwrite):
+            continue
 
+        process_list.append(product_id)
 
     #-----------
     # Processing
 
-    logging.info("TOTAL: %d orbits to process", len(productlist))
+    logging.info("TOTAL: %d orbits to process", len(process_list))
 
     if args.dryrun:
-        logging.info("Process orbits: " + ' '.join(productlist))
-        return 0
+        logging.info("Process orbits: " + ' '.join(process_list))
+        return
 
-    for i, orbit in enumerate(productlist, start=1):
-        logging.info('(%s) %5d/%5d: %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i, len(args.orbits), orbit)
-        b = rsr_processor(orbit, winsize=args.winsize, sampling=args.sampling,
+    for i, product_id in enumerate(process_list, start=1):
+        logging.info('(%s) %5d/%5d: %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), i, len(process_list), product_id)
+        b = rsr_processor(product_id, winsize=args.winsize, sampling=args.sampling,
                 nbcores=args.jobs, verbose=args.verbose,
                 bins=args.bins, fit_model=args.fit_model, sav=True,
                 senv=senv)
 
 
-
-
 if __name__ == "__main__":
     # execute only if run as a script
     sys.exit(main())
-
-
-
 
