@@ -311,11 +311,11 @@ class SHARADDataReader:
         if science:
             mode_id = science_label['FILE']['INSTRUMENT_MODE_ID']
             if mode_id in self.BITS8:
-                pseudo_samples = 3600
+                self.pseudo_samples = 3600
             elif mode_id in self.BITS6:
-                pseudo_samples = 2700
+                self.pseudo_samples = 2700
             elif mode_id in self.BITS4:
-                pseudo_samples = 1800
+                self.pseudo_samples = 1800
             else: # pragma: no cover
                 raise ValueError('Error while reading science label! Invalid mode id %d' % mode_id)
 
@@ -323,7 +323,6 @@ class SHARADDataReader:
             # contained in the science ancilliary label file
             dtype.append(('sample_bytes', str(pseudo_samples)+'b')) # signed bytes
 
-            self.pseudo_samples = pseudo_samples
         else:
             self.pseudo_samples = None
         self.dtype_local = dtype
@@ -384,33 +383,31 @@ class SHARADDataReader:
         if idxes is None:
             idxes = slice(None)
 
-        pseudo_samples = self.pseudo_samples
-
         s = arr['sample_bytes']
-        if pseudo_samples == 3600: # 8-bit
+        if self.pseudo_samples == 3600: # 8-bit
             arr_out[...] = s[idxes]
-        elif pseudo_samples == 2700: # 6-bit
-            # Bits 7:2 of s[0] become arr_out[0]
+        elif self.pseudo_samples == 2700: # 6-bit
+            # bits 7:2 of s[0] become arr_out[0]
             arr_out[:, 0:3600:4] = s[idxes, 0:2700:3] >> 2
-            # bytes 1:0 of s[0] (hi2) and 7:4 of s[1] become arr_out[1]
+            # bits 1:0 of s[0] (hi2) and 7:4 of s[1] become arr_out[1]
             # mask then sign extend
             hi2 = ((s[idxes, 0:2700:3] & 0x3) << 6) >> 2
             lo4 = ( s[idxes, 1:2700:3] >> 4) & 0x0f
             arr_out[:, 1:3600:4] = hi2 | lo4
             del hi2, lo4
-            # bytes 3:0 of s[1] get sign extended and bytes 7:5 of s[2]
+            # bits 3:0 of s[1] get sign extended and bits 7:6 of s[2]
             hi4 = ((s[idxes, 1:2700:3] & 0x0f) << 4) >> 2
             lo2 = (s[idxes, 2:2700:3] >> 6) & 0x03
             arr_out[:, 2:3600:4] = hi4 | lo2
             del hi4, lo2
-            # Sign extend last 6 bits
+            # Sign extend bits 5:0 of s[3]
             arr_out[:, 3:3600:4] = (s[idxes, 2:2700:3] << 2) >> 2
-        elif pseudo_samples == 1800: # 4-bit
+        elif self.pseudo_samples == 1800: # 4-bit
             # Sign extend everything
             arr_out[:, 0:3600:2] = s[idxes, 0:1800] >> 4
             arr_out[:, 1:3600:2] = (s[idxes, 0:1800] << 4) >> 4
         else: # pragma: no cover
-            raise ValueError("Unexpected value for pseudo_samples = %d" % pseudo_samples)
+            raise ValueError("Unexpected value for pseudo_samples = %d" % self.pseudo_samples)
         return arr_out
 
 
