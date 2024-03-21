@@ -577,7 +577,7 @@ def matched_filter(data, dpst, La, Er, af0, recal_int, tlp, et, rxwot, comb_ml=T
 
 
 
-    print('Number of looks in matched filter SAR processing is', looks)
+    logging.info('Number of looks in matched filter SAR processing is %d', looks)
 
     # predefine output and start sar processor
     if looks != 1:
@@ -587,7 +587,8 @@ def matched_filter(data, dpst, La, Er, af0, recal_int, tlp, et, rxwot, comb_ml=T
         rl = np.zeros((len(pst_trc), len(data[0])), dtype=float)
     for ii in range(len(pst_trc)):
         if ii % 50 == 0:
-            print('Working matched filter SAR column', ii, 'of', len(pst_trc))
+            logging.debug('Working matched filter SAR column %d of %d traces [%d, %d]', 
+                          ii, len(pst_trc), pst_trc[ii, 1], pst_trc[ii, 2])
         if pst_trc[ii, 1] != 0 and pst_trc[ii, 2] != 0:
             # select data within the aperture
             temp_data = data[pst_trc[ii, 1]:pst_trc[ii, 2]]

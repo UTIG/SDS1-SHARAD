@@ -50,6 +50,8 @@ from sar import sar
 import cmp.pds3lbl as pds3
 import misc.hdf as hdf
 
+#from run_rng_cmp import process_product_args
+
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
@@ -197,8 +199,9 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         # load the relevant EDR files
         logging.debug("%s: Loading science data from EDR file: %s", taskname, science_path)
-        data = pds3.read_science(science_path, label_path, science,
-                                 )[idx_start:idx_end]
+        scireader = pds3.SHARADDataReader(label_path, science_path)
+        data = scireader.arr[idx_start:idx_end]
+        bitdata = scireader.get_bitcolumns()[idx_start:idx_end]
 
         auxfile = science_path.replace('_s.dat', '_a.dat')
         logging.debug("%s: Loading auxiliary data from EDR file: %s", taskname, auxfile)
@@ -206,10 +209,11 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         logging.debug("%s: EDR sci data length: %d", taskname, len(data))
         logging.debug("%s: EDR aux data length: %d", taskname, len(aux))
+        assert len(data) == len(aux)
 
         # load relevant spacecraft position information from EDR files
-        pri_code = data['PULSE_REPETITION_INTERVAL']
-        rxwot = data['RECEIVE_WINDOW_OPENING_TIME']
+        pri_code = bitdata['PULSE_REPETITION_INTERVAL']
+        rxwot = np.copy(data['RECEIVE_WINDOW_OPENING_TIME'])
         if focuser != 'Delay Doppler v2':
             for j, code in enumerate(pri_code):
                 pri = PRI_TABLE.get(code, 0.0)
@@ -315,6 +319,13 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
     return 0
 
+def read_tracklist(tracklist: str):
+    with open(tracklist, 'rt') as fin:
+        for line in fin:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            yield line
 
 
 def main():
@@ -400,8 +411,7 @@ def main():
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
     #keys = h5file.keys()
-    with open(args.tracklist) as fin:
-        lookup = [line.strip() for line in fin if line.strip() != '']
+    lookup = list(read_tracklist(args.tracklist))
 
     # Build list of processes
     process_list = []
