@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 
 """
-Example command:
 
-To process a single orbit (0887601) and archive to the default location:
-
-./run_rsr.py 0887601
-
-To process a single orbit (0887601), not archive to the default location (--ofmt
-none),
-and output a numpy file into a debug directory:
-
-./run_rsr.py 0887601 --ofmt none --output ./rsr_data
+run_surface.py -- compute surface echo powers
+See README.md for general usage help among processing scripts
 
 """
 
@@ -266,6 +258,7 @@ def main():
     #--------------------
     # Job control options
     add_standard_args(parser, script='rsr')
+
     #--------------------
     # Algorithm options
 
@@ -275,12 +268,12 @@ def main():
     parser.add_argument('-s', '--sampling', type=int, default=250,
             help='Step at which a window is repeated')
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int, default=[-100,100],
-            help='2 numbers defining the fast-time relative boundaries around\
+            help='Number of samples defining the fast-time relative boundaries around\
             the altimetry surface return where the surface will be looked for')
     parser.add_argument('-b', '--bins', type=str, default='fd',
             help='Method to compute the bin width (inherited from numpy.histogram)')
     parser.add_argument('-f', '--fit_model', type=str, default='hk',
-            help='Name of the function (in pdf module) to use for the fit')
+            help='Name of the function (in rsr.pdf module) to use for the fit')
 
 
     args = parser.parse_args()
@@ -291,37 +284,43 @@ def main():
 
     if args.output is None:
         args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
-    # Construct directory names
-    orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
 
+    orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
     senv = SHARADEnv.SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
     ## add sfiles and pass through to figure out output file location
     #--------------------------
     # Requested Orbits handling
 
     if args.orbits == ['all']:
-        # Search for all available products and throw them on the command line
-        senv.index_files(index_intermediate_files=True)
-        productlist = list(senv.processed()['cmp'])
+        # Get all known product IDs from the index
+        productlist = senv.sfiles.product_id_index.keys()
     else:
-        senv.index_files(index_intermediate_files=False)
+        #senv.index_files(index_intermediate_files=False)
         productlist = process_product_args(args.orbits, args.tracklist, senv.sfiles)
     assert productlist, "No files to process"
 
     process_list = []
-    for product_id in productlist:
-        infiles = senv.sfiles.product_paths('srf', product_id)
-        outfiles = senv.sfiles.product_paths('rsr', product_id)
+    ii = 0
+    for ii, product_id in enumerate(productlist, start=1):
+        try:
+            infiles = senv.sfiles.product_paths('srf', product_id)
+            outfiles = senv.sfiles.product_paths('rsr', product_id)
+        except KeyError: # pragma: no cover
+            logging.debug("Can't find product ID %s in index for srf, rsr", product_id)
+            continue
 
         if not should_process_products(product_id, infiles,  outfiles, args.overwrite):
             continue
 
         process_list.append(product_id)
 
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
+        process_list = process_list[0:args.maxtracks]
+
     #-----------
     # Processing
 
-    logging.info("TOTAL: %d orbits to process", len(process_list))
+    logging.info("Processing %d orbits of %d requested", len(process_list), ii)
 
     if args.dryrun:
         logging.info("Process orbits: " + ' '.join(process_list))

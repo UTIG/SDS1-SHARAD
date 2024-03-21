@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Example command:
-
-To process a single orbit (0887601) and archive to the default location:
-
-./run_surface.py 0887601
-
-To process a single orbit (0887601), not archive to the default location (--ofmt
-none),
-and output a numpy file into a debug directory:
-
-./run_surface.py 0887601 --ofmt none --output ./surface_data
+run_surface.py -- compute surface echo powers
+See README.md for general usage help among processing scripts
 
 """
 
@@ -274,7 +265,6 @@ def main():
 
     #--------------------
     # Job control options
-
     add_standard_args(parser, script='srf')
 
     #------------------
@@ -282,16 +272,14 @@ def main():
 
     parser.add_argument('-y', '--ywinwidth', nargs='+', type=int,
                         default=100,
-                        help='2 numbers defining the fast-time relative \
+                        help='Number of samples defining the fast-time relative \
                         boundaries around the altimetry surface return where \
                         the surface will be looked for')
     parser.add_argument('-t', '--type', type=str, default='cmp',
-                        help='Type of radar data used to get the amplitude \
-                        from')
+                        help='Type of radar data used to get amplitude')
 
-    # Delete items that aren't
+
     args = parser.parse_args()
-
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
@@ -305,11 +293,10 @@ def main():
     #--------------------------
     # Requested Orbits handling
     if args.orbits == ['all']:
-        # Search for all available products and throw them on the command line
-        senv.index_files(index_intermediate_files=True)
-        productlist = list(senv.processed()['cmp'])
+        # Get all known product IDs from the index
+        productlist = senv.sfiles.product_id_index.keys()
     else:
-        senv.index_files(index_intermediate_files=False)
+        #senv.index_files(index_intermediate_files=False)
         productlist = process_product_args(args.orbits, args.tracklist, senv.sfiles)
 
     assert productlist, "No files to process"
@@ -329,12 +316,13 @@ def main():
     }
 
     process_list = []
+    ii = 0
     for ii, product_id in enumerate(productlist, start=1):
         try:
             infiles = senv.sfiles.product_paths(args.type, product_id) # nominally args.type=='cmp'
             infiles.update(senv.sfiles.product_paths('alt', product_id))
             outfiles = senv.sfiles.product_paths('srf', product_id, typ=args.type)
-        except KeyError:
+        except KeyError: # pragma: no cover
             logging.debug("Can't find product ID %s in index for %s, alt, srf", product_id, args.type)
             continue
 
@@ -345,7 +333,7 @@ def main():
         params.update(kwargs)
         process_list.append(params)
 
-    logging.info("TOTAL: %d orbits to process", len(process_list))
+    logging.info("Processing %d orbits of %d requested", len(process_list), ii)
 
     if args.dryrun:
         logging.debug("orbits: %s", ' '.join([p['orbit'] for p in process_list]))

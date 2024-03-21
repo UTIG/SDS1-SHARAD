@@ -10,7 +10,7 @@ and processes them into various derived data products.
 ## Processing Step Scripts
 
 The primary processing scripts which produce named
-data products are in the SHARAD directory, and include
+data products are in the `SHARAD` directory, and include
 
 - cmp - `run_rng_cmp.py`
 - alt - `run_altimetry.py`
@@ -27,6 +27,8 @@ archive at https://pds-geosciences.wustl.edu/mro/mro-m-sharad-3-edr-v1/ been
 has been placed at `$SDS/orig/supl/xtra-pds/SHARAD/EDR/`, where
 `$SDS` is an environment variable.
 
+### Processing script standard usage and options
+
 These processing step scripts may be called with the name of a data product, such as:
 
 ```
@@ -39,8 +41,25 @@ pulse compress it, and place it in a parallel directory structure at
  `$SDS/targ/xtra/SHARAD/cmp/mrosh_0001/data/edr15xxx/edr1592001/ion/`.
 
 Multiple data products can be specified on the command line, and they can
-also be provided via a text file from the `--tracklist` option.
+also be provided via a text file from the `--tracklist` option.  Products
+specified in the text file are appended after those specified on the
+command line.
 
+Processing outputs are automatically organized by data product type and SHARAD EDR product ID.
+To change the base output directory, use the `--output` flag.  Providing
+`--output $SDS/targ/xtra/SHARAD` is equivalent to the default behavior.
+
+The path to the processing input can't be changed directly, changing
+the `$SDS` environment variable or providing `--SDS` option can effectively
+allow you to change the input path.
+
+
+By default, processing scripts will check whether output files
+are up to date compared to their direct input prerequisites.
+If they are up to date, or the required inputs so not exist,
+the script will skip processing.  You can force outputs to be
+overwritten with the `--overwrite` flag, or see what processing would
+occur with the `-n` or `--dryrun` flag.
 
 
 # Getting SDS
