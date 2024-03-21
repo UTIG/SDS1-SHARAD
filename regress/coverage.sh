@@ -138,7 +138,7 @@ $COV run $FLAGS -a ../SHARAD/run_rsr.py -n all > /dev/null
 $COV run $FLAGS -a ../SHARAD/run_rsr.py -n --overwrite all > /dev/null
 # Run an orbit
 
-nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --output $OUT1 -s 2000 1920301
+nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --output $OUT1 -s 2000 e_1920301_001_ss04_700_a
 
 
 echo "$S0: run_ranging"
