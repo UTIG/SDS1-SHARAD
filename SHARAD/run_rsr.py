@@ -291,7 +291,7 @@ def main():
         # Get all known product IDs from the index
         productlist = senv.sfiles.product_id_index.keys()
     else:
-        #senv.index_files(index_intermediate_files=False)
+        senv.index_files(use_edr_index=True, index_intermediate_files=False)
         productlist = process_product_args(args.orbits, args.tracklist, senv.sfiles)
     assert productlist, "No files to process"
 
