@@ -189,17 +189,17 @@ def rx_opening(data, rxwot, dt):
     '''
 
     # define required temporary parameters
-    n = np.size(data, axis=1)
+    #n = data.shape[1] #np.size(data, axis=1)
     fs = np.fft.fftfreq(n, dt)
 
     # define the output
-    out = np.zeros((len(data), n), dtype=complex)
+    out = np.empty_like(data, dtype=complex)
 
     # apply phase shift
     for jj in range(len(data)):
-        tempA = np.multiply(np.fft.fft(data[jj], norm='ortho'),
-                            np.exp(-1j * 2 * np.pi * rxwot[jj] * fs))
-        out[jj] = np.fft.ifft(tempA, norm='ortho')
+        temp_a = np.multiply(np.fft.fft(data[jj], norm='ortho'),
+                             np.exp(-1j * 2 * np.pi * rxwot[jj] * fs))
+        out[jj] = np.fft.ifft(temp_a, norm='ortho')
 
     return out
 
