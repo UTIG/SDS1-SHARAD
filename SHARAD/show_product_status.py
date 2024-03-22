@@ -69,7 +69,7 @@ def main():
     if args.textout:
         Path(args.textout).parent.mkdir(parents=True, exist_ok=True)
         with open(args.textout, 'wt') as fout:
-            write_text(status_index, types, fout)
+            write_text_table(status_index, types, fout)
         logging.info("Wrote to %s", args.textout)
     else:
         write_text_table(status_index, types, sys.stdout)
@@ -77,7 +77,7 @@ def main():
 def write_text_table(status_index: Dict[str, Dict[str,str]], types: List[str], file):
     """ Write detailed report of product status to specified file handle """
     delim = ' '
-    width=7
+    width = 7
     headerline = '#{:<24s}'.format(' product_id') + delim + fixed_headers(types, delimiter=delim)
     print(headerline, file=file)
 
@@ -89,8 +89,8 @@ def write_text_table(status_index: Dict[str, Dict[str,str]], types: List[str], f
         print(line, file=file)
 
         # Tabulate completion by product type
-        for type in types:
-            typecounts[type][type_status[type]] += 1
+        for type, status_str in type_status.items():
+            typecounts[type][status_str] += 1
 
     # At the bottom, print totals
     print(headerline, file=file)

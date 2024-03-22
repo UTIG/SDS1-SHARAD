@@ -43,6 +43,7 @@ $COV run $FLAGS ../xlib/clutter/parse_channels.py > /dev/null
 # TODO: run_specularity
 for NAME in ../SHARAD/pipeline.py ../SHARAD/data_visualization.py ../SHARAD/run_ranging.py \
 ../SHARAD/run_rng_cmp.py ../SHARAD/run_rsr.py ../SHARAD/run_altimetry.py \
+../SHARAD/show_product_status.py \
 ../xlib/clutter/unfoc_KMS2.py
 do
     echo "$S0: Running $NAME -h"
@@ -105,6 +106,11 @@ $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --tracklist ./tracks_cove
 # Run pipeline on a partially complete output
 rm -rf $OUT2/alt
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
+
+# Show product status using actual hierarchy
+$COV run $FLAGS -a ../SHARAD/show_product_status.py --jsonout $OUT2/pstat/product_status.json --textout $OUT2/product_status.txt --maxtracks 1000
+$COV run $FLAGS -a ../SHARAD/show_product_status.py --maxtracks 10 > /dev/null
+
 
 RNGDATA=./covdata/rng_cmp/
 $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py -o $RNGDATA -n --tracklist ./tracks_coverage.txt --maxtracks 1
