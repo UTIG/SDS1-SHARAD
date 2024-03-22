@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+""" TODO: make this use the common argument processing system """
+
 __authors__ = ['Gregor Steinbruegge, gregor@ig.utexas.edu']
 __version__ = '1.0'
 __history__ = {
@@ -166,7 +169,7 @@ def main():
 
     if args.qcdir:
         # Save debugging outputs to qc directory if requested
-        logging.debug("Saving qc to " + args.qcdir)
+        logging.debug("Saving qc to %s", args.qcdir)
         os.makedirs(args.qcdir, exist_ok=True)
         np.save(os.path.join(args.qcdir, 'ranging_result.npy'), rlist)
         plt.savefig(os.path.join(args.qcdir, 'ranging_result.pdf'))
@@ -212,12 +215,8 @@ def process_rng(inpath, SDS, idx_start=None, idx_end=None, save_format='', taskn
         aux_label = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
         science_path = inpath.replace('_a.dat','_s.dat')
-
         if not os.path.exists(cmp_path):
-            logging.warning(cmp_path + " does not exist")
-        science_path = inpath.replace('_a.dat','_s.dat')
-        if not os.path.exists(cmp_path):
-            logging.warning(cmp_path + " does not exist")
+            logging.warning("%s does not exist", cmp_path)
             return 0
 
         logging.info("%s: Reading %s", taskname, cmp_path)
@@ -244,7 +243,8 @@ def process_rng(inpath, SDS, idx_start=None, idx_end=None, save_format='', taskn
                 do_progress=not b_noprogress, maxechoes=maxechoes)
 
         if DO_CLUTTER_ONLY:
-            raise Exception("Done with clutter simulation.")
+            logging.info("Done with clutter simulation.")
+            return None
 
         result = np.zeros((20, 3))
         for co_sim in range(12, 25):

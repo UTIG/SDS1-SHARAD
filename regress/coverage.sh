@@ -118,13 +118,15 @@ $COV run $FLAGS -a ../xlib/cmp/rng_cmp.py -o $RNGDATA -n --tracklist ./tracks_co
 
 
 echo $S0: run_rng_cmp
-$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n e_1920301_001_ss04_700_a DOESNOTEXIST || true
+$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n DOESNOTEXIST || true
+$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n e_1920301_001_ss04_700_a
 $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o $OUT1 -j 1 --maxtracks 2 --tracklist ./tracks_coverage.txt
 $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o $OUT1 -j 1 e_0187401_007_ss19_700_a
 
 echo $S0: run_altimetry
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o $OUT1 -j 1 --tracklist ./tracks_coverage.txt -n
 $COV run $FLAGS -a ../SHARAD/run_altimetry.py -o $OUT1 -j 1 --maxtracks 1 --tracklist ./tracks_coverage.txt
+$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o $OUT1 e_0224401_007_ss05_700_a
 # This doesn't work because we haven't updated our MROSH index since 2018 (see tracklist file)
 #$COV run $FLAGS -a ../SHARAD/run_altimetry.py -o ./covdata/altimetry_data -j 1 \
 #    --tracklist ./tracks_run_altimetry_fix202110.txt
@@ -135,7 +137,7 @@ echo "$S0: run_surface"
 $COV run $FLAGS -a ../SHARAD/run_surface.py -n --overwrite all
 # show all files that would be processed if not done
 $COV run $FLAGS -a ../SHARAD/run_surface.py -n all
-$COV run $FLAGS -a ../SHARAD/run_surface.py -o $OUT1 -j 1 e_1920301_001_ss04_700_a
+$COV run $FLAGS -a ../SHARAD/run_surface.py -o $OUT1 -j 1 e_0224401_007_ss05_700_a
 
 echo "$S0: run_rsr"
 # show what happens processing all files
@@ -152,6 +154,8 @@ $COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx
 if [ "$RUNSLOW" -eq "1" ]
 then
     $COV run $FLAGS -a ../SHARAD/run_ranging.py --noprogress --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 2 --jobs 1
+    # should be quick.  Get clutter only trees
+    $COV run $FLAGS -a ../SHARAD/run_ranging.py --noprogress --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --clutteronly --maxtracks 2 --jobs 1 || true
 fi
 
 

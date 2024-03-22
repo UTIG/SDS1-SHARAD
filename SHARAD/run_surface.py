@@ -185,9 +185,7 @@ def relative_sahga_gain(aux):
     hgaout = aux['MRO_HGA_OUTER_GIMBAL_ANGLE']
 
     gain = 0.0423*np.abs(samxin) + 0.0274*np.abs(sapxin) - 0.0056*np.abs(hgaout)
-    gain = -gain
-
-    return gain
+    return -gain
 
 
 def archive_surface(output_filename, orbit_full: str, aux, srf_data, typ: str):

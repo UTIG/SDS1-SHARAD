@@ -247,7 +247,7 @@ def run_jobs(f_processor: Callable, jobs: List[Dict[str, str]], nb_cores: int):
         global F_PROCESSOR
         F_PROCESSOR = f_processor
         with multiprocessing.Pool(nb_cores) as pool:
-            gen_jobs = zip(range(len(jobs)), jobs)
+            gen_jobs = enumerate(jobs) # for f_procesor_mp we need the enumerate inside
             for ii, res in enumerate(pool.imap_unordered(f_processor_mp, gen_jobs), start=1):
                 logging.info("Finished task %d (%d of %d remaining)",
                              res[0]+1, len(jobs) - ii, len(jobs))
