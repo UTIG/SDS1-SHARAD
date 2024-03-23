@@ -98,7 +98,7 @@ $COV run $FLAGS -a ../SHARAD/pipeline.py -n -vv --tracklist ./tracks_coverage.tx
 # Don't do foc because it takes forever
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --maxtracks 1 --tracklist ./tracks_coverage.txt --tasks rsr
 $COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 --ignoretimes --maxtracks 1 --tracklist ./tracks_coverage.txt --tasks cmp
-$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --tracklist ./tracks_coverage.txt
+$COV run $FLAGS -a ../SHARAD/pipeline.py -j 1 -o $OUT2 -n --ignoretimes --tracklist ./tracks_coverage.txt
 # Cause srf to be out of date
 sleep 1
 touch $OUT2/alt/mrosh_0001/data/edr02xxx/edr0224401/beta5/*.{h5,i}

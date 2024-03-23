@@ -85,8 +85,7 @@ def rsr_processor(orbit, typ='cmp', gain=0, sav=True,
     ok:  Whether the RSR fit converged correctly (1) or not (0)
     """
 
-    if senv is None:
-        senv = SHARADEnv.SHARADEnv()
+    assert senv is not None
 
     # This should be done in aux_data?
     orbit_full = orbit if orbit.find('_') == 1 else senv.orbit_to_full(orbit)
@@ -144,8 +143,7 @@ def rsr_grid(filename:str, query_lon=None, query_lat=None, grid_shape='square',
     radius: float
         radius around each point
     """
-    if senv is None:
-        senv = SHARADEnv.SHARADEnv()
+    assert senv is not None
 
     # Load and select data
     #quadrangle_id = filename[filename.find('MC'):filename.find('MC')+4]
@@ -205,8 +203,7 @@ def rsr_quadrangle(filename, query_lon=None, query_lat=None, grid_shape='square'
     radius: float
         radius around each point
     """
-    if senv is None:
-        senv = SHARADEnv.SHARADEnv()
+    assert senv is not None
 
     # Load and select data
     quadrangle_id = filename[filename.find('MC'):filename.find('MC')+4]

@@ -23,8 +23,7 @@ from run_rng_cmp import add_standard_args, run_jobs, process_product_args, \
 def surface_processor(orbit, ywinwidth=100, archive=False,
                       gain=0, gain_altitude='grima2021', gain_sahga=True,
                       senv=None, method='grima2012', alt_data=True,
-                      output_filename:str=None,
-                      debug_dir=None):
+                      output_filename:str=None):
     """
     Get the maximum of amplitude*(d amplitude/dt) within bounds defined by the
     altimetry processor
@@ -61,8 +60,7 @@ def surface_processor(orbit, ywinwidth=100, archive=False,
 
     """
 
-    if senv is None: # pragma: no cover
-        senv = SHARADEnv.SHARADEnv()
+    assert senv is not None
 
     #----------
     # Load data
@@ -140,14 +138,6 @@ def surface_processor(orbit, ywinwidth=100, archive=False,
 
     if archive:
         archive_surface(output_filename, aux, out)
-
-    if debug_dir is not None:
-        # Debugging output
-        outfile = os.path.join(debug_dir, "srf_{:s}.npy".format(orbit_full))
-        logging.debug("Saving to %s", outfile)
-        os.makedirs(debug_dir, exist_ok=True)
-        np.save(outfile, out)
-
 
     return out
 
