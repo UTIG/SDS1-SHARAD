@@ -189,7 +189,7 @@ def rx_opening(data, rxwot, dt):
     '''
 
     # define required temporary parameters
-    #n = data.shape[1] #np.size(data, axis=1)
+    n = data.shape[1] #np.size(data, axis=1)
     fs = np.fft.fftfreq(n, dt)
 
     # define the output

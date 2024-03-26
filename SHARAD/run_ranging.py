@@ -23,9 +23,12 @@ import spiceypy as spice
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from run_rng_cmp import run_jobs, process_product_args,\
+                        should_process_products, add_standard_args
+
 sys.path.append('../xlib')
 #import misc.prog as prog
-import misc.hdf as hdf
+#import misc.hdf as hdf
 
 import rng.icd as icd
 
@@ -34,23 +37,26 @@ DO_CLUTTER_ONLY = False
 def main():
     global args, DO_CLUTTER_ONLY
     parser = argparse.ArgumentParser(description='Run SHARAD ranging processing')
-    parser.add_argument('-o','--output', help="Output base directory")
+    #parser.add_argument('-o','--output', help="Output base directory")
     parser.add_argument('--qcdir', help="Quality control output directory")
     parser.add_argument('--ofmt', default='hdf5', choices=('hdf5','csv','none'),
                         help="Output file format")
-    parser.add_argument('--tracklist', default="xover_idx.dat",
-        help="List of tracks with xover points to process")
+    #parser.add_argument('--tracklist', default="xover_idx.dat",
+    #    help="List of tracks with xover points to process")
     parser.add_argument('--clutterpath', default=None, help="Cluttergram path")
     parser.add_argument('--noprogress', action="store_true", help="don't show progress")
-    parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
-    parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
+    #parser.add_argument('-j','--jobs', type=int, default=4, help="Number of jobs (cores) to use for processing")
+    #parser.add_argument('-v','--verbose', action="store_true", help="Display verbose output")
     parser.add_argument('-d','--debug', action="store_true", help="Display debugging plots")
-    parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
-    parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
+    #parser.add_argument('-n','--dryrun', action="store_true", help="Dry run. Build task list but do not run")
+    #parser.add_argument('--maxtracks', type=int, default=0, help="Maximum number of tracks to process")
     parser.add_argument('--maxechoes', type=int, default=0, help="Maximum number of echoes to process in a track")
-    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS)")
+    #parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
+    #                    help="Root directory (default: environment variable SDS)")
     parser.add_argument('--clutteronly', action="store_true", help="Cluttergram simulation only")
+
+    add_standard_args(parser)
+    # TODO: disallow orbits on command line since you can't really do that
 
     args = parser.parse_args()
 
@@ -77,7 +83,8 @@ def main():
     b_noprogress = True if args.noprogress else False
     with open(args.tracklist, 'r') as flist:
         for line in flist:
-            if line.strip().startswith('#'):
+            line = line.strip()
+            if line.startswith('#') or not line:
                 continue
             print(line)
             path, idx_start, idx_end = line.split()
@@ -113,10 +120,11 @@ def main():
         raise ValueError("Must have an even number of tracks for crossovers!")
 
     if args.dryrun:
-        sys.exit(0)
+        return
 
     logging.info("Start processing %d tracks", len(process_list))
 
+    #run_jobs(process_rng, process_list, args.jobs)
     rlist = [] # result list
     if args.jobs <= 1:
         for i, t in enumerate(process_list, start=1):

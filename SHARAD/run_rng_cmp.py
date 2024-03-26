@@ -259,10 +259,9 @@ def f_processor_mp(t):
 
 def read_tracklistfile(trackfile: str):
     """ Read a track list and return data structures about desired products
-    TODO: unify with the read_tracklist functions in other code
     """
     with open(trackfile, 'rt') as flist:
-        for linenum, path in enumerate(flist, start=1):
+        for path in flist:
             path = path.strip()
             if not path or path.startswith('#'):
                 continue

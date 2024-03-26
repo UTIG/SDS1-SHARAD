@@ -172,7 +172,8 @@ $COV run $FLAGS -a ../MARFA/run_interferometry.py \
 
 
 ####################################
-RUN_SAR2_FLAGS="-o ./covdata/run_sar2_data -j 1 --maxtracks 1  --tracklist ./tracks_coverage.txt --params run_sar2_cov.json"
+RUN_SAR2_FLAGS="-o $OUT1 -j 1 --maxtracks 1  --tracklist ./tracks_coverage.txt --params run_sar2_cov.json"
+# These require cmp to have succeeded
 #$COV run $FLAGS -a ../SHARAD/run_sar2.py -o ./covdata/run_sar2_data -j 1 --maxtracks 1 --ofmt none --tracklist ./tracks_coverage.txt
 echo $S0: run_sar2 -n
 $COV run $FLAGS -a ../SHARAD/run_sar2.py $RUN_SAR2_FLAGS --ofmt none --focuser ddv2 -n

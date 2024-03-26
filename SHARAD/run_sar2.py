@@ -48,9 +48,11 @@ import pandas as pd
 sys.path.insert(0, '../xlib/')
 from sar import sar
 import cmp.pds3lbl as pds3
-import misc.hdf as hdf
 
-#from run_rng_cmp import process_product_args
+from run_rng_cmp import run_jobs, process_product_args,\
+                        should_process_products, add_standard_args, read_tracklistfile
+
+from SHARADEnv import SHARADEnv, SHARADFiles
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
@@ -74,8 +76,8 @@ PRI_TABLE = {
 
 
 
-def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
-                  saving="hdf5", debug=False):
+def sar_processor(taskinfo, procparam, focuser,
+                  senv: SHARADEnv, saving="hdf5", debug=False):
     """
     Processor for individual SHARAD tracks. Intended for multi-core processing
     Takes individual range compressed and ionosphere corrected tracks and
@@ -87,7 +89,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
     -----------
       taskinfo  : dict of inputs required for SAR processing, with the following keys
                   - name: (required) name for this task, unique among all tasks being processed
-                  - input: (required) path to EDR
+                  - input: (required) path to EDR data file
                   - output: (required) path to output file (or None to omit saving)
                   - sharadroot: path to root of SHARAD data
                   - SDS: Root directory (usually /disk/kea/SDS)
@@ -111,6 +113,8 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                   - ddv2_posting_interval: interpolated range line interval at which to place SAR columns
                   - ddv2_aperture_dist   : length [km] of the synthetic aperture
                   - ddv2_trim            : number of sample to keep in trimmed version of the processing
+      senv: SHARADEnv object describing hierarchy organization
+
       saving    : Flag describing output save format
                   hdf5 - save in HDF5 format
                   npy  - save in numpy format
@@ -132,8 +136,6 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         idx_start = taskinfo.get('idx_start', None)
         idx_end = taskinfo.get('idx_end', None)
-        SDS = taskinfo.get('SDS', os.getenv('SDS', '/disk/kea/SDS'))
-        path = taskinfo['input']
         outputfile = taskinfo['output']
 
         # print info in debug mode
@@ -161,43 +163,23 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             if len(procparam['ddv2_trim [samples]']) != 0:
                 logging.debug('%f: SAR fast-time trim [samples]: %f', taskname, procparam['ddv2_trim [samples]'])
 
-        # create cmp path
-        if sharad_root is None:
-            sharad_root = os.path.join(SDS, 'targ/xtra/SHARAD')
-        path_root = os.path.join(sharad_root, 'cmp/')
+        product_id = Path(taskinfo['input']).name.replace('_a.dat', '')
+        assert product_id.startswith('e_'), "Unexpected product_id"
+        edr_paths = senv.sfiles.edr_product_paths(product_id)
+        label_path = os.path.join(senv.sfiles.orig_path, 'EDR/mrosh_0004/label/science_ancillary.fmt')
+        aux_path = os.path.join(senv.sfiles.orig_path, 'EDR/mrosh_0004/label/auxiliary.fmt')
 
-        inputroot = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/')
-        path_file = os.path.relpath(path, inputroot)
-        data_file = os.path.basename(path_file)
-        path_file = os.path.dirname(path_file)
-        #h5_file = data_file.replace('_a.dat', '_s_1bit.h5')
-        h5_file = data_file.replace('_a.dat', '_s.h5')
-        cmp_path = os.path.join(path_root, path_file, 'ion', h5_file)
-        label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
-        aux_path   = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
-        science_path = path.replace('_a.dat', '_s.dat')
-
-        logging.debug("%s: Loading cmp data from %s", taskname, cmp_path)
-
-        # load the range compressed and ionosphere corrected data
-        # TODO: use SHARADEnv which is more efficient
-        real = np.array(pd.read_hdf(cmp_path, 'real'))
-        imag = np.array(pd.read_hdf(cmp_path, 'imag'))
-        cmp_track = real + 1j * imag
-
-        #import matplotlib.pyplot as plt
-        #plt.figure()
-        #plt.imshow(np.transpose(20 * np.log10(np.abs(cmp_track))), aspect='auto')
-        #plt.show()
+        cmp_track = senv.cmp_data(product_id)
 
         idx_start = 0            if idx_start is None else max(0, idx_start)
         idx_end = len(cmp_track) if idx_end   is None else min(len(cmp_track), idx_end)
         cmp_track = cmp_track[idx_start:idx_end]
 
-        logging.debug("{:s}: Processing track from start={:d} end={:d} (length={:d})".format(
-            taskname, idx_start, idx_end, len(cmp_track)))
+        logging.debug("%s: Processing track from start=%d end=%d (length=%d)",
+            taskname, idx_start, idx_end, len(cmp_track))
 
         # load the relevant EDR files
+        science_path = edr_paths['edr_sci']
         logging.debug("%s: Loading science data from EDR file: %s", taskname, science_path)
         scireader = pds3.SHARADDataReader(label_path, science_path)
         data = scireader.arr[idx_start:idx_end]
@@ -209,7 +191,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
 
         logging.debug("%s: EDR sci data length: %d", taskname, len(data))
         logging.debug("%s: EDR aux data length: %d", taskname, len(aux))
-        assert len(data) == len(aux)
+        assert len(data) == len(aux), "Science and aux data lengths don't match"
 
         # load relevant spacecraft position information from EDR files
         pri_code = bitdata['PULSE_REPETITION_INTERVAL']
@@ -294,6 +276,7 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
                                  complib = 'blosc:lz4', complevel=6)
             elif saving == "npy":
                 outputdir = os.path.dirname(outputfile)
+                # TODO: change this from multiple npy files to one big npz file
                 if focuser != 'Delay Doppler v2':
                     np.save(os.path.join(outputdir, "sar.npy"), sar)
                     np.save(os.path.join(outputdir, "columns.npy"), columns)
@@ -304,36 +287,25 @@ def sar_processor(taskinfo, procparam, focuser='Delay Doppler v2',
             elif saving == "none":
                 pass
             else:
-                logging.error("Can't save to format '{:s}'".format(saving))
+                logging.error("Can't save to format '%s'", saving)
                 return 1
 
     except Exception: # pylint: disable=W0703
-        logging.error('%s: Error processing %s', taskname, path)
+        logging.error('%s: Error processing %s', taskname, taskinfo.get('input', 'unknowninput'))
         for line in traceback.format_exc().split("\n"):
             logging.error('%s: %s', taskname, line)
 
         return 1
 
-    logging.debug('%s: Successfully processed file: %s', taskname, path)
+    logging.debug('%s: Successfully processed %s', taskname, product_id)
 
     return 0
 
-def read_tracklist(tracklist: str):
-    with open(tracklist, 'rt') as fin:
-        for line in fin:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            yield line
 
 
 def main():
 
     parser = argparse.ArgumentParser(description='Run SAR processing')
-    parser.add_argument('-i', '--input', default=None,
-                        help="Input base SHARAD directory")
-    parser.add_argument('-o', '--output', default=None,#output_default,
-                        help="Output base directory")
     parser.add_argument('--ofmt', default='hdf5',
                         choices=('hdf5', 'npy', 'none'),
                         help="Output data format")
@@ -342,47 +314,34 @@ def main():
                         help="Focusing algorithm")
     parser.add_argument('--params', default=None,
                         help="Processing parameters configuration file (JSON format)")
-    parser.add_argument('-j', '--jobs', type=int, default=3,
-                        help="Number of jobs (cores) to use for processing")
-    parser.add_argument('-v', '--verbose', action="store_true",
-                        help="Display verbose output")
-    parser.add_argument('-n', '--dryrun', action="store_true",
-                        help="Dry run. Build task list but do not run")
-    parser.add_argument('--tracklist', default="elysium.txt",
-                        help="List of tracks to process")
-    parser.add_argument('--maxtracks', default=None, type=int,
-                        help="Max number of tracks to process")
 
-    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'),
-                        help="Root directory (default: environment variable SDS)")
-
+    add_standard_args(parser)
     args = parser.parse_args()
 
-
-    #logging.basicConfig(filename='sar_crash.log',level=logging.DEBUG)
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel, stream=sys.stdout,
                         format="run_sar2: [%(levelname)-7s] %(message)s")
 
 
     if args.output is None:
-        #input_default = os.path.join(SDS, 'targ/xtra/SHARAD')
-        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD/foc/')
+        args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
 
+    sharad_root = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
+    #sfiles = SHARADFiles(data_path=args.output, orig_path=sharad_root, read_edr_index=True)
+    senv = SHARADEnv(data_path=args.output, orig_path=sharad_root, b_index_files=False)
+    senv.index_files(use_edr_index=True, index_intermediate_files=False)
+    sfiles = senv.sfiles
 
-    # Set number of cores
-    ncores = args.jobs
-    # Set output base directory
-    outputroot = args.output
 
     # set SAR processing variables as a dictionary
+    # TODO: make the calling function accept the codes below
     focuser_names = {
         'ddv1': 'Delay Doppler v1',
         'mf': 'Matched Filter',
         'ddv2': 'Delay Doppler v2',
     }
     focuser = focuser_names[args.focuser]
-    processing_parameters = { # default processing parameters
+    processing_parameters = { # default SAR processing parameters
         'ddv1_posting_distance [m]': 115,
         'ddv1_aperture_time [s]': 8.774,
         'ddv1_bandwidth [Hz]': 0.4,
@@ -410,7 +369,7 @@ def main():
     # Read lookup table associating gob's with tracks
     #h5file = pd.HDFStore('mc11e_spice.h5')
     #keys = h5file.keys()
-    lookup = list(read_tracklist(args.tracklist))
+    lookup = list(read_tracklistfile(args.tracklist))
 
     # Build list of processes
     process_list = []
@@ -429,24 +388,28 @@ def main():
         data_file = os.path.basename(path_file)
         orbit_name = data_file[2:7]
         path_file = os.path.dirname(path_file)
+
         if focuser == 'Delay Doppler v1':
-            new_path = os.path.join(outputroot, path_file,
+            new_path = os.path.join(args.output, 'foc', path_file,
                                     str(processing_parameters['ddv1_posting_distance [m]']) + 'm',
                                     str(processing_parameters['ddv1_aperture_time [s]']) + 's',
                                     str(processing_parameters['ddv1_bandwidth [Hz]']) + 'Hz')
         elif focuser == 'Matched Filter':
-            new_path = os.path.join(outputroot, path_file,
+            new_path = os.path.join(args.output, 'foc', path_file,
                                     str(processing_parameters['mf_posting_distance [m]']) + 'm',
                                     str(processing_parameters['mf_aperture_time [s]']) + 's',
                                     str(processing_parameters['mf_bandwidth [Hz]']) + 'Hz',
                                     str(processing_parameters['mf_Er']) + 'Er')
         elif focuser == 'Delay Doppler v2':
-            new_path = os.path.join(outputroot, path_file,
+            new_path = os.path.join(args.output, 'foc', path_file,
                                     str(processing_parameters['ddv2_interpolate_dx [m]']) + 'm',
                                     str(processing_parameters['ddv2_posting_interval [range lines]']) + ' range lines',
                                     str(processing_parameters['ddv2_aperture_dist [km]']) + 'km')
 
         outputfile = os.path.join(new_path, data_file.replace('_a.dat', '_s.h5'))
+
+        outputfile2 = foc_product_paths(senv.sfiles, focuser, processing_parameters, path)['foc_rad']
+        assert outputfile == outputfile2, "%s != %s" % (outputfile, outputfile2)
 
         logging.debug("Looking for %s", new_path)
 
@@ -560,7 +523,7 @@ def main():
             '50214': [41105,  84238]
         }
 
-        if os.path.exists(new_path):
+        if not args.overwrite and os.path.exists(new_path):
             logging.debug('File already processed. Skipping: '+path)
             continue
 
@@ -570,53 +533,65 @@ def main():
             'name': 'Task{:03d}-{:s}'.format(i, orbit_name),
             'input': path,
             'output': outputfile,
-            'sharad_root': args.input,
-            'SDS': args.SDS,
             'idx_start': orbit_index[0],
             'idx_end': orbit_index[1],
         }
-        process_list.append(task)
+        params = {
+            'taskinfo': task,
+            'focuser': focuser,
+            'procparam': processing_parameters,
+            'senv': senv,
+            'saving': args.ofmt,
+            'debug': args.verbose,
+        }
+        process_list.append(params)
         logging.debug("%s input:  %s", task['name'], task['input'])
         logging.debug("%s output: %s", task['name'], task['output'])
 
-    #h5file.close()
 
-    if args.maxtracks:
-        logging.info("Processing first %d tracks", args.maxtracks)
+    if args.maxtracks > 0 and len(process_list) > args.maxtracks:
+        # Limit to first args.maxtracks tracks
         process_list = process_list[0:args.maxtracks]
 
     if args.dryrun:
         # If it's a dry run, print the list and stop
         print(process_list)
-        sys.exit(0)
+        return
 
-    logging.info("Start processing %d tracks", len(process_list))
     start_time = time.time()
 
-#    params_pos = (posting,aperture,bandwidth,focuser,recalc,Er)
-    params_named = {'saving':args.ofmt,'debug':args.verbose}
-    if ncores <= 1:
-        for job in process_list:
-            sar_processor(job, processing_parameters, focuser, args.ofmt, args.verbose)
-            #params2 = (t,) + processing_parameters + focuser
-            #sar_processor( *params2, **params_named )
-    else:
-        run_mp(ncores, processing_parameters, focuser, params_named, process_list)
+    run_jobs(sar_processor, process_list, args.jobs)
     logging.info("Done in %0.1f seconds", time.time() - start_time)
 
-def run_mp(ncores, processing_parameters, focuser, params_named, process_list):
-    pool = multiprocessing.Pool(ncores)
-    results = [pool.apply_async(sar_processor,
-                                (t, processing_parameters, focuser,
-                                 params_named['saving'], params_named['debug']))
-               for t in process_list]
+def foc_product_paths(sfiles: SHARADFiles, focuser, processing_parameters, edr_data_file):
+    """ From the EDR data file name, construct the focused data file name and return it """
+    p_edr_data_file = Path(edr_data_file)
+    product_id = p_edr_data_file.name.replace('_a.dat','')
+    relpath = p_edr_data_file.relative_to(Path(sfiles.orig_path) / 'EDR').parent
+    assert str(relpath).startswith('mrosh_00'), "Unexpected path isn't in EDR archive '%s'" % (str(relpath),)
 
-    for i, result in enumerate(results, start=1):
-        if result.get() == 1:
-            lvl, fmtstr = logging.ERROR, "Task {:d} of {:d} had a problem."
-        else:
-            lvl, fmtstr = logging.INFO, "Task {:d} of {:d} successful."
-        logging.log(lvl, fmtstr.format(i, len(process_list)))
+    if focuser == 'Delay Doppler v1':
+        typ = "{:s}m/{:s}s/{:s}Hz".format(
+                str(processing_parameters['ddv1_posting_distance [m]']),
+                str(processing_parameters['ddv1_aperture_time [s]']),
+                str(processing_parameters['ddv1_bandwidth [Hz]']))
+    elif focuser == 'Matched Filter':
+        typ = "{:s}m/{:s}s/{:s}Hz/{:s}Er".format(
+                str(processing_parameters['mf_posting_distance [m]']),
+                str(processing_parameters['mf_aperture_time [s]']),
+                str(processing_parameters['mf_bandwidth [Hz]']),
+                str(processing_parameters['mf_Er']),
+                )
+    elif focuser == 'Delay Doppler v2':
+        typ = "{:s}m/{:s} range lines/{:s}km".format(
+                str(processing_parameters['ddv2_interpolate_dx [m]']),
+                str(processing_parameters['ddv2_posting_interval [range lines]']),
+                str(processing_parameters['ddv2_aperture_dist [km]']))
+    else:
+        raise ValueError("Unknown value for focuser '%s'" % (focuser,))
+
+    return {'foc_rad': os.path.join(sfiles.data_path, 'foc', relpath, typ, product_id + '_s.h5')}
+
 
 
 
