@@ -953,7 +953,7 @@ class SHARADFiles:
         logging.debug("product_id_index has %d items", len(self.product_id_index))
 
 
-    def data_product_paths(self, product_id: str, types=('edr', 'cmp', 'alt', 'srf', 'rsr', 'rng', 'foc')):
+    def data_product_paths(self, product_id: str, types=('edr', 'cmp', 'alt', 'srf', 'rsr', 'clu', 'rng', 'foc')):
         """ Populate a dictionary with all data file locations """
         products = {}
         for prod in types:
@@ -1024,13 +1024,22 @@ class SHARADFiles:
         orbitdir = os.path.join(self.data_path, 'rsr', pinfo['volume_id'], pinfo['relpath'], typ)
         return {'rsr_txt': os.path.join(orbitdir, product_id + '.txt'),}
 
+    def clu_product_paths(self, product_id: str, typ='icd'):
+        """ Cluttergram simulation outputs """
+        pinfo = self.product_id_index[product_id]
+        orbitdir = os.path.join(self.data_path, 'clu', pinfo['volume_id'], pinfo['relpath'], typ)
+        return {
+            'clu_rad': os.path.join(orbitdir, product_id + '.npz'),
+            'clu_json': os.path.join(orbitdir, product_id + '.json'),
+        }
+
 
     def rng_product_paths(self, product_id: str, typ:str='icd'):
         """ Ranging product produced by run_ranging.py. Example
         /disk/kea/SDS/targ/xtra/SHARAD/rng/mrosh_0004/data/rm270/edr4973503/icd/e_4973503_001_ss19_700_a_a.cluttergram.npy"""
         pinfo = self.product_id_index[product_id]
         orbitdir = os.path.join(self.data_path, 'rng', pinfo['volume_id'], pinfo['relpath'], typ)
-        return {'rng_clu': os.path.join(orbitdir, product_id + '.txt'),}
+        return {'rng_json': os.path.join(orbitdir, product_id + '.json'),}
 
 
     def foc_product_paths(self, product_id: str, typ:str=None):

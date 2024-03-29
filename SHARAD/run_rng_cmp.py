@@ -259,13 +259,15 @@ def f_processor_mp(t):
 
 def read_tracklistfile(trackfile: str):
     """ Read a track list and return data structures about desired products
+    Ignore anything after the first space
     """
     with open(trackfile, 'rt') as flist:
         for path in flist:
             path = path.strip()
             if not path or path.startswith('#'):
                 continue
-            yield path
+            # Ignore anything after first space
+            yield path.split(' ')[0]
 
 def filename_to_productid(filename: str):
     """ Converts a filename to a productid.  If the

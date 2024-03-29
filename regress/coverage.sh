@@ -112,13 +112,8 @@ $COV run $FLAGS -a ../SHARAD/show_product_status.py --jsonout $OUT2/pstat/produc
 $COV run $FLAGS -a ../SHARAD/show_product_status.py --maxtracks 10 > /dev/null
 
 
-RNGDATA=./covdata/rng_cmp/
-$COV run $FLAGS -a ../xlib/cmp/rng_cmp.py -o $RNGDATA -n --tracklist ./tracks_coverage.txt --maxtracks 1
-
-
-
 echo $S0: run_rng_cmp
-$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n DOESNOTEXIST || true
+$COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n e_DOESNOTEXIST_a || true
 $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -n e_1920301_001_ss04_700_a
 $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o $OUT1 -j 1 --maxtracks 2 --tracklist ./tracks_coverage.txt
 $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py -o $OUT1 -j 1 e_0187401_007_ss19_700_a
@@ -146,16 +141,18 @@ $COV run $FLAGS -a ../SHARAD/run_rsr.py -n all > /dev/null
 $COV run $FLAGS -a ../SHARAD/run_rsr.py -n --overwrite all > /dev/null
 # Run an orbit
 
-nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --output $OUT1 -s 2000 e_1920301_001_ss04_700_a
+nice $COV run $FLAGS -a ../SHARAD/run_rsr.py --output $OUT1 -s 2000 e_0224401_007_ss05_700_a
 
+echo "$S0: run_clutter"
+$COV run $FLAGS -a ../SHARAD/run_clutter.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 2 --jobs 1
 
 echo "$S0: run_ranging"
-$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 4 --jobs 1 -n
+$COV run $FLAGS -a ../SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 4 --jobs 1 -n
 if [ "$RUNSLOW" -eq "1" ]
 then
-    $COV run $FLAGS -a ../SHARAD/run_ranging.py --noprogress --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --maxtracks 2 --jobs 1
-    # should be quick.  Get clutter only trees
-    $COV run $FLAGS -a ../SHARAD/run_ranging.py --noprogress --tracklist ./run_ranging__xover_idx.dat -o ./covdata/ranging_data/ --clutteronly --maxtracks 2 --jobs 1 || true
+    # Ensure cmp data is up-to-date for this track list
+    $COV run $FLAGS -a ../SHARAD/run_rng_cmp.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 2 --jobs 1
+    $COV run $FLAGS -a ../SHARAD/run_ranging.py --noprogress --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 2 --jobs 1 --qcdir $OUT1/rng/qc
 fi
 
 
@@ -197,7 +194,7 @@ echo "$S0: data_visualization.py"
 # These require a connection to an X11 display. allow them to error out
 $COV run $FLAGS -a  ../SHARAD/data_visualization.py --selftest && true
 $COV run $FLAGS -a  ../SHARAD/data_visualization.py --product cmp && true
-$COV run $FLAGS -a  ../SHARAD/data_visualization.py --input '/disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr10xxx/edr1058901/5m/3 range lines/30km/e_1058901_001_ss19_700_a_s.h5' && true
+$COV run $FLAGS -a  ../SHARAD/data_visualization.py --input '$SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr10xxx/edr1058901/5m/3 range lines/30km/e_1058901_001_ss19_700_a_s.h5' && true
 #---------------------------------------------
 
 echo "$S0: End coverage: " `date` 

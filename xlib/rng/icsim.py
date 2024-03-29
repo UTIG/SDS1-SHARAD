@@ -68,7 +68,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     geotiff = gdal.Open(dtm_path)
     band = geotiff.GetRasterBand(1)
     dem = band.ReadAsArray()
-    logging.debug("dem.shape = " + str(dem.shape))
+    logging.debug("dem.shape = %r", dem.shape)
     CornerLats, CornerLons = GetCornerCoordinates(dtm_path)
 
     # TODO: can we just load sections of the ROI?
@@ -77,6 +77,7 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
 
     Necho = ROIstop-ROIstart
     Necho1 = min(Necho, maxechoes) if maxechoes else Necho
+    roi_stop1 = ROIstart + Necho1
     # Derive pulse repetition frequency
     prf = np.zeros(Necho)
     prf[pri == 1] = 1/1428e-6
@@ -85,6 +86,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     prf[pri == 4] = 1/2856e-6
     prf[pri == 5] = 1/2984e-6
     prf[pri == 6] = 1/2580e-6
+
+    assert len(state.T) == len(rxwot), "len(state)=%d len(rxwot)=%d" % (len(state), len(rxwot))
+    assert len(state.T) == len(prf)
 
     # Convert spacecraft state vectors in MKS units
     state = state*1000
@@ -154,13 +158,16 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     dem_cart = calc_dem_cart(dem, dem_mask, CornerLats, CornerLons, r_sphere)
     del dem, dem_mask
     logging.debug("incoherent_sim: Done precomputing cartesian coordinates at %0.3f sec", time.time() - t0)
+    #logging.debug("dem_cart.shape=%r dtype=%r", dem_cart.shape, dem_cart.dtype)
 
     # Create array to store result. echosp will contain the Fourier transform
     # of each rangeline.
     echosp = np.empty((Nsample, Necho1), dtype=complex)
+    logging.debug("echosp.shape=%r", echosp.shape)
     p = prg.Prog(Necho1) if do_progress else None
 
     for pos in range(Necho1):
+        logging.debug("%d of %d", pos+1, Necho1)
         # Extract DTM topography
         lon_w, lon_e, lat_s, lat_n = lonlatbox(lonsc[pos], latsc[pos],
                                                r_circle, r_sphere)
@@ -170,6 +177,9 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         _, _, aidx = argwhere_dtmgrid(dem_cart.shape[0:2], lon_w, lon_e, lat_s, lat_n,
                                  CornerLats, CornerLons)
 
+        #logging.debug("pos=%d, chunk shape=%r",
+        #             pos, (aidx[1]-aidx[0], aidx[3]-aidx[2], 3)
+        #             )
 
         if True:
             la, lb, _, _, Uz, R = surfaspect(
@@ -225,7 +235,6 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
         spectrum = pulsesp_c*np.fft.fft(reflections)
         echosp[:, pos] = spectrum[np.abs(fo) <= fs/2]
 
-	
         if p:
             p.print_Prog(pos)
     if p:
@@ -237,29 +246,31 @@ def incoherent_sim(state, rxwot, pri, dtm_path, ROIstart, ROIstop,
     # Align echoes to a common reference point in time
     deltat = -(rxwot/fs+1428e-6)+11.96e-6
 
+    # TODO: speed this up by combining -2j*pi*conjf (changes output slightly)
     conjf = np.conj(f)
     for pos in range(Necho1):
         phase = np.exp(-2j*pi*deltat[pos]*conjf)
         echosp[:, pos] *= phase #echosp[:, pos]*phase
 
     # Convert echoes from power to voltage
-    logging.debug("incoherent_sim: delay: {:0.3f} sec".format(time.time() - t0))
-    echo = np.fft.ifft(echosp, axis=0)
-    echo = np.sqrt(echo)
-    logging.debug("incoherent_sim: power to voltage: {:0.3f} sec".format(time.time() - t0))
+    logging.debug("incoherent_sim: delay: %0.3f sec", time.time() - t0)
+    echo = np.sqrt(np.fft.ifft(echosp, axis=0))
+    logging.debug("incoherent_sim: power to voltage: %0.3f sec", time.time() - t0)
     echosp = np.fft.fft(echo, axis=0)
-    
-
+    del echo
+    rdrgr = np.empty_like(echosp, dtype=np.float32)
     for pos in range(Necho1):
-        echo[:, pos] = np.fft.ifft(w_c * echosp[:, pos])
-
-    rdrgr = 20*np.log10(np.abs(echo))
-    logging.debug("incoherent_sim: hanning filter and freq to time domain: {:0.3f} sec".format(time.time() - t0))
+        trace = np.fft.ifft(w_c * echosp[:, pos])
+        rdrgr[:, pos] = 20*np.log10(np.abs(trace))
+    del echosp
+    logging.debug("incoherent_sim: hanning filter and freq to time domain: %0.3f sec", time.time() - t0)
 
     # Save results in an output file
     if save_path is not None:
-        logging.debug("incoherent_sim: Saving radargram to " + save_path)
+        logging.debug("incoherent_sim: Saving radargram to %s", save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         np.save(save_path, rdrgr)
+        # TODO: also save json metadata (ROI and source files)
 
 
 
@@ -336,10 +347,7 @@ def lonlatbox(lon_0, lat_0, r_circle, r_sphere):
 
     # Pathologies
     if r_circle / r_sphere >= pi/2:
-        lon_w = 0
-        lon_e = 360
-        lat_s = -90
-        lat_n = 90
+        lon_w, lon_e, lat_s, lat_n = 0, 360, -90, 90
 
     delta_lat = 180/pi * r_circle / r_sphere
 
@@ -347,14 +355,10 @@ def lonlatbox(lon_0, lat_0, r_circle, r_sphere):
     lat_n = lat_0 + delta_lat
 
     if lat_n >= 90:
-        lon_w = 0
-        lon_e = 360
-        lat_n = 90
+        lon_w, lon_e, lat_n = 0, 360, 90
 
     if lat_s <= -90:
-        lon_w = 0
-        lon_e = 360
-        lat_s = -90
+        lon_w, lon_e, lat_s = 0, 360, -90
 
     # use the sine theorem: sin A / sin a = sin B / sin b
     a = r_circle/r_sphere
@@ -405,8 +409,8 @@ def calc_dem_cart(dem, dem_mask, corner_lats, corner_lons, r_sphere):
     sph_dem[:, 0] = lat_r[maskidx[0]]
     sph_dem[:, 1] = lon_r[maskidx[1]]
     sph_dem[:, 2] = dem[maskidx[0], maskidx[1]] + r_sphere
-
-    cart_dem = np.empty(dem.shape +  (3,))
+    # This is pretty gigantic so can we afford making it only float32?
+    cart_dem = np.empty(dem.shape +  (3,)) # dtype=np.float32
     cart_dem[maskidx[0], maskidx[1], :] = crd.sph2cart(sph_dem, indeg=False)
     
     return cart_dem.reshape(dem.shape + (3,))
@@ -453,9 +457,15 @@ def argwhere_dtmgrid(dem_shape, lon_w, lon_e, lat_s, lat_n, CornerLats, CornerLo
     lon = lon[J_g]
 
     # select DEM portion
-    start1 = np.array(I_g)[0, 0]; end1 = np.array(I_g)[0, -1]
-    start2 = np.array(J_g)[0, 0]; end2 = np.array(J_g)[0, -1]
-    
+    # TODO: excess conversions
+    # TODO: test when target isn't in the DEM
+    #logging.debug("I_g=%r", I_g)
+    start1 = np.array(I_g)[0, 0]
+    end1 = np.array(I_g)[0, -1]
+    #logging.debug("J_g=%r", J_g)
+    start2 = np.array(J_g)[0, 0]
+    end2 = np.array(J_g)[0, -1]
+
     # Array indices in the DEM used
     arrayidx = (start1, end1+1, start2, end2+1)
 
@@ -710,7 +720,7 @@ def GetCornerCoordinates2(FileName):
     try:
         gdal_info = json.loads(resp.decode())
     except json.decoder.JSONDecodeError:
-        logging.error("Could not decode json: " + resp.decode())
+        logging.error("Could not decode json: %s", resp.decode())
         raise
     # How do we get center?
     # print(resp.decode())
@@ -829,11 +839,8 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     idx_end = 63243
     #------------------------
 
-    # create cmp path
-    path_root_rng = '/disk/kea/SDS/targ/xtra/SHARAD/rng/'
-    path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
     path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-    dtm_path = '/disk/daedalus/sds/orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff'
+    dtm_path = '/disk/kea/SDS/orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff'
     # Relative path to this file
     fname = os.path.basename(inpath)
 
@@ -842,17 +849,11 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     logging.debug("inpath: %s", inpath)
     logging.debug("reldir: %s", reldir)
     logging.debug("path_root_edr: %s", path_root_edr)
-    cmp_path = os.path.join(path_root_cmp, reldir, 'ion', fname.replace('_a.dat','_s.h5') )
     label_science = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
     label_aux  = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
 
 
     science_path = inpath.replace('_a.dat','_s.dat')
-    
-    if not os.path.exists(cmp_path):
-        logging.warning(cmp_path + " does not exist")
-        return
-
     aux_path = inpath
 
     # Number of range lines
@@ -882,6 +883,16 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     #    print("sim.shape = {:s}".format(str(sim.shape)))
     #    print("data.shape = {:s}".format(str(data.shape)))
     #    raise
+
+def calc_roi(idx_start: int, idx_end: int, maxechoes: int):
+    """ Calculate the actual trace range and number
+    of traces taking into account the maxechoes parameter """
+    assert idx_end is not None, "end must be explicit"
+    necho = idx_end - idx_start
+    necho1 = min(necho, maxechoes) if maxechoes else necho
+    roi_stop1 = idx_start + necho1
+    return idx_start, roi_stop1, necho1
+
 
 def test_surfaspect():
     """ TODO: test equivalence of surfaspect() and surfaspect1() """

@@ -15,6 +15,8 @@ __history__ = {
 import sys
 import os
 import logging
+from pathlib import Path
+import json
 
 import numpy as np
 import scipy.signal
@@ -25,36 +27,25 @@ import matplotlib.pyplot as plt
 
 xlib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if xlib_path not in sys.path:
-    sys.path.append(xlib_path)
+    sys.path.insert(1, xlib_path)
 
 import cmp.pds3lbl as pds3
 import rng.icsim as icsim
 import clutter.peakint as peakint
 
-def gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
+def gen_cluttergram(clutterfile: str, dtm_path, science_path, label_science,
                 aux_path, label_aux, idx_start, idx_end,
                 debug = False, ipl = False, #window = 50,
                 #average = 30,
-                cluttergram_path=None, save_clutter_path=None,
                 do_progress=False, maxechoes=0):
 
 
     """ TODO: put this into icsim.py
     Returns a cluttergram simulation result
-
+    TODO: it's kinda weird that we trim the ROI here.
     """
-    # SHARAD sampling frequency
-    #f = 1/0.0375E-6
 
-    # Number of range lines
-    Necho = idx_end - idx_start
-
-    #============================
-    # Assertions about input dimensions
-    assert idx_start >= 0
-    assert idx_end > 0
-    assert idx_end - idx_start >= 800
-
+    logging.debug("Performing clutter simulation")
 
     #============================
     # Read and prepare input data
@@ -67,107 +58,66 @@ def gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
     # Range window starts
     rxwot = data['RECEIVE_WINDOW_OPENING_TIME'][idx_start:idx_end]
 
+    # SHARAD sampling frequency
+    #f = 1/0.0375E-6
+    if idx_end is None:
+        idx_end = len(rxwot)
+    if idx_start is None:
+        idx_start = 0
 
-    # Perform clutter simulation or load existing cluttergram
-    if cluttergram_path is None:
-        logging.debug("Performing clutter simulation")
-        aux = pds3.read_science(aux_path, label_aux)
-        pri_code = np.ones(Necho)
-        p_scx = aux['X_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
-        p_scy = aux['Y_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
-        p_scz = aux['Z_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
-        v_scx = aux['X_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
-        v_scy = aux['Y_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
-        v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
-        state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
-        # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
-        sim = icsim.incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end,
-                                   do_progress=do_progress, maxechoes=maxechoes).transpose()
-        if save_clutter_path is not None:
-            logging.debug("Saving cluttergram to " + save_clutter_path)
-            np.save(save_clutter_path, sim)
-    else:
-        logging.debug("Loading cluttergram from " + cluttergram_path)
-        sim = np.load(cluttergram_path)
+    #============================
+    # Assertions about input dimensions
+    assert idx_start >= 0
+    assert idx_end > 0
+    assert idx_end - idx_start >= 800
+
+    # Number of range lines
+    Necho = idx_end - idx_start
+
+
+    aux = pds3.read_science(aux_path, label_aux)
+    pri_code = np.ones(Necho)
+    p_scx = aux['X_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+    p_scy = aux['Y_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+    p_scz = aux['Z_MARS_SC_POSITION_VECTOR'][idx_start:idx_end]
+    v_scx = aux['X_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
+    v_scy = aux['Y_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
+    v_scz = aux['Z_MARS_SC_VELOCITY_VECTOR'][idx_start:idx_end]
+    state = np.vstack((p_scx, p_scy, p_scz, v_scx, v_scy, v_scz))
+    # GNG 2020-01-27 transpose seems to give matching dimensions to pulse compressed radargrams
+    sim = icsim.incoherent_sim(state, rxwot, pri_code, dtm_path, idx_start, idx_end,
+                               do_progress=do_progress, maxechoes=maxechoes).transpose()
+
+    # cluttergram metadata
+    info = {
+        'filename': os.path.basename(clutterfile),
+        'shape': sim.shape,
+        'dtype': repr(sim.dtype),
+        'science_path': str(science_path),
+        'aux_path': str(aux_path),
+        'idx_start': idx_start,
+        'idx_end': idx_start + sim.shape[0], # allow for maxechoes
+        'dtm': dtm_path,
+        'dtm_filesize': os.path.getsize(dtm_path),
+    }
+
+    if clutterfile is not None:
+        logging.info("Saving cluttergram to %s", clutterfile)
+        os.makedirs(os.path.dirname(clutterfile), exist_ok=True)
+        if clutterfile.endswith('.npz'):
+            np.savez(clutterfile, sim=sim)
+        else:
+            np.save(clutterfile, sim)
+
+        p_json = Path(clutterfile).with_suffix('.json')
+        logging.info("Saving cluttergram metadata to %s", str(p_json))
+        with p_json.open('wt') as fhjson:
+            json.dump(info, fhjson, indent="\t")
+
     return sim
 
 
-def icd_ranging_2(cmp_data_sliced, sim_data_sliced, idx_start, idx_end,
-                debug=False, ipl=False, window=50,
-                average=30, co_sim=10, co_data=30,
-                cluttergram_path=None, save_clutter_path=None,
-                do_progress=False):
-    """ Alternative icd_ranging assuming some of the data files have been read or calculated externally
-    cmp_data_sliced -- pulse-compressed data, already sliced to only idx_start to idx_end
-    sim_data_sliced -- cluttergram data, already sliced to only idx_start to idx_end
-    idx_start -- starting index of data being considered, mapping to  cmp_data_sliced[0] and sim_data_sliced[-1]
-    idx_end -- ending index of data being considered, mapping to cmp_data_sliced[-1]
-
-    """
-    assert cmp_data_sliced.size == sim_data_sliced.size
-
-
-def icd_ranging(cmp_path, dtm_path, science_path, label_science,
-                aux_path, label_aux, idx_start, idx_end,
-                debug = False, ipl = False, window = 50,
-                average = 30, co_sim = 10, co_data = 30,
-                cluttergram_path=None, save_clutter_path=None,
-                do_progress=False, maxechoes=0):
-
-    """
-    Computes the differential range between two tracks
-    by matching incoherent cluttergrams with pulse compressed data.
-
-    # TODO: document what the minimum window size is (min value of idx_end - idx_start)
-    # TODO: rework naming and make more consistent cluttergram_path and save_clutter_path naming and mechanics
-    # TODO: do template matching using sub-sample resolution
-
-    # Question: ensure that moving average is centered?
-
-    Input
-    -----
-    cmp_path: string
-        Path to pulse compressed data. h5 file expected
-    sim_path: string
-        Clutter simulation for track
-    science_path: string
-        Path to EDR science data
-    label_path: string
-        Path to science label of EDR data
-    idx_start: integer
-        start index for xover
-    idx_end: integer
-        end index for xover
-    do_progress: boolean
-        Show progress bar to console if true
-
-    Output
-    ------
-    delta
-    dz
-    min(md)
-
-
-    """
-
-
-    sim = gen_or_load_cluttergram(cmp_path, dtm_path, science_path, label_science,
-                aux_path, label_aux, idx_start, idx_end,
-                debug = debug, ipl=ipl, #window=window,
-                #average=average, co_sim=co_sim, co_data=co_data,
-                cluttergram_path=cluttergram_path, save_clutter_path=save_clutter_path,
-                do_progress=do_progress, maxechoes=maxechoes)
-
-    return icd_ranging_cg(cmp_path, dtm_path, science_path, label_science,
-                aux_path, label_aux, idx_start, idx_end, sim,
-                debug=debug, ipl=ipl, window=window,
-                average=average, co_sim=co_sim, co_data=co_data,
-                do_progress=do_progress, maxechoes=maxechoes)
-
-
-
-
-def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
+def icd_ranging_cg3(cmp_path, __unused__, science_path, label_science,
                 aux_path, label_aux, idx_start, idx_end, sim,
                 debug=False, ipl=False, window=50,
                 average=30, co_sim=10, co_data = 30,
@@ -178,7 +128,6 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
     by matching incoherent cluttergrams with pulse compressed data.
     Based on icd_ranging_cg, but modified to use a shifted MAD rather than rolled,
     and adding peakint.  Consider removing interpolation if results are good.
-
 
 
     # TODO: document what the minimum window size is (min value of idx_end - idx_start)
@@ -254,7 +203,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
     #power_db = 20*np.log10(np.abs(re+1j*im)+1E-3)
     #power_db = 20*np.log10(np.hypot(re, im)+1E-3)
     power_db = 10*np.log10(re*re + im*im +1E-3)
-
+    del re, im
     # can we assert len(sim) == idx_end - idx_start now?
 
     # Free memory - science data not needed anymore
@@ -272,7 +221,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
         logging.error("rxwot: " + str(rxwot))
         raise
     # Free memory
-    del re, im, power_db
+    del power_db
 
     # TODO: document which axis of data is slow time and which is fast time
     # In data and avg, axis 0 is slow time, axis 1 is fast time
@@ -310,6 +259,8 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
 
     del data_norm, sim_norm
 
+    # TODO: improve memory by going trace-by-trace
+    # TODO: see if we can do this without interpolating and using subsample peak interpolation
 
     # Correlate non-interpolated radargram rolling through the window
 
@@ -370,11 +321,11 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
             fig.savefig(savefile)
             #plt.show()
 
-        logging.debug("icd_ranging: Correlating interpolated arrays of length w_range={:d} and shape {:s}".format(\
-                      w_range, str(sim_ipl[average:-average].shape)))
+        logging.debug("icd_ranging: Correlating interpolated arrays of length w_range=%d and shape %r",
+                      w_range, sim_ipl[average:-average].shape)
         # TODO: use scipy correlation function
 
-        logging.debug("MAD from i={:0.3f} to i={:0.3f}".format(i_interp - 10, i_interp + 10))
+        logging.debug("MAD from i=%0.3f to i=%0.3f", i_interp - 10, i_interp + 10)
         # Correlate interpolated array only around desired window.
         #p = icsim.prg.Prog(2*10) if do_progress else None
         mask = np.ones(2*w_range) # mask of items that have not been checked
@@ -382,13 +333,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
         for i in range(-w_range, w_range, 1):
             if np.abs(i - i_interp) > ifactor: # 1 sample radius
                 continue # Don't calculate for outside the window around the minimum
-            try:
-                md1[i + w_range] = mean_abs_diff_shifted(i, sim_ipl[average:-average], data_ipl[average:-average])
-            except ValueError: # pragma: no cover
-                print("ValueError:") # we can probably get rid of this.
-                print(f"mean_abs_diff_shifted({i}, sim_ipl[{average}:{-average}], data_ipl[{average}:{-average}])")
-                print(f"sim_ipl={sim_ipl.shape}, data_ipl=({data_ipl.shape})")
-                raise
+            md1[i + w_range] = mean_abs_diff_shifted(i, sim_ipl[average:-average], data_ipl[average:-average])
             mask[i + w_range] = 0
         md1 += mask*max(md) # set unchecked to max
         del data_ipl, sim_ipl
@@ -399,7 +344,7 @@ def icd_ranging_cg3(cmp_path, dtm_path, science_path, label_science,
         w_range = window
         p_step = 1
 
-
+    # TODO: Is interpolated data not getting used?  md1 is set but unused.
     logging.debug("icd_ranging: Finished correlating")
 
     if debug:
@@ -545,7 +490,6 @@ def main():
     test_running_mean()
     test_shift_ft_arr()
     test_mad()
-    #gen_or_load_cluttergram()
 
 if __name__ == "__main__":
     main()
