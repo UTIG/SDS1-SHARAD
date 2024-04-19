@@ -824,7 +824,7 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
 
     #------------------------
     # input parameters 
-    inpath='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/rm271/edr4992001/e_4992001_001_ss19_700_a_a.dat'
+    inpath='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/edr49xxx/edr4992001/e_4992001_001_ss19_700_a_a.dat'
     idx_start = 53243
     idx_end = 63243
     #------------------------

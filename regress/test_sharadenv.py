@@ -238,8 +238,8 @@ class TestProcessed(unittest.TestCase):
         logging.info("processed() %0.2f seconds; processed1() %0.2f seconds", dt1, dt2)
         assert s1 == s2
 
-
-    @unittest.expectedFailure
+    # This was an expected failure when the archive was incomplete
+    #@unittest.expectedFailure
     def test_processed2(self):
         p2 = self.senv.processed2()
         #s1 = json.dumps(p2)
