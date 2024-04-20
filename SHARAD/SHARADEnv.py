@@ -1024,9 +1024,12 @@ class SHARADFiles:
         orbitdir = os.path.join(self.data_path, 'rsr', pinfo['volume_id'], pinfo['relpath'], typ)
         return {'rsr_txt': os.path.join(orbitdir, product_id + '.txt'),}
 
-    def clu_product_paths(self, product_id: str, typ='icd'):
+    def clu_product_paths(self, product_id: str, typ='icd', start='0', end='end'):
         """ Cluttergram simulation outputs """
         pinfo = self.product_id_index[product_id]
+        rangestr = str(start) + '-' + str(end)
+        # New path
+        # orbitdir = os.path.join(self.data_path, 'clu', pinfo['volume_id'], pinfo['relpath'], typ, rangestr)
         orbitdir = os.path.join(self.data_path, 'clu', pinfo['volume_id'], pinfo['relpath'], typ)
         return {
             'clu_rad': os.path.join(orbitdir, product_id + '.npz'),
