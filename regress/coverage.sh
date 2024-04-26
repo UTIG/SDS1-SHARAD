@@ -56,7 +56,7 @@ if [ "$RUNSLOW" -eq "1" ]
 then
     $COV run $FLAGS -a ../xlib/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
     for NAME in ../xlib/clutter/interferometry_funclib.py \
-    ../xlib/rng/icsim.py
+    ../xlib/rng/icsim.py ../xlib/rng/icd_test.py
     do
         $COV run $FLAGS -a $NAME
     done

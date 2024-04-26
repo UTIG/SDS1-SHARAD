@@ -381,15 +381,6 @@ def shift_ft_arr(a, n):
         b[j] = np.roll(a[j], int(n[j]))
     return b
 
-def test_shift_ft_arr():
-    x = np.random.rand(10, 11)
-    a1 = np.full((10,), 5)
-    a2 = np.full((10,), 6)
-    y = shift_ft_arr(x, a1)
-    z = shift_ft_arr(y, a2)
-    assert (x == z).all()
-
-
 
 def running_mean(x, N):
     # assert N >= 3
@@ -398,13 +389,6 @@ def running_mean(x, N):
     res[N//2:-N//2+1] = (cumsum[N:] - cumsum[:-N]) / N
     return res
 
-def test_running_mean():
-    x1 = np.arange(10)
-    x2 = np.flip(x1)
-    for y in range(3, 8):
-        z1 = running_mean(x1, y)
-        z2 = running_mean(x2, y)
-        assert np.abs(np.mean(z1) - np.mean(z2)) < 1e-6
 
 
 def sinc_interpolate(data, subsample_factor):
@@ -470,27 +454,4 @@ def mean_abs_diff_shifted(x, a, b):
         print(f"np.mean(np.abs(a[:][0:{blen}] -  b[:][{i1}:{i2}])")
         print(f"a.shape={a.shape} b={b.shape}")
         raise
-
-def test_mad():
-
-    # mean_abs_diff_shifted(1, sim_ipl[30:-30], data_ipl[30:-30])
-    # sim_ipl=(5293, 8000), data_ipl=((5293, 8000))
-    sim_ipl = np.random.normal(size=(5293, 8000))
-    data_ipl = np.random.normal(size=(5293, 8000))
-    mean_abs_diff_shifted(1, sim_ipl[30:-30], data_ipl[30:-30])
-
-
-    for alen in (3, 10, 11, 100, 1000):
-        aa = np.random.normal(size=(alen, alen))
-        ab = np.random.normal(size=(alen, alen))
-        for sh in range(-alen+1, alen-1):
-            mean_abs_diff_shifted(sh, aa, ab)
-
-def main():
-    test_running_mean()
-    test_shift_ft_arr()
-    test_mad()
-
-if __name__ == "__main__":
-    main()
 
