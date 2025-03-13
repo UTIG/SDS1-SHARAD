@@ -13,8 +13,14 @@ from pathlib import Path
 from typing import List, Dict
 from collections import Counter
 
-from SHARADEnv import SHARADEnv, SHARADFiles
+p1 = Path(__file__).parent
+sys.path.insert(1, str(p1.resolve()))
+
 from run_rng_cmp import add_standard_args, process_product_args
+
+sys.path.insert(1, '../xlib')
+from sharad.sharadenv import SHARADEnv, SHARADFiles
+
 
 def main():
     desc = "Create a report of what data products are up to date"

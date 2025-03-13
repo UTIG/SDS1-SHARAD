@@ -1,0 +1,51 @@
+[project]
+name = "sds1-sharad"
+version = "2.1.0"
+description = "Europa Clipper REASON Science Data System software, build 1, for use with SHARAD radar data as input"
+readme = "README.md"
+
+classifiers = [
+    "Private :: Do Not Upload",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Intended Audience :: Science/Research",
+    "Development Status :: 4 - Beta",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+
+requires-python = ">=3.9"
+dependencies = [
+    "bitstruct>=8.20.0",
+    "h5py>=3.13.0",
+    "matplotlib>=3.9.4",
+    "numpy==1.23",
+    "pandas>=1.5.1",
+    "pvl>=1.3.2",
+    "rsr>=1.0.7",
+    "scipy>=1.13.1",
+    "spiceypy>=6.0.0",
+    "subradar==1.1.0",
+    "tables>=3.9.2",
+]
+
+#[project.optional-dependencies]
+# the icsim component requires GDAL
+#icsim = ["GDAL"]
+
+
+#[project.entry-points]
+#console_scripts = { sds1-pipeline = "sds1-sharad.sharad.pipeline:main" }
+
+[project.scripts]
+sds1pipeline = "sds1_sharad.sharad.pipeline:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+#[tool.uv]
+[tool.hatch.build.targets.wheel]
+packages = ["src/sds1_sharad"]
+            

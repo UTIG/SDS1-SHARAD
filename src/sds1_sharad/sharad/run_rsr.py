@@ -24,11 +24,16 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-import SHARADEnv
-from run_rng_cmp import add_standard_args, should_process_products, process_product_args
 
 import rsr
 
+p1 = Path(__file__).parent
+sys.path.insert(1, str(p1.resolve()))
+
+from run_rng_cmp import add_standard_args, should_process_products, process_product_args
+
+sys.path.insert(1, '../xlib')
+from sharad.sharadenv import SHARADEnv
 
 
 
@@ -279,7 +284,7 @@ def main():
         args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
 
     orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
-    senv = SHARADEnv.SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
+    senv = SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
     ## add sfiles and pass through to figure out output file location
     #--------------------------
     # Requested Orbits handling

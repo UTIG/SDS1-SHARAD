@@ -15,9 +15,12 @@ import numpy as np
 import pandas as pd
 import subradar as sr
 
-import SHARADEnv
 from run_rng_cmp import add_standard_args, run_jobs, process_product_args, \
                         should_process_products
+
+
+sys.path.insert(1, '../xlib')
+from sharad.sharadenv import SHARADEnv
 
 
 def surface_processor(orbit, ywinwidth=100, archive=False,
@@ -256,7 +259,7 @@ def main():
         args.output = os.path.join(args.SDS, 'targ/xtra/SHARAD')
 
     orig_path = os.path.join(args.SDS, 'orig/supl/xtra-pds/SHARAD')
-    senv = SHARADEnv.SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
+    senv = SHARADEnv(data_path=args.output, orig_path=orig_path, b_index_files=False)
     #--------------------------
     # Requested Orbits handling
     if args.orbits == ['all']:

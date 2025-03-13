@@ -55,23 +55,27 @@ math says that you could do up to 63 jobs on the regular sized machine under
 
 import sys
 import os
+from pathlib import Path
 import logging
 import argparse
 import traceback
 
 import spiceypy as spice
 
+p1 = Path(__file__).parent
+sys.path.insert(1, str(p1.resolve()))
+
 from run_rng_cmp import run_jobs, process_product_args,\
                         should_process_products, add_standard_args
 
-sys.path.append('../xlib')
+sys.path.insert(1, '../xlib')
 #import misc.prog as prog
 import misc.hdf as hdf
 import misc.fileproc as fileproc
 #import matplotlib.pyplot as plt
 import altimetry.beta5 as b5
 
-from SHARADEnv import SHARADFiles
+from sharad.sharadenv import SHARADFiles
 
 def main():
     desc = 'Run SHARAD altimetry processing'

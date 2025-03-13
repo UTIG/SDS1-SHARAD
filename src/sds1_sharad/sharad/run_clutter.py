@@ -27,6 +27,9 @@ import spiceypy as spice
 import pandas as pd
 import matplotlib.pyplot as plt
 
+p1 = Path(__file__).parent
+sys.path.insert(1, str(p1.resolve()))
+
 from run_rng_cmp import run_jobs, process_product_args,\
                         should_process_products, add_standard_args, filename_to_productid
 
@@ -36,7 +39,7 @@ sys.path.append('../xlib')
 
 import rng.icd as icd
 from rng.icsim import calc_roi
-from SHARADEnv import SHARADEnv, SHARADFiles
+from sharad.sharadenv import SHARADEnv, SHARADFiles
 
 def main():
     global args

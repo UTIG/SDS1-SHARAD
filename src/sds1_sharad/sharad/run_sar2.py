@@ -45,14 +45,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, '../xlib/')
-from sar import sar
-import cmp.pds3lbl as pds3
+p1 = Path(__file__).parent
+sys.path.insert(1, str(p1.resolve()))
 
 from run_rng_cmp import run_jobs, process_product_args,\
                         should_process_products, add_standard_args, read_tracklistfile
 
-from SHARADEnv import SHARADEnv, SHARADFiles
+p1 = Path(__file__).parent / '..' / 'xlib'
+sys.path.insert(1, str(p1.resolve()))
+from sar import sar
+import cmp.pds3lbl as pds3
+
+from sharad.sharadenv import SHARADEnv, SHARADFiles
 
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")

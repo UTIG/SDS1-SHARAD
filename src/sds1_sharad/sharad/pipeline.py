@@ -59,11 +59,16 @@ import tempfile
 from typing import List, Dict, Any
 from pathlib import Path
 
-from SHARADEnv import SHARADFiles
+p1 = Path(__file__).parent
+sys.path.insert(1, str(p1.resolve()))
+
 from run_rng_cmp import run_jobs, add_standard_args, process_product_args
 
 p1 = Path(__file__).parent / '..' / 'xlib'
 sys.path.insert(1, str(p1.resolve()))
+
+from sharad.sharadenv import SHARADFiles
+
 from misc.fileproc import file_processing_status, delete_files
 
 

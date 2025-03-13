@@ -30,11 +30,11 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Callable
 
-from SHARADEnv import SHARADFiles
-
 CODEPATH = os.path.dirname(__file__)
 p1 = os.path.abspath(os.path.join(CODEPATH, "../xlib"))
 sys.path.insert(1, p1)
+
+from sharad.sharadenv import SHARADFiles
 
 #import misc.hdf
 import cmp.pds3lbl as pds3

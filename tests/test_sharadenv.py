@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 
 
-import csv
 import os
 import sys
-import glob
 import logging
-from collections import defaultdict
 from pathlib import Path
 import json
 import time
@@ -14,10 +11,10 @@ import time
 import unittest
 
 
-CODEPATH = Path(__file__).parent / '..' / 'SHARAD'
+CODEPATH = Path(__file__).parent / '..' / 'src'# / 'sds1_sharad' / 'xlib' / 'sharad'
 sys.path.insert(1, str(CODEPATH))
 
-from SHARADEnv import SHARADEnv, DataMissingException
+from sds1_sharad.xlib.sharad.sharadenv import SHARADEnv, DataMissingException
 
 ORIG_PATH = None
 TARG_PATH = None

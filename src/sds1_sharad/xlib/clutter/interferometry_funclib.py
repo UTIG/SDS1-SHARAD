@@ -14,7 +14,6 @@ __history__ = {
 
 import sys
 import math
-import pytest
 import logging
 import os
 import csv
@@ -220,7 +219,7 @@ def test_load_pik1():
     for channel in list_channels:
         for IQ in ('mag','phs'):
             load_pik1(line, channel, pth=pth, IQ=IQ)
-
+        # TODO: convert to unittest
         with pytest.raises(ValueError):
             load_pik1(line, channel, pth=pth, IQ='invalidtype')
 

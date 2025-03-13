@@ -9,14 +9,25 @@ __history__ = {
 
 import matplotlib.pyplot as plt
 import numpy as np
-from tkinter import messagebox
 
+try:
+    from tkinter import messagebox
+except ImportError:
+    # tkinter didn't import. workaround
+    messagebox = None
+
+def check_tkinter():
+    """ Check if tkinter was imported correctly and fail if not """
+    if messagebox is None:
+        raise ImportError("tkinter failed to import, so picker() is not available")
 
 def picker(data, interfaces=[], color='viridis', snap_to='maximum', plt_final=False,
            featurename='reflection of interest'):
     '''
     algorithm for picking interface indices
     '''
+
+    check_tkinter()
 
     if len(interfaces) == 0:
         kk = 0
@@ -153,7 +164,7 @@ def remover(data, interfaces, color='viridis', plt_final=False):
     '''
     algorithm for removing interface indices
     '''
-
+    check_tkinter()
     kk = 1
     quit_picking = 'No'
     
@@ -273,6 +284,7 @@ def remover_mac(data, interfaces, color='viridis', plt_final=False):
     non-interactive algorithm for removing picked interfaces when working on
     mac
     '''
+    check_tkinter()
     cmin = np.ceil(np.min(data) / 5) * 5
     cmax = np.floor(np.max(data) / 5) * 5
 

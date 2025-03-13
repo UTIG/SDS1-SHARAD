@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Tools to explore SHARAD data
 
 __authors__ = ['Cyril Grima, cyril.grima@gmail.com']
@@ -43,7 +42,7 @@ import h5py as h5
 #import rsr
 
 CODEPATH = os.path.dirname(__file__)
-p1 = os.path.abspath(os.path.join(CODEPATH, "../xlib"))
+p1 = os.path.abspath(os.path.join(CODEPATH, ".."))
 sys.path.insert(1, p1)
 from rdr import solar_longitude
 import misc.fileproc as fileproc
