@@ -42,10 +42,11 @@ dependencies = [
 sds1pipeline = "sds1_sharad.sharad.pipeline:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+#requires = ["hatchling"]
+#build-backend = "hatchling.build"
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
 
 #[tool.uv]
 [tool.hatch.build.targets.wheel]
 packages = ["src/sds1_sharad"]
-            
