@@ -369,18 +369,19 @@ def build_command(product_id: str, prod: Dict[str, Any],
     # Build the commmand
     # TODO: write a function
     # TODO: move this over to the dict so we don't need an if statement here
+    cmd = ['python3']
     if prod['Processor'] in ['run_surface.py']:
         tempfile1 = None
-        cmd = [proc, '--overwrite', '-j', '1', product_id]
+        cmd += [proc, '--overwrite', '-j', '1', product_id]
     elif prod['Processor'] in ['run_rsr.py']: # no -j option for run_rsr, that's in args
         tempfile1 = None
-        cmd = [proc, '--overwrite', product_id]
+        cmd += [proc, '--overwrite', product_id]
     elif prod['Processor'] in ['run_rng_cmp.py', 'run_altimetry.py']:
         tempfile1 = None
-        cmd = [proc, '--overwrite', '-j', '1', product_id]
+        cmd += [proc, '--overwrite', '-j', '1', product_id]
     else:
         tempfile1 = temptracklist(product_id)
-        cmd = [proc, '--tracklist', tempfile1, '-j', '1']
+        cmd += [proc, '--tracklist', tempfile1, '-j', '1']
         if prod['Processor'] == "run_sar2.py":
             # Add targ path which it uses to find input files
             cmd += ['-i', data_path]
@@ -388,7 +389,7 @@ def build_command(product_id: str, prod: Dict[str, Any],
     # Pass the targ directory to the lower level script
     # if we requested something different
     if data_path != TARGDIR_TYPICAL:
-        cmd = cmd[0:1] + ['-o', data_path] + cmd[1:]
+        cmd = cmd[0:2] + ['-o', data_path] + cmd[1:]
 
     if 'args' in prod:
         cmd += prod['args']
