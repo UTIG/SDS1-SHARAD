@@ -30,7 +30,7 @@ dependencies = [
     "tables>=3.9.2",
 ]
 
-#[project.optional-dependencies]
+[project.optional-dependencies]
 # the icsim component requires GDAL
 #icsim = ["GDAL"]
 
@@ -50,3 +50,8 @@ build-backend = "setuptools.build_meta"
 #[tool.uv]
 [tool.hatch.build.targets.wheel]
 packages = ["src/sds1_sharad"]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.6.12",
+]

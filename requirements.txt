@@ -20,12 +20,11 @@ tables==3.9.2
 pygdal==3.2.1.10
 
 
-rsr==1.0.7
-#subradar>=1.1.0
+rsr>=1.0.7
+subradar>=1.1.0
 #subradar==1.1.2
-subradar==1.1.0
 # subradar 1.1.2 has a bug where it doesn't call out this dependency
 # https://github.com/cgrima/subradar/issues/9
-hdf5storage==0.1.19
+hdf5storage>=0.1.19
 
 coverage
