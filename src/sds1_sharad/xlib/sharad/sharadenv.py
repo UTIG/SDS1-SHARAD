@@ -119,14 +119,19 @@ class DataMissingException(FileNotFoundError):
 
 class SHARADEnv:
     """ Class for interacting with data files in the SHARAD dataset """
-    def __init__(self, data_path:str=None, orig_path:str=None, b_index_files=True):
-        """Get various parameters defining the dataset  """
+    def __init__(self, data_path:str=None, orig_path:str=None, b_index_files=True, sds:str=None):
+        """Get various parameters defining the dataset
+        if sds parameter is not provided, use environment variable
+        """
+
+        if sds is None:
+            sds = os.getenv('SDS', '/disk/kea/SDS')
 
         if data_path is None:
-            data_path = '/disk/kea/SDS/targ/xtra/SHARAD'
+            data_path = os.path.join(sds, 'targ/xtra/SHARAD')
             logging.warning("Creating SHARADEnv with default data_path parameters, which is deprecated")
         if orig_path is None:
-            orig_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
+            orig_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD')
             logging.warning("Creating SHARADEnv with default orig_path parameters, which is deprecated")
 
         self.out = None
@@ -915,8 +920,8 @@ class SHARADFiles:
     def __init__(self, data_path:str, orig_path:str, read_edr_index=False):
         """Get various parameters defining the dataset  """
         # Typical values
-        #data_path = '/disk/kea/SDS/targ/xtra/SHARAD'
-        #orig_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD'
+        #data_path = '$SDS/targ/xtra/SHARAD'
+        #orig_path = '$SDS/orig/supl/xtra-pds/SHARAD'
 
         #self.code_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = data_path
@@ -972,7 +977,7 @@ class SHARADFiles:
         described in section 4.3.5 of the EDR SIS
         https://pds-geosciences.wustl.edu/mro/mro-m-sharad-3-edr-v1/mrosh_0001/document/edrsis.pdf
         """
-        # /disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0187401/e_0187401_00
+        # $SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr01xxx/edr0187401/e_0187401_00
         pinfo = self.product_id_index[product_id]
         orbitdir = os.path.join(self.orig_path, 'EDR', pinfo['volume_id'], pinfo['relpath'])
 
@@ -987,7 +992,7 @@ class SHARADFiles:
         """ Return paths to range compression outputs
         (produced by run_rng_cmp.py)
         TODO: better mnemonic than h5 
-        Example: /disk/kea/SDS/targ/xtra/SHARAD/cmp/mrosh_0004/data/rm262/edr4839701/ion/e_4839701_001_ss4_700_a_s_TECU.txt
+        Example: $SDS/targ/xtra/SHARAD/cmp/mrosh_0004/data/rm262/edr4839701/ion/e_4839701_001_ss4_700_a_s_TECU.txt
         """
         pinfo = self.product_id_index[product_id]
         orbitdir = os.path.join(self.data_path, 'cmp', pinfo['volume_id'], pinfo['relpath'], typ)
@@ -1000,7 +1005,7 @@ class SHARADFiles:
 
     def alt_product_paths(self, product_id: str, typ:str='beta5'):
         """ Calculate output paths for altimetry data products
-        Example: /disk/kea/SDS/targ/xtra/SHARAD/alt/mrosh_0001/data/edr08xxx/edr0898101/beta5/e_0898101_001_ss19_700_a_a.h5
+        Example: $SDS/targ/xtra/SHARAD/alt/mrosh_0001/data/edr08xxx/edr0898101/beta5/e_0898101_001_ss19_700_a_a.h5
         """
 
         pinfo = self.product_id_index[product_id]
@@ -1009,7 +1014,7 @@ class SHARADFiles:
 
     def srf_product_paths(self, product_id: str, typ:str='cmp'):
         """ Example: 
-        /disk/kea/SDS/targ/xtra/SHARAD/srf/mrosh_0001/data/edr20xxx/edr2007501/cmp/e_2007501_001_ss19_700_a.txt"""
+        $SDS/targ/xtra/SHARAD/srf/mrosh_0001/data/edr20xxx/edr2007501/cmp/e_2007501_001_ss19_700_a.txt"""
         pinfo = self.product_id_index[product_id]
         orbitdir = os.path.join(self.data_path, 'srf', pinfo['volume_id'], pinfo['relpath'], typ)
 
@@ -1018,7 +1023,7 @@ class SHARADFiles:
 
     def rsr_product_paths(self, product_id: str, typ:str='cmp'):
         """ Example:
-        /disk/kea/SDS/targ/xtra/SHARAD/rsr/mrosh_0002/data/edr24xxx/edr2484501/cmp/e_2484501_001_ss04_700_a.txt"""
+        $SDS/targ/xtra/SHARAD/rsr/mrosh_0002/data/edr24xxx/edr2484501/cmp/e_2484501_001_ss04_700_a.txt"""
         pinfo = self.product_id_index[product_id]
         orbitdir = os.path.join(self.data_path, 'rsr', pinfo['volume_id'], pinfo['relpath'], typ)
         return {'rsr_txt': os.path.join(orbitdir, product_id + '.txt'),}
@@ -1038,7 +1043,7 @@ class SHARADFiles:
 
     def rng_product_paths(self, product_id: str, typ:str='icd'):
         """ Ranging product produced by run_ranging.py. Example
-        /disk/kea/SDS/targ/xtra/SHARAD/rng/mrosh_0004/data/rm270/edr4973503/icd/e_4973503_001_ss19_700_a_a.cluttergram.npy"""
+        $SDS/targ/xtra/SHARAD/rng/mrosh_0004/data/rm270/edr4973503/icd/e_4973503_001_ss19_700_a_a.cluttergram.npy"""
         pinfo = self.product_id_index[product_id]
         orbitdir = os.path.join(self.data_path, 'rng', pinfo['volume_id'], pinfo['relpath'], typ)
         return {'rng_json': os.path.join(orbitdir, product_id + '.json'),}
@@ -1046,7 +1051,7 @@ class SHARADFiles:
 
     def foc_product_paths(self, product_id: str, typ:str=None):
         """ Focused radargrams produced by run_sar2.py Example:
-        /disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr04xxx/edr0490602/5m/5 range lines/6km/e_0490602_001_ss19_700_a_s.h5
+        $SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr04xxx/edr0490602/5m/5 range lines/6km/e_0490602_001_ss19_700_a_s.h5
         TODO: include all types, and remove spaces
         """
         pinfo = self.product_id_index[product_id]

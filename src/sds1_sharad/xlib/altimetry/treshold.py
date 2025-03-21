@@ -23,7 +23,7 @@ from scipy.constants import c
 from scipy.ndimage import shift
 #import matplotlib.pyplot as plt
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(1, os.path.join(os.path.dirname(__file__), '..'))
 import cmp.pds3lbl as pds3
 from cmp.plotting import plot_radargram
 from rot import mars
@@ -33,9 +33,10 @@ from misc import coord
 
 def alt_profile(label_path, aux_path, science_path,
                 cmp_track_path, sar_window,
-                kernel_path='/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm',
+                kernel_path, #'$SDS/orig/supl/kernels/mro/mro_v01.tm',
                 save_path=None, idx_start=None, idx_end=None, fix_pri=None):
 
+    assert kernel_path is not None, "Kernel path must be explicitly specified"
     rot_model = mars.mars_rot_model('IAU2000')
     re = pd.read_hdf(cmp_track_path, key='real')
     im = pd.read_hdf(cmp_track_path, key='imag')
@@ -157,9 +158,9 @@ def test_alt_profile():
 
     # TODO: function for calculating paths
     # create cmp path
-    path_root_alt = '/disk/kea/SDS/targ/xtra/SHARAD/alt/'
-    path_root_cmp = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
-    path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    path_root_alt = os.path.join(sds, 'targ/xtra/SHARAD/alt/')
+    path_root_cmp = os.path.join(sds, 'targ/xtra/SHARAD/cmp/')
+    path_root_edr = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/')
     # Relative path to this file
     fname = os.path.basename(inpath)
     obn = fname[2:9] # orbit name
@@ -184,7 +185,7 @@ def test_alt_profile():
             logging.warning(cmp_path + " does not exist")
             return
 
-    kernel_path = '/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm'
+    kernel_path = os.path.join(sds, 'orig/supl/kernels/mro/mro_v01.tm')
     spice.furnsh(kernel_path)
 
     # GNG: Not sure what reasonable values for sar_window is.
@@ -192,7 +193,7 @@ def test_alt_profile():
 
     #def alt_profile(label_path, aux_path, science_path,
     #            cmp_track_path, sar_window,
-    #            kernel_path='/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm',
+    #            kernel_path='$SDS/orig/supl/kernels/mro/mro_v01.tm',
     #            save_path=None, idx_start=None, idx_end=None):
     for sar_window in (1, 5, 10):
         save_path = None

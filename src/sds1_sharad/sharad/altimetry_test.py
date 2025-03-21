@@ -19,15 +19,17 @@ def running_mean(x, N):
 t0 = time.time()
 
 sar_length = 200
+sds = os.getenv('SDS', '/disk/kea/SDS')
+label_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+aux_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
-label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
-
-science_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat'
-cmp_track = np.load('/disk/daedalus/sds/targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy')
+science_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0003/data/edr28xxx/edr2821503/e_2821503_001_ss4_700_a_s.dat')
+npypath = os.path.join(sds, 'targ/xtra/SHARAD/cmp/mrosh_0003/data/edr28xxx/edr2821503/ion/e_2821503_001_ss4_700_a_s.npy')
+cmp_track = np.load(npypath)
 data = pds3.read_science(science_path, label_path)
 aux = pds3.read_science(science_path.replace('_s.dat', '_a.dat'), aux_path)
-spice.furnsh('/disk/kea/SDS/orig/supl/kernels/mro/mro_v01.tm')
+spicepath = os.path.join(sds, 'orig/supl/kernels/mro/mro_v01.tm')
+spice.furnsh(spicepath)
 
 range_window_start = data['RECEIVE_WINDOW_OPENING_TIME']
 topo = data['TOPOGRAPHY']

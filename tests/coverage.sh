@@ -45,7 +45,7 @@ $COV run $FLAGS $XLIB/clutter/parse_channels.py > /dev/null
 ######################################
 # Run placeholders
 # TODO: run_specularity
-for NAME in $SHARAD/pipeline.py  $SHARAD/run_ranging.py \
+for NAME in $SHARAD/pipeline.py \
 $SHARAD/run_rng_cmp.py $SHARAD/run_rsr.py $SHARAD/run_altimetry.py \
 $SHARAD/run_surface.py $SHARAD/show_product_status.py \
 $XLIB/clutter/unfoc_KMS2.py
@@ -61,12 +61,13 @@ if [ "$RUNSLOW" -eq "1" ]
 then
     $COV run $FLAGS -a $XLIB/clutter/filter_ra.py --selftest 1 1 1 1 1 1 1
     for NAME in $XLIB/clutter/interferometry_funclib.py \
+    $SHARAD/run_ranging.py \
     $XLIB/rng/icsim.py $XLIB/rng/icd_test.py
     do
         $COV run $FLAGS -a $NAME
     done
 fi
-
+ENABLE_GDAL=0
 ENABLE_TK=1
 # These scripts require tk to be working properly
 if [ "${ENABLE_TK}" -eq "1" ]
@@ -101,6 +102,7 @@ $COV run $FLAGS -a $XLIB/cmp/test_pds3lbl.py
 
 $COV run $FLAGS -a ./test_sharadfiles.py
 $COV run $FLAGS -a ./test_sharadenv.py
+$COV run $FLAGS -a ./test_interferometry.py
 
 $COV run $FLAGS -a $XLIB/cmp/pds3lbl.py -o ./covdata/
 
@@ -160,11 +162,14 @@ $COV run $FLAGS -a $SHARAD/run_rsr.py -n --overwrite all > /dev/null
 
 nice $COV run $FLAGS -a $SHARAD/run_rsr.py --output $OUT1 -s 2000 e_0224401_007_ss05_700_a
 
-echo "$S0: run_clutter"
-$COV run $FLAGS -a $SHARAD/run_clutter.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 2 --jobs 1
+if [ "$ENABLE_GDAL" -eq "1" ]
+then
+    echo "$S0: run_clutter"
+    $COV run $FLAGS -a $SHARAD/run_clutter.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 2 --jobs 1
+    echo "$S0: run_ranging"
+    $COV run $FLAGS -a $SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 4 --jobs 1 -n
+fi
 
-echo "$S0: run_ranging"
-$COV run $FLAGS -a $SHARAD/run_ranging.py --tracklist ./run_ranging__xover_idx.dat -o $OUT1 --maxtracks 4 --jobs 1 -n
 if [ "$RUNSLOW" -eq "1" ]
 then
     # Ensure cmp data is up-to-date for this track list

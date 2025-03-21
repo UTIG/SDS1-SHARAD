@@ -113,7 +113,8 @@ print('build task list')
 process_list = []
 p=prog.Prog(len(keys))
 i = 0
-path_root = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'
+SDS = os.getenv('SDS', '/disk/kea/SDS')
+path_root = os.path.join(sds, 'targ/xtra/SHARAD/cmp/')
 for orbit in keys:
     p.print_Prog(i)
     gob = int(orbit.replace('/orbit', ''))

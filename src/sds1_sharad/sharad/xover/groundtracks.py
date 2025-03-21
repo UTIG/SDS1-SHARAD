@@ -21,8 +21,6 @@ The area is limited to the HRSC MC11E DTM.
 """
 
 import os
-#import sys
-#import glob
 
 import numpy as np
 import pandas as pd
@@ -35,7 +33,8 @@ def main():
     """ get a list of all files in sharad data folder
     identify data records and corresponding label files """
     # TODO: GNG this root path seems wrong now (path not found)
-    raw = '/disk/kea/SDS/orig/supl/SHARAD/raw/'
+    SDS = os.getenv('SDS', '/disk/kea/SDS')
+    raw = os.path.join(SDS, 'orig/supl/SHARAD/raw/')
     records = []
     lbls = []
     for path, _, files in os.walk(raw):

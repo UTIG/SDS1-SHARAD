@@ -15,7 +15,7 @@ __history__ = {
 
 Attempt to implement an interferometry approach to clutter discrimination based
 on what has been presented in Haynes et al. (2018). As we can't actually test
-with REASON measurments, the goal is to use MARFA.
+with REASON measurements, the goal is to use MARFA.
 
 Usage example
 
@@ -117,7 +117,7 @@ def main():
     parser.add_argument('--plot', action='store_true', help='Plot debugging graphs')
     parser.add_argument('--save', default=None, help='Location to save intermediate files and plots')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose script output')
-    parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD',
+    parser.add_argument('--targ', default=None, #default='$SDS/targ/xtra/SHARAD',
                         help='targ data base directory')
     parser.add_argument('--mode', default='Roll', choices=('Roll', 'Reference', 'none'),
                         help='Interferogram Correction Mode')
@@ -153,13 +153,19 @@ def main():
     interferogram_correction_mode = args.mode
     roll_correction = True
 
-    focpath = os.path.join('/disk/kea/WAIS/targ/xtra', project, 'FOC/Best_Versions')
+    sds = os.getenv('SDS', '/disk/kea/SDS')
+    wais = os.getenv('WAIS', '/disk/kea/WAIS')
+
+    if args.targ is None:
+        args.targ = os.path.join(sds, 'targ/xtra/SHARAD')
+
+    focpath = os.path.join(wais, 'targ/xtra', project, 'FOC/Best_Versions')
     if project in ('SRH1', 'ICP9', 'ICP10'):
         snm, chirp_bp = 'RADnh5', True
     else:
         snm, chirp_bp = 'RADnh3', False
-    rawpath = os.path.join('/disk/kea/WAIS/orig/xlob', line.rstrip('/'), snm) + '/'
-    tregpath = os.path.join('/disk/kea/WAIS/targ/treg', line,  'TRJ_JKB0/')
+    rawpath = os.path.join(wais, 'orig/xlob', line.rstrip('/'), snm) + '/'
+    tregpath = os.path.join(wais, 'targ/treg', line,  'TRJ_JKB0/')
     chirppath = os.path.join(focpath, 'S4_FOC')
     print('chirppath = ' + chirppath)
     print('tregpath = ' + tregpath)

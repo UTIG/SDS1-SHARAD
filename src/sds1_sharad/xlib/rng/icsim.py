@@ -832,15 +832,16 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     """ Run icsim using parameters from run_ranging.py and icd.py """
     logging.debug("test_icsim1()")
 
+    sds = os.getenv('SDS', '/disk/kea/SDS')
     #------------------------
     # input parameters 
-    inpath='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/edr49xxx/edr4992001/e_4992001_001_ss19_700_a_a.dat'
+    inpath = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/data/edr49xxx/edr4992001/e_4992001_001_ss19_700_a_a.dat')
     idx_start = 53243
     idx_end = 63243
     #------------------------
 
-    path_root_edr = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
-    dtm_path = '/disk/kea/SDS/orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff'
+    path_root_edr = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/')
+    dtm_path = os.path.join(sds, 'orig/supl/hrsc/MC11E11_HRDTMSP.dt5.tiff')
     # Relative path to this file
     fname = os.path.basename(inpath)
 
@@ -849,8 +850,8 @@ def test_icsim1(save_path=None, do_plot=False, do_progress=True):
     logging.debug("inpath: %s", inpath)
     logging.debug("reldir: %s", reldir)
     logging.debug("path_root_edr: %s", path_root_edr)
-    label_science = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-    label_aux  = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+    label_science = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+    label_aux  = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
 
     science_path = inpath.replace('_a.dat','_s.dat')

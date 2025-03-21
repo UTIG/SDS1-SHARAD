@@ -4,7 +4,7 @@
 Example command lines
 
 Focused
-./data_visualization.py --input '/disk/kea/SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr10xxx/edr1058901/5m/3 range lines/30km/e_1058901_001_ss19_700_a_s.h5'
+./data_visualization.py --input '$SDS/targ/xtra/SHARAD/foc/mrosh_0001/data/edr10xxx/edr1058901/5m/3 range lines/30km/e_1058901_001_ss19_700_a_s.h5'
 
 cmp:
 ./data_visualization.py --product cmp
@@ -31,13 +31,15 @@ import sys
 import os
 import argparse
 import logging
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import tkinter as tk
 
-sys.path.insert(0, '../xlib/')
+p1 = Path(__file__).parent / '..' / 'xlib'
+sys.path.insert(0, str(p1.resolve()))
 import cmp.pds3lbl as pds3
 
 def snr(data, noise_window=250):
@@ -113,19 +115,29 @@ def main():
     parser.add_argument('--input', help='Path to HDF5 file to visualize')
     parser.add_argument('--maxsamp', type=int, default=3600, help='maximum fast-time sample to include in radargram plots')
     parser.add_argument('--plotsnr', action='store_true', help='plot final radargrams in SNR?')
-    parser.add_argument('--targ', default='/disk/kea/SDS/targ/xtra/SHARAD', help='targ data base directory')
+    parser.add_argument('--targ', default=None, help='targ data base directory (default $SDS/targ/xtra/SHARAD)')
     parser.add_argument('--product', default='foc', choices=('foc','cmp'), help='Type of data product to be visualized')
-    parser.add_argument('--orbit', default='/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat',
+    parser.add_argument('--orbit', default=None,
                         help='Path to auxiliary file for orbit of interest')
 
+    parser.add_argument('--SDS', default=os.getenv('SDS', '/disk/kea/SDS'), help='SDS root directory (default from SDS environment variable)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging output')
     parser.add_argument('--selftest', action='store_true', help='Internal script self tset')
     args = parser.parse_args()
 
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=loglevel)
+    p_sds = Path(args.SDS)
 
-    inputroot = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR'
+    if args.targ is None:
+        args.targ = str(p_sds / 'targ/xtra/SHARAD')
+
+    if args.orbit is None:
+        args.orbit = str(p_sds /
+            'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0001/data/edr10xxx/edr1058901/e_1058901_001_ss19_700_a_a.dat')
+
+
+    inputroot = str(p_sds / 'orig/supl/xtra-pds/SHARAD/EDR')
     pathfile = os.path.relpath(args.orbit, inputroot)
     datapath = os.path.join(args.targ, args.product, pathfile)
     datafile = os.path.basename(datapath).replace('_a.dat', '_s.h5')

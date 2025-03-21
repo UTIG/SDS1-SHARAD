@@ -17,8 +17,11 @@ import hdf
 
 
 
-def test_read(inputpath='/disk/kea/SDS/targ/xtra/SHARAD/cmp', maxfiles=100):
+def test_read(inputpath=None, maxfiles=100):
     logging.info("test_read()")
+    if inputpath is None:
+        sds = os.getenv('SDS', '/disk/kea/SDS')
+        inputpath = os.path.join(sds, 'targ/xtra/SHARAD/cmp')
     pat = os.path.join(inputpath, '*/*/*/*/*/*.h5')
     h5files = glob.glob(pat)
     logging.info("Found %d hdf5 files", len(h5files))

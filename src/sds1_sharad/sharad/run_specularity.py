@@ -6,6 +6,7 @@ Which orbits are to be analyzed are passed using a text file.
 """
 
 import sys
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,6 +14,8 @@ import pandas as pd
 
 sys.path.insert(0, '../xlib')
 import cmp.pds3lbl as pds3
+
+SDS = os.getenv('SDS', '/disk/kea/SDS')
 
 def snr(data, noise_window=250):
     '''
@@ -62,17 +65,22 @@ if ii == 0:
     rawfn = a[ii].replace('\n', '')
     temp = rawfn.split('/')
     print('Working: ' + temp[-1])
-    base = '/disk/kea/SDS/targ/xtra/SHARAD/foc/'
-    base = base + temp[-5] + '/' + temp[-4] + '/' + temp[-3] + '/' + temp[-2] + '/'
-    short_fn = base + str(short['interp_dx']) + 'm/'
-    short_fn = short_fn + str(short['column_interval']) + ' range lines/'
-    short_fn = short_fn + str(short['aperture']) + 'km/'
-    short_fn = short_fn + temp[-1].replace('a.dat', 's.h5')
-    long_fn = base + str(long['interp_dx']) + 'm/'
-    long_fn = long_fn + str(long['column_interval']) + ' range lines/'
-    long_fn = long_fn + str(long['aperture']) + 'km/'
-    long_fn = long_fn + temp[-1].replace('a.dat', 's.h5')
-    del temp
+    base = (
+            Path(SDS) / 'targ/xtra/SHARAD/foc' /
+            temp[-5] / temp[-4] / temp[-3] / temp[-2]
+    )
+    short_fn = (
+        base / (str(short['interp_dx']) + 'm') /
+        (str(short['column_interval']) + ' range lines') /
+        (str(short['aperture']) + 'km') /
+        (temp[-1].replace('a.dat', 's.h5')
+    )
+    long_fn = (base /
+        (str(long['interp_dx']) + 'm') /
+        (str(long['column_interval']) + ' range lines)' /
+        (str(long['aperture']) + 'km') /
+        (temp[-1].replace('a.dat', 's.h5')
+    )
 
     # load the radar data and interpolated ephemeris times
     short_sar = np.array(pd.read_hdf(short_fn, 'sar'))
@@ -115,7 +123,7 @@ if ii == 0:
         plt.show()
     
     # load unedited ephemeris, latitude, and longitude information
-    aux_lbl = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+    aux_lbl = str(Path(SDS) / 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
     aux = pds3.read_science(rawfn, aux_lbl)
     raw_et = aux['EPHEMERIS_TIME']
     raw_lat = aux['SUB_SC_PLANETOCENTRIC_LATITUDE']

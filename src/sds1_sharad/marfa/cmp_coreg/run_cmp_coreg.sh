@@ -18,7 +18,7 @@ do
         #../run_interferometry.py --project SRH1 --line DEV2/JKB2t/Y82a \
         ../run_interferometry.py --project GOG3 --line NAQLK/JKB2j/ZY1b/ \
         --plot --save $CDIR --pickfile ../run_interferometry__FOI.npz --coregifactor $IFACTOR \
-        --coregmethod $METHOD --mode Roll --refpickfile /disk/kea/SDS/code/work/kms2/MARFA/ZY1b_PartialBed_NoStack.npy
+        --coregmethod $METHOD --mode Roll --refpickfile $SDS/code/work/kms2/MARFA/ZY1b_PartialBed_NoStack.npy
     done
 done
 

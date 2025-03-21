@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from cmp import pds3lbl as pds3
 #import pandas as pd
 #from scipy.constants import c
 
+SDS = os.getenv('SDS', '/disk/kea/SDS')
 xover = np.load('mc11_xover.npy')
 lookup = np.genfromtxt('lookup.txt', dtype='str')
-label_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt'
-aux_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt'
+label_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/science_ancillary.fmt')
+aux_path = os.path.join(SDS, 'orig/supl/xtra-pds/SHARAD/EDR/mrosh_0004/label/auxiliary.fmt')
 
 diff = []
 sza = []
@@ -21,11 +23,11 @@ for x in xover:
         idx2 = x[3]
         # track 1
         path1 = lookup[gob1]
-        #path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        #path_file = path.replace('$SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
         #data_file = path_file.split('/')[-1]
         #path_file = path_file.replace(data_file,'')
         #new_path = 'alt2/'+data_file.replace('.dat','.npy')
-        #tecu_file = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'+path_file+'ion/'+data_file.replace('_a.dat','_s_TECU.txt')
+        #tecu_file = '$SDS/targ/xtra/SHARAD/cmp/'+path_file+'ion/'+data_file.replace('_a.dat','_s_TECU.txt')
         #tec1 = np.loadtxt(tecu_file)*1E+15
         #track1 = np.load(new_path)
         apath = path1.replace('_s.dat', '_a.dat')
@@ -40,11 +42,11 @@ for x in xover:
         apath = path2.replace('_s.dat', '_a.dat')
         aux2 = pds3.read_science(apath, aux_path)
         sza2 = aux2['SOLAR_ZENITH_ANGLE'][idx2]
-        #path_file = path.replace('/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
+        #path_file = path.replace('$SDS/orig/supl/xtra-pds/SHARAD/EDR/','')
         #data_file = path_file.split('/')[-1]
         #path_file = path_file.replace(data_file,'')
         #new_path = 'alt2/'+data_file.replace('.dat','.npy')
-        #tecu_file = '/disk/kea/SDS/targ/xtra/SHARAD/cmp/'+path_file+'ion/'+data_file.replace('_a.dat','_s_TECU.txt')
+        #tecu_file = '$SDS/targ/xtra/SHARAD/cmp/'+path_file+'ion/'+data_file.replace('_a.dat','_s_TECU.txt')
         #tec2 = np.loadtxt(tecu_file)*1E+15
         #delay2 = c*tec2*1.69E-6/(2*np.pi*(20E+6)**2)
         #print(sza2,tec2[0],tec2[0]*1.69E-6/(20E+6)**2)

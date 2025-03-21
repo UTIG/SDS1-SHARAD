@@ -151,7 +151,8 @@ def main():
     workdir = './work'
     remote_path = 'https://pds-geosciences.wustl.edu/mro/mro-m-sharad-3-edr-v1'
 
-    local_path = '/disk/kea/SDS/orig/supl/xtra-pds/SHARAD/EDR/'
+    sds = os.getenv('SDS', '/disk/kea/SDS')
+    local_path = os.path.join(sds, 'orig/supl/xtra-pds/SHARAD/EDR/')
 
     idxfile = os.path.join(workdir, 'mrosh_0001/index/cumindex.tab')
 

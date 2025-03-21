@@ -68,25 +68,21 @@ In the `SHARAD` directory, the script `show_product_status.py`
 follows a similar argument convention as the processing scripts,
 and can show processing completion status for all data products.
 
-# Getting SDS
+# Getting SDS1-SHARAD
 
-```
-git clone /disk/kea/SDS/repo/sds.git
-```
+Use the packages under the github Release tab.
 
-# Dependencies
+# Developing for SDS1-SHARAD
 
-pip Package dependencies:
+These instructions mostly apply at UTIG.
 
-See `requirements.txt`.  To install, run
+## Dependencies
 
-```
-pip install -r requirements.txt
-```
+pip package dependencies were previously in `requirements.txt`.  To install, run `pip install -r requirements.txt`
 
 # Environment
 
-Before you run code in SDS, in each terminal, to setup your environment, including path, run
+Before you develop code in SDS, in each terminal, to setup your environment, including path, run
 
 ```
 $ source env/cshrc
