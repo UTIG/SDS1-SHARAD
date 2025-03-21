@@ -1,6 +1,6 @@
 [project]
 name = "sds1-sharad"
-version = "2.1.0"
+version = "2.2.0"
 description = "Europa Clipper REASON Science Data System software, build 1, for use with SHARAD radar data as input"
 readme = "README.md"
 
