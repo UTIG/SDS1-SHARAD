@@ -49,14 +49,13 @@ Processing outputs are automatically organized by data product type and SHARAD E
 To change the base output directory, use the `--output` flag.  Providing
 `--output $SDS/targ/xtra/SHARAD` is equivalent to the default behavior.
 
-The path to the processing input can't be changed directly, changing
+The path to the processing input can't be changed directly, but changing
 the `$SDS` environment variable or providing `--SDS` option can effectively
 allow you to change the input path.
 
-
 By default, processing scripts will check whether output files
 are up to date compared to their direct input prerequisites.
-If they are up to date, or the required inputs so not exist,
+If they are up to date, or the required inputs do not exist,
 the script will skip processing.  You can force outputs to be
 overwritten with the `--overwrite` flag, or see what processing would
 occur with the `-n` or `--dryrun` flag.
@@ -64,7 +63,7 @@ occur with the `-n` or `--dryrun` flag.
 
 # Show processing status
 
-In the `SHARAD` directory, the script `show_product_status.py`
+The script `SHARAD/show_product_status.py`
 follows a similar argument convention as the processing scripts,
 and can show processing completion status for all data products.
 
@@ -84,6 +83,6 @@ pip package dependencies were previously in `requirements.txt`.  To install, run
 
 Before you develop code in SDS, in each terminal, to setup your environment, including path, run
 
-```
+```sh
 $ source env/cshrc
 ```
